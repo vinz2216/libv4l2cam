@@ -1,8 +1,11 @@
-libcam is a simple wrapper class handling lower level v4l2 management, and providing an easy interface to v4l2 hardware.
+libv4l2cam is a simple wrapper class handling lower level v4l2 management, and providing an easy interface to v4l2 hardware.
 
 
 AUTHOR:
   Giacomo Spigler, adapting code from http://linux.bytesex.org/v4l2/ and building a wrapper class.
+
+VERSION:
+  Version 1.0
 
 COMPILING:
   $Make
