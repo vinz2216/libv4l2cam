@@ -745,7 +745,7 @@ unsigned char *Camera::Update(unsigned int t) {
 
 
 unsigned char *Camera::Update(Camera *c2, unsigned int t) {
-  while(this->Get()==0 && c2->Get()==0) usleep(t);
+  while(this->Get()==0 || c2->Get()==0) usleep(t);
   return this->data;
 
 }
