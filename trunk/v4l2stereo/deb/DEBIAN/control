@@ -1,0 +1,8 @@
+Package: v4l2stereo
+Version: 0.1
+Section: utils
+Maintainer: Bob Mottram <fuzzgun@gmail.com>
+Architecture: all
+Essential: no
+Priority: optional
+Description: A utility for stereoscopic vision using either a pair of webcams or a stereo webcam such as Minoru
