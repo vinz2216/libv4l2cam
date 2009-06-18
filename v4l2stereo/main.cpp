@@ -40,6 +40,7 @@ int main(int argc, char* argv[]) {
   bool show_matches = false;
   bool show_anaglyph = false;
   bool show_histogram = false;
+  bool rectify_images = false;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -64,11 +65,39 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --anaglyph             Show anaglyph");
   opt->addUsage( "     --histogram            Show disparity histogram");
   opt->addUsage( "     --calibrate            Calibrate offsets");
+  opt->addUsage( "     --cd0x                 Centre of distortion x coord for the left camera");
+  opt->addUsage( "     --cd0y                 Centre of distortion y coord for the left camera");
+  opt->addUsage( "     --cd1x                 Centre of distortion x coord for the right camera");
+  opt->addUsage( "     --cd1y                 Centre of distortion y coord for the right camera");
+  opt->addUsage( "     --coeff00              Distortion coefficient 0 for the left camera");
+  opt->addUsage( "     --coeff01              Distortion coefficient 1 for the left camera");
+  opt->addUsage( "     --coeff02              Distortion coefficient 2 for the left camera");
+  opt->addUsage( "     --coeff10              Distortion coefficient 0 for the right camera");
+  opt->addUsage( "     --coeff11              Distortion coefficient 1 for the right camera");
+  opt->addUsage( "     --coeff12              Distortion coefficient 2 for the right camera");
+  opt->addUsage( "     --rot0                 Calibration rotation of the left camera in radians");
+  opt->addUsage( "     --rot1                 Calibration rotation of the right camera in radians");
+  opt->addUsage( "     --scale0               Calibration scale of the left camera");
+  opt->addUsage( "     --scale1               Calibration scale of the right camera");
   opt->addUsage( " -V  --version              Show version number");
   opt->addUsage( "     --save                 Save raw images");
   opt->addUsage( "     --help                 Show help");
   opt->addUsage( "" );
 
+  opt->setOption(  "cd0x" );
+  opt->setOption(  "cd0y" );
+  opt->setOption(  "cd1x" );
+  opt->setOption(  "cd1y" );
+  opt->setOption(  "coeff00" );
+  opt->setOption(  "coeff01" );
+  opt->setOption(  "coeff02" );
+  opt->setOption(  "coeff10" );
+  opt->setOption(  "coeff11" );
+  opt->setOption(  "coeff12" );
+  opt->setOption(  "rot0" );
+  opt->setOption(  "rot1" );
+  opt->setOption(  "scale0" );
+  opt->setOption(  "scale1" );
   opt->setOption(  "dev0", '0' );
   opt->setOption(  "dev1", '1' );
   opt->setOption(  "width", 'w' );
@@ -135,7 +164,7 @@ int main(int argc, char* argv[]) {
   }
 
   if( opt->getFlag( "anaglyph" ) ) {
-	  //show_features = false;
+	  show_features = false;
 	  show_matches = false;
 	  show_anaglyph = true;
 	  show_histogram = false;
@@ -181,6 +210,84 @@ int main(int argc, char* argv[]) {
   int max_disparity_percent = 40;
   if( opt->getValue( 'd' ) != NULL  || opt->getValue( "disparity" ) != NULL  ) {
 	  max_disparity_percent = atoi(opt->getValue("disparity"));
+  }
+
+  float centre_of_distortion_x0 = ww/2;
+  if( opt->getValue( "cd0x" ) != NULL  ) {
+	  centre_of_distortion_x0 = atof(opt->getValue("cd0x"));
+	  rectify_images = true;
+  }
+
+  float centre_of_distortion_y0 = hh/2;
+  if( opt->getValue( "cd0y" ) != NULL  ) {
+	  centre_of_distortion_y0 = atof(opt->getValue("cd0y"));
+	  rectify_images = true;
+  }
+
+  float centre_of_distortion_x1 = ww/2;
+  if( opt->getValue( "cd1x" ) != NULL  ) {
+	  centre_of_distortion_x1 = atof(opt->getValue("cd1x"));
+	  rectify_images = true;
+  }
+
+  float centre_of_distortion_y1 = hh/2;
+  if( opt->getValue( "cd1y" ) != NULL  ) {
+	  centre_of_distortion_y1 = atof(opt->getValue("cd1y"));
+	  rectify_images = true;
+  }
+
+  float coeff[2][3];
+  coeff[0][0] = (float)1.03159213066101;
+  coeff[0][1] = (float)-1.04955497590709E-05;
+  coeff[0][2] = (float)-4.3939662646153E-06;
+  coeff[1][0] = (float)1.03159213066101;
+  coeff[1][1] = (float)-1.04955497590709E-05;
+  coeff[1][2] = (float)-4.3939662646153E-06;
+  if( opt->getValue( "coeff00" ) != NULL  ) {
+	  coeff[0][0] = atof(opt->getValue("coeff00"));
+	  rectify_images = true;
+  }
+  if( opt->getValue( "coeff01" ) != NULL  ) {
+	  coeff[0][1] = atof(opt->getValue("coeff01"));
+	  rectify_images = true;
+  }
+  if( opt->getValue( "coeff02" ) != NULL  ) {
+      coeff[0][2] = atof(opt->getValue("coeff02"));
+      rectify_images = true;
+  }
+  if( opt->getValue( "coeff10" ) != NULL  ) {
+	  coeff[1][0] = atof(opt->getValue("coeff10"));
+	  rectify_images = true;
+  }
+  if( opt->getValue( "coeff11" ) != NULL  ) {
+	  coeff[1][1] = atof(opt->getValue("coeff11"));
+	  rectify_images = true;
+  }
+  if( opt->getValue( "coeff12" ) != NULL  ) {
+	  coeff[1][2] = atof(opt->getValue("coeff12"));
+	  rectify_images = true;
+  }
+
+  float rotation0 = 0;
+  if( opt->getValue( "rot0" ) != NULL  ) {
+	  rotation0 = atof(opt->getValue("rot0"));
+	  rectify_images = true;
+  }
+  float rotation1 = 0;
+  if( opt->getValue( "rot1" ) != NULL  ) {
+	  rotation1 = atof(opt->getValue("rot1"));
+	  rectify_images = true;
+  }
+
+  float scale0 = 1;
+  if( opt->getValue( "scale0" ) != NULL  ) {
+	  scale0 = atof(opt->getValue("scale0"));
+	  rectify_images = true;
+  }
+  float scale1 = 1;
+  if( opt->getValue( "scale1" ) != NULL  ) {
+	  scale1 = atof(opt->getValue("scale1"));
+	  rectify_images = true;
   }
 
   delete opt;
@@ -229,12 +336,25 @@ int main(int argc, char* argv[]) {
   svs* lcam = new svs(ww, hh);
   svs* rcam = new svs(ww, hh);
 
+  unsigned char* rectification_buffer = NULL;
+
+
   while(1){
 
     while(c.Get()==0 || c2.Get()==0) usleep(100);
 
     c.toIplImage(l);
     c2.toIplImage(r);
+
+    if (rectify_images) {
+    	if (rectification_buffer == NULL) {
+    		rectification_buffer = new unsigned char[ww * hh * 3];
+    	}
+        lcam->rectify(l_, centre_of_distortion_x0, centre_of_distortion_y0, coeff[0][0], coeff[0][1], coeff[0][2], rotation0, scale0, rectification_buffer);
+        memcpy(l_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
+        rcam->rectify(r_, centre_of_distortion_x1, centre_of_distortion_y1, coeff[1][0], coeff[1][1], coeff[1][2], rotation1, scale1, rectification_buffer);
+        memcpy(r_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
+    }
 
     int calib_offset_x = calibration_offset_x;
     int calib_offset_y = calibration_offset_y;
@@ -457,6 +577,7 @@ int main(int argc, char* argv[]) {
 
   delete lcam;
   delete rcam;
+  if (rectification_buffer != NULL) delete[] rectification_buffer;
 
   return 0;
 }

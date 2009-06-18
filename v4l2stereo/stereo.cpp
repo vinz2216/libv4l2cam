@@ -60,6 +60,7 @@ svs::svs(int width, int height) {
     feature_x = new short int[SVS_MAX_FEATURES];
 
     disparity_histogram = NULL;
+    calibration_map = NULL;
 
     /* array storing the number of features detected on each row */
     features_per_row = new unsigned short int[SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING];
@@ -620,9 +621,11 @@ void svs::calibrate_offsets(
 		        int n2 = (((y+offset_y) * imgWidth) + (tx+offset_x)) * 3;
 		        for (int x = tx; x < bx; x++, n += 3, n2 += 3) {
 
-		        	int v = left_image[n] - right_image[n2];
-		        	if (v < 0) v = -v;
-                    diff += v;
+		        	for (int col = 0; col < 3; col++) {
+		        	    int v = left_image[n+col] - right_image[n2+col];
+		        	    if (v < 0) v = -v;
+                        diff += v;
+		        	}
 
 				}
 			}
@@ -633,5 +636,92 @@ void svs::calibrate_offsets(
             }
 		}
 	}
+}
+
+/* takes the raw image and camera calibration parameters and returns a rectified image */
+void svs::rectify(
+	unsigned char* raw_image,
+	float centre_of_distortion_x,
+	float centre_of_distortion_y,
+	float coeff_0,
+	float coeff_1,
+	float coeff_2,
+	float rotation,
+	float scale,
+	unsigned char* rectified_frame_buf) {
+
+    if (calibration_map == NULL) {
+
+	    polynomial* distortion_curve = new polynomial();
+	    distortion_curve->SetDegree(3);
+	    distortion_curve->SetCoeff(0, 0);
+	    distortion_curve->SetCoeff(1, coeff_0);
+	    distortion_curve->SetCoeff(2, coeff_1);
+	    distortion_curve->SetCoeff(3, coeff_2);
+
+        int half_width = imgWidth / 2;
+        int half_height = imgHeight / 2;
+        calibration_map = new int[imgWidth * imgHeight];
+        for (int x = 0; x < (int)imgWidth; x++) {
+
+        	float dx = x - centre_of_distortion_x;
+
+            for (int y = 0; y < (int)imgHeight; y++) {
+
+                float dy = y - centre_of_distortion_y;
+
+                float radial_dist_rectified = (float)sqrt(dx*dx + dy*dy);
+                if (radial_dist_rectified >= 0.01f) {
+
+                    double radial_dist_original = distortion_curve->RegVal(radial_dist_rectified);
+                    if (radial_dist_original > 0) {
+
+                        double ratio = radial_dist_original / radial_dist_rectified;
+                        float x2 = (float)round(centre_of_distortion_x + (dx * ratio));
+                        x2 = (x2 - (imgWidth / 2)) * scale;
+                        float y2 = (float)round(centre_of_distortion_y + (dy * ratio));
+                        y2 = (y2 - (imgHeight / 2)) * scale;
+
+                        // apply rotation
+                        double x3 = x2, y3 = y2;
+                        double hyp;
+                        if (rotation != 0)
+                        {
+                            hyp = sqrt(x2*x2 + y2*y2);
+                            if (hyp > 0)
+                            {
+                                double rot_angle = acos(y2 / hyp);
+                                if (x2 < 0) rot_angle = (3.1415927 * 2) - rot_angle;
+                                double new_angle = rotation + rot_angle;
+                                x3 = hyp * sin(new_angle);
+                                y3 = hyp * cos(new_angle);
+                            }
+                        }
+
+                        x3 += half_width;
+                        y3 += half_height;
+
+                        if (((int)x3 > -1) && ((int)x3 < (int)imgWidth) &&
+                            ((int)y3 > -1) && ((int)y3 < (int)imgHeight)) {
+
+                            int n = (y * imgWidth) + x;
+                            int n2 = ((int)y3 * imgWidth) + (int)x3;
+
+                            calibration_map[n] = n2;
+                        }
+                    }
+                }
+            }
+        }
+        delete distortion_curve;
+    }
+
+    int n = 0;
+    int max = imgWidth * imgHeight * 3;
+    for (int i = 0; i < max; i += 3, n++) {
+        int index = calibration_map[n] * 3;
+        for (int col = 0; col < 3; col++)
+        	rectified_frame_buf[i + col] = raw_image[index + col];
+    }
 }
 
