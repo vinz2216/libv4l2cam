@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
+#include "polynomial.h"
 
 #define SVS_MAX_FEATURES         2000
 #define SVS_MAX_IMAGE_WIDTH      1024
@@ -63,6 +65,9 @@ public:
     /* array used to store a disparity histogram */
     int* disparity_histogram;
 
+    /* maps raw image pixels to rectified pixels */
+    int* calibration_map;
+
     int update_sums(int y, unsigned char* rectified_frame_buf);
     void non_max(int inhibition_radius, unsigned int min_response);
     int compute_descriptor(int px, int py, unsigned char* rectified_frame_buf, int no_of_features, int row_mean);
@@ -71,7 +76,7 @@ public:
     int match(svs* other, int ideal_no_of_matches, int max_disparity_percent, int descriptor_match_threshold, int learnDesc, int learnLuma, int learnDisp);
 
     void calibrate_offsets(unsigned char* left_image, unsigned char* right_image, int x_range, int y_range, int& calibration_offset_x, int& calibration_offset_y);
-
+    void rectify(unsigned char* raw_image, float centre_of_distortion_x, float centre_of_distortion_y, float coeff_0, float coeff_1, float coeff_2, float rotation, float scale, unsigned char* rectified_frame_buf);
     svs(int width, int height);
     ~svs();
 };
