@@ -28,7 +28,7 @@
 #include "stereo.h"
 #include "libcam.h"
 
-#define VERSION 0.1
+#define VERSION 0.2
 
 using namespace std;
 
@@ -63,6 +63,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --matches              Show stereo matches");
   opt->addUsage( "     --anaglyph             Show anaglyph");
   opt->addUsage( "     --histogram            Show disparity histogram");
+  opt->addUsage( "     --calibrate            Calibrate offsets");
   opt->addUsage( " -V  --version              Show version number");
   opt->addUsage( "     --save                 Save raw images");
   opt->addUsage( "     --help                 Show help");
@@ -81,6 +82,7 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "matches" );
   opt->setFlag(  "anaglyph" );
   opt->setFlag(  "histogram" );
+  opt->setFlag(  "calibrate" );
   opt->setFlag(  "version", 'V' );
 
   opt->processCommandArgs(argc, argv);
@@ -139,6 +141,15 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
   }
 
+  bool calibrate_offsets = false;
+  if( opt->getFlag( "calibrate" ) ) {
+	  calibrate_offsets = true;
+	  show_features = false;
+	  show_matches = false;
+	  show_anaglyph = false;
+	  show_histogram = false;
+  }
+
   std::string dev0 = "/dev/video1";
   if( opt->getValue( '0' ) != NULL  || opt->getValue( "dev0" ) != NULL  ) {
   	  dev0 = opt->getValue("dev0");
@@ -157,7 +168,7 @@ int main(int argc, char* argv[]) {
   	  hh = atoi(opt->getValue("height"));
   }
 
-  int calibration_offset_x = 5;
+  int calibration_offset_x = 8;
   if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
   	  calibration_offset_x = atoi(opt->getValue("offsetx"));
   }
@@ -173,7 +184,7 @@ int main(int argc, char* argv[]) {
   }
 
   delete opt;
-//cout<<dev0<<" "<<dev1<<endl;
+
   Camera c(dev0.c_str(), ww, hh, 30);
   Camera c2(dev1.c_str(), ww, hh, 30);
 
@@ -419,6 +430,15 @@ int main(int argc, char* argv[]) {
         break;
     }
 
+    if (calibrate_offsets) {
+    	int x_range = 25;
+    	int y_range = 25;
+    	lcam->calibrate_offsets(l_, r_, x_range, y_range, calibration_offset_x, calibration_offset_y);
+    	printf("Offset x: %d\n", calibration_offset_x);
+    	printf("Offset y: %d\n", calibration_offset_y);
+    	break;
+    }
+
     cvShowImage(left_image_title.c_str(), l);
     if ((!show_matches) && (!show_anaglyph)) {
    	    cvShowImage(right_image_title.c_str(), r);
@@ -440,4 +460,5 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
+
 
