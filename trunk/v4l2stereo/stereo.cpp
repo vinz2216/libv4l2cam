@@ -595,3 +595,43 @@ void svs::filter(
 		}
 	}
 }
+
+/* calculate offsets assuming that the cameras are looking at some distant object */
+void svs::calibrate_offsets(
+	unsigned char* left_image,
+	unsigned char* right_image,
+	int x_range,
+	int y_range,
+	int& calibration_offset_x,
+	int& calibration_offset_y) {
+
+	int tx = imgWidth*25/100;
+	int ty = imgHeight*25/100;
+	int bx = imgWidth - tx;
+	int by = imgHeight - ty;
+
+	int min_diff = (bx-tx)*(by-ty)*3*255;
+	for (int offset_y = -y_range; offset_y < y_range; offset_y++) {
+		for (int offset_x = -x_range; offset_x < x_range; offset_x++) {
+
+			int diff = 0;
+	        for (int y = ty; y < by; y++) {
+		        int n = ((y * imgWidth) + tx) * 3;
+		        int n2 = (((y+offset_y) * imgWidth) + (tx+offset_x)) * 3;
+		        for (int x = tx; x < bx; x++, n += 3, n2 += 3) {
+
+		        	int v = left_image[n] - right_image[n2];
+		        	if (v < 0) v = -v;
+                    diff += v;
+
+				}
+			}
+            if (diff < min_diff) {
+            	min_diff = diff;
+            	calibration_offset_x = offset_x;
+            	calibration_offset_y = offset_y;
+            }
+		}
+	}
+}
+

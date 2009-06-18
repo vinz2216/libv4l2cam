@@ -70,8 +70,11 @@ public:
     void filter(int no_of_possible_matches, int max_disparity_pixels, int tolerance);
     int match(svs* other, int ideal_no_of_matches, int max_disparity_percent, int descriptor_match_threshold, int learnDesc, int learnLuma, int learnDisp);
 
+    void calibrate_offsets(unsigned char* left_image, unsigned char* right_image, int x_range, int y_range, int& calibration_offset_x, int& calibration_offset_y);
+
     svs(int width, int height);
     ~svs();
 };
 
 #endif
+
