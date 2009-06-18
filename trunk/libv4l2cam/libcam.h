@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009 Giacomo Spigler
- * CopyPolicy: Released under the terms of the GNU GPL v2.0.
+ * CopyPolicy: Released under the terms of the GNU GPL v3.0.
  */
 
 #ifndef __LIBCAM__H__
