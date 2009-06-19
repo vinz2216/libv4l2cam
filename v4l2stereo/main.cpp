@@ -402,10 +402,8 @@ int main(int argc, char* argv[]) {
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 0, 255, 0);
 				}
 				else {
+					x -= calibration_offset_x;
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
-				    //if (show_anaglyph) {
-				    	//drawing::drawCross(l_, ww, hh, x, y, 2, 255, 0, 0, 0);
-				    //}
 				}
 
 				/* move to the next row */
