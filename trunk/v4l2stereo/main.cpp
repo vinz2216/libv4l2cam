@@ -28,7 +28,7 @@
 #include "stereo.h"
 #include "libcam.h"
 
-#define VERSION 0.2
+#define VERSION 1.0
 
 using namespace std;
 
