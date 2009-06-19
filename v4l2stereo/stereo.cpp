@@ -80,6 +80,9 @@ svs::svs(int width, int height) {
 
     /* array stores matching probabilities (prob,x,y,disp) */
     svs_matches = new unsigned int[SVS_MAX_FEATURES*4];
+
+    /* array used during filtering */
+    valid_quadrants = new unsigned char[SVS_MAX_FEATURES];
 }
 
 svs::~svs() {
@@ -90,6 +93,7 @@ svs::~svs() {
     delete[] row_sum;
     delete[] row_peaks;
     delete[] svs_matches;
+    delete[] valid_quadrants;
     if (disparity_histogram != NULL) delete[] disparity_histogram;
 }
 
@@ -554,45 +558,129 @@ void svs::filter(
 	int max_disparity_pixels,   /*maximum disparity in pixels */
 	int tolerance) {            /* tolerance around the peak in pixels of disparity */
 
-	int i;
+	int i, hf;
+	unsigned int tx, ty, bx, by;
 
 	/* create the histogram */
 	if (disparity_histogram == NULL) {
-		disparity_histogram = new int[SVS_MAX_IMAGE_WIDTH];
+	    disparity_histogram = new int[SVS_MAX_IMAGE_WIDTH];
 	}
 
-	/* clear the histogram */
-    memset(disparity_histogram, 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
-    int hist_max = 0;
+	/* clear quadrants */
+	memset(valid_quadrants, 0, SVS_MAX_IMAGE_WIDTH * sizeof(unsigned char));
 
-    /* update the disparity histogram */
-	for (i = 0; i < no_of_possible_matches; i++) {
-		int disp = svs_matches[i*4 + 3];
-		disparity_histogram[disp]++;
-		if (disparity_histogram[disp] > hist_max) hist_max = disparity_histogram[disp];
-	}
+	/* create disparity histograms within different
+	 * zones of the image */
+	for (hf = 0; hf < 4; hf++) {
 
-	/* locate the histogram peak */
-	int mass = 0;
-	int disp2 = 0;
-	int hist_thresh = hist_max / 4;
-	for (int d = 3; d < max_disparity_pixels-1; d++) {
-		if (disparity_histogram[d] > hist_thresh) {
-			int m = disparity_histogram[d] + disparity_histogram[d-1] + disparity_histogram[d+1];
-			mass += m;
-			disp2 += m * d;
+		switch(hf) {
+		    /* left hemifield */
+		    case 0: {
+		    	tx = 0;
+		    	ty = 0;
+		    	bx = imgWidth/2;
+		    	by = imgHeight;
+		    	break;
+		    }
+		    /* right hemifield */
+		    case 1: {
+		    	tx = bx;
+		    	bx = imgWidth;
+		    	break;
+		    }
+		    /* upper hemifield */
+		    case 2: {
+		    	tx = 0;
+		    	ty = 0;
+		    	bx = imgWidth;
+		    	by = imgHeight/2;
+		    	break;
+		    }
+		    /* lower hemifield */
+		    case 3: {
+		    	ty = by;
+		    	by = imgHeight;
+		    	break;
+		    }
+		}
+
+		/* clear the histogram */
+        memset(disparity_histogram, 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
+        int hist_max = 0;
+
+		/* update the disparity histogram */
+		for (i = 0; i < no_of_possible_matches; i++) {
+			unsigned int x = svs_matches[i*4 + 1];
+			if ((x > tx) && (x < bx)) {
+				unsigned int y = svs_matches[i*4 + 2];
+				if ((y > ty) && (y < by)) {
+			        int disp = svs_matches[i*4 + 3];
+			        disparity_histogram[disp]++;
+			        if (disparity_histogram[disp] > hist_max) hist_max = disparity_histogram[disp];
+				}
+			}
+		}
+
+		/* locate the histogram peak */
+		int mass = 0;
+		int disp2 = 0;
+		int hist_thresh = hist_max/4;
+		int hist_mean = 0;
+		int hist_mean_hits = 0;
+		for (int d = 3; d < max_disparity_pixels-1; d++) {
+			if (disparity_histogram[d] > hist_thresh) {
+				int m = disparity_histogram[d] + disparity_histogram[d-1] + disparity_histogram[d+1];
+				mass += m;
+				disp2 += m * d;
+			}
+			if (disparity_histogram[d] > 0) {
+				hist_mean += disparity_histogram[d];
+				hist_mean_hits++;
+			}
+		}
+		if (mass > 0) {
+			disp2 /= mass;
+			hist_mean /= hist_mean_hits;
+		}
+
+		/* simple near/far classification adjusts
+		 * the peak disparity that we're interested in */
+		int near = 1;
+		if (hist_mean*4 > disparity_histogram[0]) {
+			near = 0;
+		}
+
+		/* remove matches too far away from the peak by setting
+		 * their probabilities to zero */
+		unsigned int min_disp = disp2 - tolerance;
+		unsigned int max_disp = disp2 + tolerance;
+		for (i = 0; i < no_of_possible_matches; i++) {
+			unsigned int x = svs_matches[i*4 + 1];
+			if ((x > tx) && (x < bx)) {
+				unsigned int y = svs_matches[i*4 + 2];
+				if ((y > ty) && (y < by)) {
+					unsigned int disp = svs_matches[i*4 + 3];
+					if (near == 1) {
+						if (!((disp < min_disp) || (disp > max_disp))) {
+							/* near - within stereo ranging resolution */
+							valid_quadrants[i]++;
+						}
+					}
+					else {
+						if (disp <= 2) {
+							/* far out man */
+							valid_quadrants[i]++;
+						}
+					}
+				}
+			}
 		}
 	}
-    if (mass > 0) disp2 /= mass;
 
-    /* remove matches too far away from the peak by setting
-     * their probabilities to zero */
-    unsigned int min_disp = disp2 - tolerance;
-    unsigned int max_disp = disp2 + tolerance;
 	for (i = 0; i < no_of_possible_matches; i++) {
-		unsigned int disp = svs_matches[i*4 + 3];
-		if ((disp < min_disp) || (disp > max_disp)) {
-			svs_matches[i*4] = 0; /* zero probability kills this match */
+		if (valid_quadrants[i] == 0) {
+			/* set probability to zero */
+			svs_matches[i*4] = 0;
 		}
 	}
 }

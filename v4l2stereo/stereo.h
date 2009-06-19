@@ -62,6 +62,9 @@ public:
     /* array stores matching probabilities (prob,x,y,disp) */
     unsigned int* svs_matches;
 
+    /* used during filtering */
+    unsigned char* valid_quadrants;
+
     /* array used to store a disparity histogram */
     int* disparity_histogram;
 
