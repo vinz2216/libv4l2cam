@@ -77,6 +77,9 @@ public:
 
     void calibrate_offsets(unsigned char* left_image, unsigned char* right_image, int x_range, int y_range, int& calibration_offset_x, int& calibration_offset_y);
     void rectify(unsigned char* raw_image, float centre_of_distortion_x, float centre_of_distortion_y, float coeff_0, float coeff_1, float coeff_2, float rotation, float scale, unsigned char* rectified_frame_buf);
+
+    void save_matches(std::string filename, unsigned char* rectified_frame_buf, int no_of_matches, bool colour);
+
     svs(int width, int height);
     ~svs();
 };

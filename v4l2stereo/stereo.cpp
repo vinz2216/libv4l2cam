@@ -599,12 +599,12 @@ void svs::filter(
 
 /* calculate offsets assuming that the cameras are looking at some distant object */
 void svs::calibrate_offsets(
-	unsigned char* left_image,
-	unsigned char* right_image,
-	int x_range,
-	int y_range,
-	int& calibration_offset_x,
-	int& calibration_offset_y) {
+	unsigned char* left_image,     /* left image data */
+	unsigned char* right_image,    /* right image data */
+	int x_range,                   /* horizontal search range in pixels */
+	int y_range,                   /* vertical search range in pixels */
+	int& calibration_offset_x,     /* returned horizontal offset in pixels */
+	int& calibration_offset_y) {   /* returned vertical offset in pixels */
 
 	int tx = imgWidth*25/100;
 	int ty = imgHeight*25/100;
@@ -640,15 +640,15 @@ void svs::calibrate_offsets(
 
 /* takes the raw image and camera calibration parameters and returns a rectified image */
 void svs::rectify(
-	unsigned char* raw_image,
-	float centre_of_distortion_x,
-	float centre_of_distortion_y,
-	float coeff_0,
-	float coeff_1,
-	float coeff_2,
-	float rotation,
-	float scale,
-	unsigned char* rectified_frame_buf) {
+	unsigned char* raw_image,     /* raw image grabbed from camera */
+	float centre_of_distortion_x, /* centre of distortion x coordinate in pixels */
+	float centre_of_distortion_y, /* centre of distortion y coordinate in pixels */
+	float coeff_0,                /* lens distortion polynomial coefficient 0 */
+	float coeff_1,                /* lens distortion polynomial coefficient 1 */
+	float coeff_2,                /* lens distortion polynomial coefficient 2 */
+	float rotation,               /* camera rotation (roll angle) in radians */
+	float scale,                  /* scaling applied */
+	unsigned char* rectified_frame_buf) { /* returned rectified image */
 
     if (calibration_map == NULL) {
 
@@ -722,6 +722,63 @@ void svs::rectify(
         int index = calibration_map[n] * 3;
         for (int col = 0; col < 3; col++)
         	rectified_frame_buf[i + col] = raw_image[index + col];
+    }
+}
+
+/* saves stereo matches to file for use by other programs */
+void svs::save_matches(
+	std::string filename,               /* filename to save as */
+	unsigned char* rectified_frame_buf, /* left image data */
+	int no_of_matches,                  /* number of stereo matches */
+	bool colour) {                      /* whether to additionally save colour of each match */
+
+    FILE *file = fopen(filename.c_str(), "wb");
+    if (file != NULL) {
+
+        if (!colour) {
+
+    		struct MatchData {
+    			float x;
+    			float y;
+    			float disparity;
+    		};
+
+    		MatchData *m = new MatchData[no_of_matches];
+    		for (int i = 0; i < no_of_matches; i++) {
+    			m[i].x = svs_matches[i*4 + 1];
+    			m[i].y = svs_matches[i*4 + 2];
+    			m[i].disparity = svs_matches[i*4 + 3];
+    		}
+
+            fwrite(m, sizeof (MatchData), no_of_matches, file);
+    		delete[] m;
+        }
+        else {
+    		struct MatchDataColour {
+    			float x;
+    			float y;
+    			float disparity;
+    			unsigned char r,g,b;
+    			unsigned char pack;
+    		};
+
+    		int n;
+    		MatchDataColour *m = new MatchDataColour[no_of_matches];
+    		for (int i = 0; i < no_of_matches; i++) {
+    			m[i].x = svs_matches[i*4 + 1];
+    			m[i].y = svs_matches[i*4 + 2];
+    			m[i].disparity = svs_matches[i*4 + 3];
+    			n = ((m[i].y * imgWidth) + m[i].x) * 3;
+    			m[i].r = rectified_frame_buf[n+2];
+    			m[i].g = rectified_frame_buf[n+1];
+    			m[i].b = rectified_frame_buf[n];
+    		}
+
+    		fwrite(m, sizeof (MatchDataColour), no_of_matches, file);
+    		delete[] m;
+        }
+
+        fclose(file);
     }
 }
 
