@@ -79,6 +79,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --rot1                 Calibration rotation of the right camera in radians");
   opt->addUsage( "     --scale0               Calibration scale of the left camera");
   opt->addUsage( "     --scale1               Calibration scale of the right camera");
+  opt->addUsage( " -f  --fps                  Frames per second");
   opt->addUsage( " -V  --version              Show version number");
   opt->addUsage( "     --save                 Save raw images");
   opt->addUsage( "     --help                 Show help");
@@ -98,6 +99,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "rot1" );
   opt->setOption(  "scale0" );
   opt->setOption(  "scale1" );
+  opt->setOption(  "fps", 'f' );
   opt->setOption(  "dev0", '0' );
   opt->setOption(  "dev1", '1' );
   opt->setOption(  "width", 'w' );
@@ -290,10 +292,15 @@ int main(int argc, char* argv[]) {
 	  rectify_images = true;
   }
 
+  int fps = 30;
+  if( opt->getValue( 'f' ) != NULL  || opt->getValue( "fps" ) != NULL  ) {
+	  fps = atoi(opt->getValue("fps"));
+  }
+
   delete opt;
 
-  Camera c(dev0.c_str(), ww, hh, 30);
-  Camera c2(dev1.c_str(), ww, hh, 30);
+  Camera c(dev0.c_str(), ww, hh, fps);
+  Camera c2(dev1.c_str(), ww, hh, fps);
 
   std::string left_image_title = "Left image";
   std::string right_image_title = "Right image";
