@@ -36,6 +36,7 @@ using namespace std;
 int main(int argc, char* argv[]) {
   int ww = 320;
   int hh = 240;
+  int skip_frames = 0;
   bool show_features = false;
   bool show_matches = false;
   bool show_anaglyph = false;
@@ -80,6 +81,8 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --scale0               Calibration scale of the left camera");
   opt->addUsage( "     --scale1               Calibration scale of the right camera");
   opt->addUsage( " -f  --fps                  Frames per second");
+  opt->addUsage( " -s  --skip                 Skip this number of frames");
+  opt->addUsage( " -o  --output               Saves stereo matches to the given output file");
   opt->addUsage( " -V  --version              Show version number");
   opt->addUsage( "     --save                 Save raw images");
   opt->addUsage( "     --help                 Show help");
@@ -107,6 +110,8 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "offsetx", 'x' );
   opt->setOption(  "offsety", 'y' );
   opt->setOption(  "disparity", 'd' );
+  opt->setOption(  "output", 'o' );
+  opt->setOption(  "skip", 's' );
   opt->setFlag(  "help" );
   opt->setFlag(  "save" );
   opt->setFlag(  "features" );
@@ -297,6 +302,16 @@ int main(int argc, char* argv[]) {
 	  fps = atoi(opt->getValue("fps"));
   }
 
+  std::string stereo_matches_filename = "";
+  if( opt->getValue( 'o' ) != NULL  || opt->getValue( "output" ) != NULL  ) {
+	  stereo_matches_filename = opt->getValue("output");
+	  skip_frames = 6;
+  }
+
+  if( opt->getValue( 's' ) != NULL  || opt->getValue( "skip" ) != NULL  ) {
+	  skip_frames = atoi(opt->getValue("skip"));
+  }
+
   delete opt;
 
   Camera c(dev0.c_str(), ww, hh, fps);
@@ -315,9 +330,14 @@ int main(int argc, char* argv[]) {
 
 //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
-  cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-  if ((!show_matches) && (!show_anaglyph)) {
-      cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+  if ((!save_images) &&
+	  (!calibrate_offsets) &&
+	  (stereo_matches_filename == "")) {
+
+      cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+      if ((!show_matches) && (!show_anaglyph)) {
+          cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+      }
   }
 
   IplImage *l=cvCreateImage(cvSize(ww, hh), 8, 3);
@@ -396,13 +416,14 @@ int main(int argc, char* argv[]) {
 			for (int f = 0; f < no_of_feats; f++, feats_remaining--) {
 
 				int x = (int)stereocam->feature_x[f];
-				int y = 4 + (row * SVS_VERTICAL_SAMPLING) + calibration_offset_y;
+				int y = 4 + (row * SVS_VERTICAL_SAMPLING);
 
 				if (cam == 0) {
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 0, 255, 0);
 				}
 				else {
 					x -= calibration_offset_x;
+					y += calibration_offset_y;
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
 				}
 
@@ -549,36 +570,62 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-    if (save_images) {
-        cvSaveImage("left.jpg", l);
-        if ((!show_matches) && (!show_anaglyph)) cvSaveImage("right.jpg", r);
-        break;
-    }
+	if (skip_frames == 0) {
 
-    if (calibrate_offsets) {
-    	int x_range = 25;
-    	int y_range = 25;
-    	lcam->calibrate_offsets(l_, r_, x_range, y_range, calibration_offset_x, calibration_offset_y);
-    	printf("Offset x: %d\n", calibration_offset_x);
-    	printf("Offset y: %d\n", calibration_offset_y);
-    	break;
-    }
+		/* save left and right images to file, then quit */
+		if (save_images) {
+			cvSaveImage("left.jpg", l);
+			if ((!show_matches) && (!show_anaglyph)) cvSaveImage("right.jpg", r);
+			break;
+		}
 
-    cvShowImage(left_image_title.c_str(), l);
-    if ((!show_matches) && (!show_anaglyph)) {
-   	    cvShowImage(right_image_title.c_str(), r);
-    }
+		/* compute calibration offsets, display the results, then quit */
+		if (calibrate_offsets) {
+			int x_range = 25;
+			int y_range = 25;
+			lcam->calibrate_offsets(l_, r_, x_range, y_range, calibration_offset_x, calibration_offset_y);
+			printf("Offset x: %d\n", calibration_offset_x);
+			printf("Offset y: %d\n", calibration_offset_y);
+			break;
+		}
+	}
+
+	/* save stereo matches to a file, then quit */
+	if ((stereo_matches_filename != "") &&
+	    ((skip_frames == 0) || (matches > 5))) {
+		lcam->save_matches(stereo_matches_filename, l_, matches, false);
+		printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
+		break;
+	}
+
+	/* display the left and right images */
+	if ((!save_images) &&
+		(!calibrate_offsets) &&
+		(stereo_matches_filename == "")) {
+        cvShowImage(left_image_title.c_str(), l);
+        if ((!show_matches) && (!show_anaglyph)) {
+   	        cvShowImage(right_image_title.c_str(), r);
+        }
+	}
+
+    skip_frames--;
+    if (skip_frames < 0) skip_frames = 0;
 
     if( (cvWaitKey(10) & 255) == 27 ) break;
   }
 
-  cvDestroyWindow(left_image_title.c_str());
-  cvReleaseImage(&l);
+  /* destroy the left and right images */
+  if ((!save_images) &&
+	  (!calibrate_offsets) &&
+	  (stereo_matches_filename == "")) {
 
-  if ((!show_matches) && (!show_anaglyph)) {
-      cvDestroyWindow(right_image_title.c_str());
+	  cvDestroyWindow(left_image_title.c_str());
+	  if ((!show_matches) && (!show_anaglyph)) {
+	      cvDestroyWindow(right_image_title.c_str());
+	  }
   }
   cvReleaseImage(&l);
+  cvReleaseImage(&r);
 
   delete lcam;
   delete rcam;
