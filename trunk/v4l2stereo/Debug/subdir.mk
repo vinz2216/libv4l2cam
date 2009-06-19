@@ -8,6 +8,7 @@ CPP_SRCS += \
 ../drawing.cpp \
 ../libcam.cpp \
 ../main.cpp \
+../polynomial.cpp \
 ../stereo.cpp 
 
 OBJS += \
@@ -15,6 +16,7 @@ OBJS += \
 ./drawing.o \
 ./libcam.o \
 ./main.o \
+./polynomial.o \
 ./stereo.o 
 
 CPP_DEPS += \
@@ -22,6 +24,7 @@ CPP_DEPS += \
 ./drawing.d \
 ./libcam.d \
 ./main.d \
+./polynomial.d \
 ./stereo.d 
 
 

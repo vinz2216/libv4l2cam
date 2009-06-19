@@ -26,7 +26,7 @@
 #include "anyoption.h"
 #include "drawing.h"
 #include "stereo.h"
-#include "../libv4l2cam/libcam.h"
+#include "libcam.h"
 
 #define VERSION 0.2
 
