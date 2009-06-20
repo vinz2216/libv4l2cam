@@ -349,7 +349,7 @@ int svs::match(
         meandescR = 0;
         memset(meandesc, 0, (SVS_DESCRIPTOR_PIXELS)* sizeof(short));
         for (R = 0; R < no_of_feats_right; R++) {
-        	descR = descriptor[fR + R];
+        	descR = other->descriptor[fR + R];
         	n = 1;
         	for (bit = 0; bit < SVS_DESCRIPTOR_PIXELS; bit++, n *= 2) {
         		if (descR & n)
