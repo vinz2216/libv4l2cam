@@ -124,7 +124,7 @@ int svs::update_sums(
     }
 
     /* row mean luminance */
-    mean = row_sum[x-1] / (((int)imgWidth-1)*6);
+    mean = row_sum[x-1] / ((int)imgWidth*3);
 
     /* compute peaks */
     int p0, p1;
@@ -563,11 +563,12 @@ void svs::filter(
 
 	/* create the histogram */
 	if (disparity_histogram == NULL) {
-	    disparity_histogram = new int[SVS_MAX_IMAGE_WIDTH];
+		/* more than half of the image width is overkill */
+	    disparity_histogram = new int[SVS_MAX_IMAGE_WIDTH/2];
 	}
 
 	/* clear quadrants */
-	memset(valid_quadrants, 0, SVS_MAX_IMAGE_WIDTH * sizeof(unsigned char));
+	memset(valid_quadrants, 0, no_of_possible_matches * sizeof(unsigned char));
 
 	/* create disparity histograms within different
 	 * zones of the image */

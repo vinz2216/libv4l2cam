@@ -365,7 +365,6 @@ int main(int argc, char* argv[]) {
 
   unsigned char* rectification_buffer = NULL;
 
-
   while(1){
 
     while(c.Get()==0 || c2.Get()==0) usleep(100);
@@ -423,7 +422,7 @@ int main(int argc, char* argv[]) {
 				}
 				else {
 					x -= calibration_offset_x;
-					y += calibration_offset_y;
+					y -= calibration_offset_y;
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
 				}
 
@@ -557,10 +556,12 @@ int main(int argc, char* argv[]) {
 
 	if (show_anaglyph) {
 		int n = 0;
-		int max = (ww*hh*3)-3;
+		int max = (ww * hh * 3) - 3;
 		for (int y = 0; y < hh; y++) {
+			int y2 = y + calibration_offset_y;
 			for (int x = 0; x < ww; x++, n += 3) {
-				int n2 = (((y + calibration_offset_y) * ww) + x + calibration_offset_x) * 3;
+				int x2 = x + calibration_offset_x;
+				int n2 = ((y2 * ww) + x2) * 3;
 				if ((n2 > -1) && (n2 < max)) {
 					l_[n] = 0;
 					l_[n+1] = l_[n+2];
