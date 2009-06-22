@@ -95,6 +95,7 @@ svs::~svs() {
     delete[] svs_matches;
     delete[] valid_quadrants;
     if (disparity_histogram != NULL) delete[] disparity_histogram;
+    if (calibration_map != NULL) delete[] calibration_map;
 }
 
 
@@ -606,7 +607,7 @@ void svs::filter(
 		}
 
 		/* clear the histogram */
-        memset(disparity_histogram, 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
+        memset(disparity_histogram, 0, max_disparity_pixels * sizeof(int));
         int hist_max = 0;
 
 		/* update the disparity histogram */
