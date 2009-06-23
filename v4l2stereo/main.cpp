@@ -28,7 +28,7 @@
 #include "stereo.h"
 #include "libcam.h"
 
-#define VERSION 1.01
+#define VERSION 1.02
 
 using namespace std;
 
@@ -422,7 +422,7 @@ int main(int argc, char* argv[]) {
 				}
 				else {
 					x -= calibration_offset_x;
-					y -= calibration_offset_y;
+					y += calibration_offset_y;
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
 				}
 
@@ -445,7 +445,11 @@ int main(int argc, char* argv[]) {
 		descriptor_match_threshold,
 		learnDesc,
 		learnLuma,
-		learnDisp);
+		learnDisp,
+		1);
+
+	/* experimental plane fitting */
+	//lcam->fit_plane(matches, 10, matches);
 
 	/* show disparity histogram */
 	if (show_histogram) {
