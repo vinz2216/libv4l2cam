@@ -70,13 +70,13 @@ svs::svs(int width, int height) {
 	row_peaks = new unsigned int[SVS_MAX_IMAGE_WIDTH];
 
 	/* array stores matching probabilities (prob,x,y,disp) */
-	svs_matches = new unsigned int[SVS_MAX_FEATURES * 4];
+	svs_matches = NULL;
 
 	/* array used during filtering */
-	valid_quadrants = new unsigned char[SVS_MAX_FEATURES];
+	valid_quadrants = NULL;
 
 	/* priors */
-	disparity_priors = new int[SVS_MAX_IMAGE_WIDTH*SVS_MAX_IMAGE_HEIGHT/16];
+	disparity_priors = NULL;
 }
 
 svs::~svs() {
@@ -86,9 +86,12 @@ svs::~svs() {
 	delete[] mean;
 	delete[] row_sum;
 	delete[] row_peaks;
-	delete[] svs_matches;
-	delete[] valid_quadrants;
-	delete[] disparity_priors;
+	if (svs_matches != NULL)
+		delete[] svs_matches;
+	if (valid_quadrants != NULL)
+	    delete[] valid_quadrants;
+	if (disparity_priors != NULL)
+		delete[] disparity_priors;
 	if (disparity_histogram != NULL)
 		delete[] disparity_histogram;
 	if (calibration_map != NULL)
@@ -304,6 +307,18 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 
 	unsigned int meandescL, meandescR;
 	short meandesc[SVS_DESCRIPTOR_PIXELS];
+
+	/* create arrays */
+	if (svs_matches == NULL) {
+	    svs_matches = new unsigned int[SVS_MAX_FEATURES * 4];
+	    valid_quadrants = new unsigned char[SVS_MAX_FEATURES];
+	}
+
+	/* create array to store disparity priors */
+	if ((use_priors != 0) &&
+		(disparity_priors == NULL)) {
+		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH*SVS_MAX_IMAGE_HEIGHT/16];
+	}
 
 	/* convert max disparity from percent to pixels */
 	max_disp_pixels = max_disparity_percent * imgWidth / 100;
