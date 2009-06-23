@@ -317,7 +317,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	/* create array to store disparity priors */
 	if ((use_priors != 0) &&
 		(disparity_priors == NULL)) {
-		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH*SVS_MAX_IMAGE_HEIGHT/16];
+		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH*SVS_MAX_IMAGE_HEIGHT/(16*SVS_VERTICAL_SAMPLING)];
 	}
 
 	/* convert max disparity from percent to pixels */
@@ -379,7 +379,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			xL = feature_x[fL + L];
 
 			if (use_priors != 0) {
-				disp_prior = disparity_priors[(y * imgWidth + xL)/16];
+				disp_prior = disparity_priors[(row * imgWidth + xL)/16];
 
 				if (disp_prior == 0) {
 					/* no prior available - use default search */
@@ -387,7 +387,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 					max_disp = max_disp_pixels;
 				}
 				else {
-					/* bias the range of search based upon prior */
+					/* narrow the range of search based upon prior */
 					min_disp = disp_prior - 3;
 					max_disp = disp_prior + 3;
 				}
@@ -475,7 +475,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 						total += row_peaks[R];
 					}
 				} else {
-					if ((disp < 0) && (disp > -max_disp)) {
+					if ((disp < min_disp) && (disp > -max_disp)) {
 						row_peaks[R] = (unsigned int) ((max_disp - disp)
 								* learnDisp);
 						total += row_peaks[R];
@@ -530,7 +530,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	}
 
 	// clear priors
-	memset(disparity_priors, 0, imgWidth*imgHeight/16*sizeof(int));
+	memset(disparity_priors, 0, imgWidth*imgHeight/(16*SVS_VERTICAL_SAMPLING)*sizeof(int));
 
 	if (no_of_possible_matches > 1) {
 
@@ -577,7 +577,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				svs_matches[curr_idx + 3] = disp;
 
 				/* store prior */
-				disparity_priors[(y * imgWidth + xL)/16] = disp;
+				disparity_priors[(row * imgWidth + xL)/16] = disp;
 			}
 
 			if (svs_matches[curr_idx] == 0) {
