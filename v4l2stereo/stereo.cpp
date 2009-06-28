@@ -435,15 +435,15 @@ int learnLuma, /* luminance match weight */
 int learnDisp, /* disparity weight */
 int use_priors) { /* if non-zero then use priors, assuming time between frames is small */
 
-	int x, xL, xR, L, R, y, no_of_feats, no_of_feats_left, no_of_feats_right, row, col=0, bit;
+	int x, xL=0, xR, L, R, y, no_of_feats, no_of_feats_left, no_of_feats_right, row, col=0, bit;
 	int luma_diff, disp_prior, min_disp, max_disp = 0, max_disp_pixels, meanL,
-			meanR, disp, fL = 0, fR = 0, bestR = 0;
+			meanR, disp=0, fL = 0, fR = 0, bestR = 0;
 	unsigned int descL, descLanti, descR, desc_match;
 	unsigned int correlation, anticorrelation, total, n;
 	unsigned int match_prob, best_prob;
 	int idx, max, curr_idx=0, search_idx, winner_idx = 0;
 	int no_of_possible_matches = 0, matches = 0;
-	int itt, additional_matches, prev_matches;
+	int itt, prev_matches;
 
 	unsigned int meandescL, meandescR;
 	short meandesc[SVS_DESCRIPTOR_PIXELS];
@@ -769,7 +769,6 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	/* attempt to assign disparities to vertical features */
 	memset(valid_quadrants, 0, SVS_MAX_MATCHES * sizeof(unsigned char));
 	itt = 0;
-	additional_matches = 0;
 	prev_matches = matches;
 	for (itt = 0; itt < 10; itt++) {
 		fL = 0;
@@ -837,7 +836,6 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
 				    	}
 						valid_quadrants[fL + L] = 1;
-						additional_matches++;
 					}
 				}
 			}
@@ -846,9 +844,6 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	    if (prev_matches == matches) break;
 	    prev_matches = matches;
 	}
-	printf("itt: %d\n", itt);
-
-	printf("matches: %d/%d/%d\n", ideal_no_of_matches, matches, additional_matches);
 	return (matches);
 }
 
