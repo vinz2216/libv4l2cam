@@ -275,23 +275,26 @@ void drawing::drawBlendedSpot(
     int g,
     int b)
 {
-	for (int yy = y - radius; yy <= y + radius; yy++)
+	int dx, dy, xx, yy, dist_sqr, n;
+	int radius_sqr = radius*radius;
+
+	for (yy = y - radius; yy <= y + radius; yy++)
 	{
 		if ((yy > -1) && (yy < img_height))
 		{
-			int dy = yy - y;
-		    for (int xx = x - radius; xx <= x + radius; xx++)
+			dy = yy - y;
+		    for (xx = x - radius; xx <= x + radius; xx++)
 		    {
 		    	if ((xx > -1) && (xx < img_width))
 		    	{
-		    		int dx = xx - x;
-		    		int dist = (int)sqrt(dx*dx + dy*dy);
-		    		if (dist <= radius)
+		    		dx = xx - x;
+		    		dist_sqr = dx*dx + dy*dy;
+		    		if (dist_sqr <= radius_sqr)
 		    		{
-		    			int n = ((yy * img_width) + xx) * 3;
-		    			img[n] = (unsigned int)((img[n] + b) / 2);
-		    			img[n+1] = (unsigned int)((img[n + 1] + g) / 2);
-		    			img[n+2] = (unsigned int)((img[n + 2] + r) / 2);
+		    			n = ((yy * img_width) + xx) * 3;
+		    			img[n] = (unsigned char)((img[n] + b) / 2);
+		    			img[n+1] = (unsigned char)((img[n + 1] + g) / 2);
+		    			img[n+2] = (unsigned char)((img[n + 2] + r) / 2);
 		    		}
 		    	}
 		    }

@@ -48,12 +48,15 @@ svs::svs(int width, int height) {
 
 	/* array storing x coordinates of detected features */
 	feature_x = new short int[SVS_MAX_FEATURES];
+	feature_y = new short int[SVS_MAX_FEATURES];
 
 	disparity_histogram = NULL;
 	calibration_map = NULL;
 
 	/* array storing the number of features detected on each row */
 	features_per_row = new unsigned short int[SVS_MAX_IMAGE_HEIGHT
+			/ SVS_VERTICAL_SAMPLING];
+	features_per_col = new unsigned short int[SVS_MAX_IMAGE_WIDTH
 			/ SVS_VERTICAL_SAMPLING];
 
 	/* Array storing a binary descriptor, 32bits in length, for each detected feature.
@@ -89,7 +92,7 @@ svs::~svs() {
 	if (svs_matches != NULL)
 		delete[] svs_matches;
 	if (valid_quadrants != NULL)
-	    delete[] valid_quadrants;
+		delete[] valid_quadrants;
 	if (disparity_priors != NULL)
 		delete[] disparity_priors;
 	if (disparity_histogram != NULL)
@@ -142,6 +145,53 @@ unsigned char* rectified_frame_buf) { /* image data */
 	return (mean);
 }
 
+/* Updates sliding sums and edge response values along a single column
+ * Returns the mean luminance along the column */
+int svs::update_sums_vertical(int x, /* col index */
+unsigned char* rectified_frame_buf) { /* image data */
+
+	int y, idx, mean = 0;
+	unsigned int v;
+
+	/* compute sums along the column */
+	idx = x;
+	row_sum[0] =
+		rectified_frame_buf[idx + 2] +
+		rectified_frame_buf[idx + 1] +
+		rectified_frame_buf[idx + 0];
+	for (y = 1; y < (int) imgHeight; y++) {
+		idx = pixindex(x, y);
+		v =
+		    rectified_frame_buf[idx + 2] +
+		    rectified_frame_buf[idx + 1] +
+			rectified_frame_buf[idx];
+		row_sum[y] = row_sum[y - 1] + v;
+	}
+
+	/* column mean luminance */
+	mean = row_sum[y - 1] / ((int) imgHeight * 3);
+
+	/* compute peaks */
+	int p0, p1;
+	for (y = 4; y < (int) imgHeight - 4; y++) {
+
+		/* edge using 2 pixel radius */
+		p0 = (row_sum[y] - row_sum[y - 2]) - (row_sum[y + 2] - row_sum[y]);
+		if (p0 < 0)
+			p0 = -p0;
+
+		/* edge using 4 pixel radius */
+		p1 = (row_sum[y] - row_sum[y - 4]) - (row_sum[y + 4] - row_sum[y]);
+		if (p1 < 0)
+			p1 = -p1;
+
+		/* overall edge response */
+		row_peaks[y] = p0 + p1;
+	}
+
+	return (mean);
+}
+
 /* performs non-maximal suppression on the given row */
 void svs::non_max(int inhibition_radius, /* radius for non-maximal suppression */
 unsigned int min_response) { /* minimum threshold as a percent in the range 0-200 */
@@ -170,6 +220,41 @@ unsigned int min_response) { /* minimum threshold as a percent in the range 0-20
 					row_peaks[x + r] = 0;
 				} else {
 					row_peaks[x] = 0;
+					r = inhibition_radius;
+				}
+			}
+		}
+	}
+}
+
+/* performs non-maximal suppression on the given row */
+void svs::non_max_vertical(int inhibition_radius, /* radius for non-maximal suppression */
+unsigned int min_response) { /* minimum threshold as a percent in the range 0-200 */
+
+	int y, r;
+	unsigned int v;
+
+	/* average response */
+	unsigned int av_peaks = 0;
+	for (y = 4; y < (int) imgHeight - 4; y++) {
+		av_peaks += row_peaks[y];
+	}
+	av_peaks /= (imgHeight - 8);
+
+	/* adjust the threshold */
+	av_peaks = av_peaks * min_response / 100;
+
+	for (y = 4; y < (int) imgHeight - inhibition_radius; y++) {
+
+		if (row_peaks[y] < av_peaks)
+			row_peaks[y] = 0;
+		v = row_peaks[y];
+		if (v > 0) {
+			for (r = 1; r < inhibition_radius; r++) {
+				if (row_peaks[y + r] < v) {
+					row_peaks[y + r] = 0;
+				} else {
+					row_peaks[y] = 0;
 					r = inhibition_radius;
 				}
 			}
@@ -287,6 +372,59 @@ int calibration_offset_x, int calibration_offset_y) {
 	return (no_of_features);
 }
 
+/* returns a set of features suitable for stereo matching */
+int svs::get_features_vertical(unsigned char* rectified_frame_buf, /* image data */
+int inhibition_radius, /* radius for non-maximal supression */
+unsigned int minimum_response, /* minimum threshold */
+int calibration_offset_x, int calibration_offset_y) {
+
+	unsigned short int no_of_feats;
+	int x, y, row_mean, start_y;
+	int no_of_features = 0;
+	int col_idx = 0;
+
+	memset(features_per_col, 0, SVS_MAX_IMAGE_WIDTH / SVS_VERTICAL_SAMPLING
+			* sizeof(unsigned short));
+
+	start_y = imgHeight - 15;
+	if ((int) imgHeight - inhibition_radius - 1 < start_y)
+		start_y = (int) imgHeight - inhibition_radius - 1;
+
+	for (x = 4 + calibration_offset_x; x < (int) imgWidth - 4; x
+			+= SVS_VERTICAL_SAMPLING) {
+
+		/* reset number of features on the row */
+		no_of_feats = 0;
+
+		if ((x >= 4) && (x <= (int) imgWidth - 4)) {
+
+			row_mean = update_sums_vertical(x, rectified_frame_buf);
+			non_max_vertical(inhibition_radius, minimum_response);
+
+			/* store the features */
+			for (y = start_y; y > 15; y--) {
+				if (row_peaks[y] > 0) {
+
+					if (compute_descriptor(x, y, rectified_frame_buf,
+							no_of_features, row_mean) == 0) {
+						feature_y[no_of_features++] = (short int) (y
+								+ calibration_offset_y);
+						no_of_feats++;
+						if (no_of_features == SVS_MAX_FEATURES) {
+							x = imgWidth;
+							printf("stereo feature buffer full\n");
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		features_per_col[col_idx++] = no_of_feats;
+	}
+	return (no_of_features);
+}
+
 /* Match features from this camera with features from the opposite one.
  * It is assumed that matching is performed on the left camera CPU */
 int svs::match(svs* other, int ideal_no_of_matches, /* ideal number of matches to be returned */
@@ -297,27 +435,29 @@ int learnLuma, /* luminance match weight */
 int learnDisp, /* disparity weight */
 int use_priors) { /* if non-zero then use priors, assuming time between frames is small */
 
-	int xL, xR, L, R, y, no_of_feats_left, no_of_feats_right, row, bit;
-	int luma_diff, disp_prior, min_disp, max_disp=0, max_disp_pixels, meanL, meanR, disp, fL = 0, fR = 0, bestR = 0;
+	int x, xL, xR, L, R, y, no_of_feats, no_of_feats_left, no_of_feats_right, row, col=0, bit;
+	int luma_diff, disp_prior, min_disp, max_disp = 0, max_disp_pixels, meanL,
+			meanR, disp, fL = 0, fR = 0, bestR = 0;
 	unsigned int descL, descLanti, descR, desc_match;
 	unsigned int correlation, anticorrelation, total, n;
 	unsigned int match_prob, best_prob;
-	int max, curr_idx, search_idx, winner_idx = 0;
+	int idx, max, curr_idx=0, search_idx, winner_idx = 0;
 	int no_of_possible_matches = 0, matches = 0;
+	int itt, additional_matches, prev_matches;
 
 	unsigned int meandescL, meandescR;
 	short meandesc[SVS_DESCRIPTOR_PIXELS];
 
 	/* create arrays */
 	if (svs_matches == NULL) {
-	    svs_matches = new unsigned int[SVS_MAX_FEATURES * 4];
-	    valid_quadrants = new unsigned char[SVS_MAX_FEATURES];
+		svs_matches = new unsigned int[SVS_MAX_MATCHES * 4];
+		valid_quadrants = new unsigned char[SVS_MAX_MATCHES];
 	}
 
 	/* create array to store disparity priors */
-	if ((use_priors != 0) &&
-		(disparity_priors == NULL)) {
-		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH*SVS_MAX_IMAGE_HEIGHT/(16*SVS_VERTICAL_SAMPLING)];
+	if ((use_priors != 0) && (disparity_priors == NULL)) {
+		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH * SVS_MAX_IMAGE_HEIGHT
+				/ (16*SVS_VERTICAL_SAMPLING)];
 	}
 
 	/* convert max disparity from percent to pixels */
@@ -379,14 +519,13 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			xL = feature_x[fL + L];
 
 			if (use_priors != 0) {
-				disp_prior = disparity_priors[(row * imgWidth + xL)/16];
+				disp_prior = disparity_priors[(row * imgWidth + xL) / 16];
 
 				if (disp_prior == 0) {
 					/* no prior available - use default search */
 					min_disp = -10;
 					max_disp = max_disp_pixels;
-				}
-				else {
+				} else {
 					/* narrow the range of search based upon prior */
 					min_disp = disp_prior - 3;
 					max_disp = disp_prior + 3;
@@ -530,7 +669,8 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	}
 
 	// clear priors
-	memset(disparity_priors, 0, imgWidth*imgHeight/(16*SVS_VERTICAL_SAMPLING)*sizeof(int));
+	memset(disparity_priors, 0, imgWidth * imgHeight / (16*
+			SVS_VERTICAL_SAMPLING ) * sizeof(int));
 
 	if (no_of_possible_matches > 1) {
 
@@ -577,7 +717,46 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				svs_matches[curr_idx + 3] = disp;
 
 				/* store prior */
-				disparity_priors[(row * imgWidth + xL)/16] = disp;
+				row = y / SVS_VERTICAL_SAMPLING;
+			    disparity_priors[(row * imgWidth + xL) / 16] = disp;
+			    if (row > 2) {
+			    	idx = ((row-1) * imgWidth + xL) / 16;
+			    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    	if (xL > 6) {
+				    	idx = ((row-1) * imgWidth + xL - 4) / 16;
+				    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+				    	idx = ((row-1) * imgWidth + xL - 8) / 16;
+				    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    	}
+			    	if (xL < (int)imgWidth-9) {
+			    	    idx = ((row-1) * imgWidth + xL + 4) / 16;
+			    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    	    idx = ((row-1) * imgWidth + xL + 8) / 16;
+			    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    	}
+			    	idx = ((row-2) * imgWidth + xL) / 16;
+			    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    	idx = ((row-3) * imgWidth + xL) / 16;
+			    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    }
+			    idx = ((row+1) * imgWidth + xL) / 16;
+			    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    idx = ((row+2) * imgWidth + xL) / 16;
+			    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    idx = ((row+3) * imgWidth + xL) / 16;
+			    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+		    	if (xL > 6) {
+			    	idx = ((row+1) * imgWidth + xL - 4) / 16;
+			    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+			    	idx = ((row+1) * imgWidth + xL - 8) / 16;
+			    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+		    	}
+		    	if (xL < (int)imgWidth-9) {
+		    	    idx = ((row+1) * imgWidth + xL + 4) / 16;
+		    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+		    	    idx = ((row+1) * imgWidth + xL + 8) / 16;
+		    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+		    	}
 			}
 
 			if (svs_matches[curr_idx] == 0) {
@@ -586,6 +765,90 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 
 		}
 	}
+
+	/* attempt to assign disparities to vertical features */
+	memset(valid_quadrants, 0, SVS_MAX_MATCHES * sizeof(unsigned char));
+	itt = 0;
+	additional_matches = 0;
+	prev_matches = matches;
+	for (itt = 0; itt < 10; itt++) {
+		fL = 0;
+		col = 0;
+		for (x = 4; x < (int) imgWidth - 4; x += SVS_VERTICAL_SAMPLING, col++) {
+
+			no_of_feats = features_per_col[col];
+
+			/* features along the row in the left camera */
+			for (L = 0; L < no_of_feats; L++) {
+
+				if (valid_quadrants[fL + L] == 0) {
+					/* y coordinate of the feature in the left camera */
+					y = feature_y[fL + L];
+
+					/* lookup disparity from priors */
+
+					row = y / SVS_VERTICAL_SAMPLING;
+					disp_prior = disparity_priors[(row * imgWidth + x) / 16];
+
+					if ((disp_prior > 0) &&
+						(matches < SVS_MAX_MATCHES)) {
+						curr_idx = matches * 4;
+						svs_matches[curr_idx] = 1000;
+						svs_matches[curr_idx + 1] = x;
+						svs_matches[curr_idx + 2] = y;
+						svs_matches[curr_idx + 3] = disp_prior;
+						matches++;
+						if (row > 2) {
+							idx = ((row-1) * imgWidth + x) / 16;
+							if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
+							idx = ((row-2) * imgWidth + x) / 16;
+							if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
+							idx = ((row-3) * imgWidth + x) / 16;
+							if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
+					    	if (xL > 6) {
+						    	idx = ((row-1) * imgWidth + xL - 4) / 16;
+						    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+						    	idx = ((row-1) * imgWidth + xL - 8) / 16;
+						    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+					    	}
+					    	if (xL < (int)imgWidth-9) {
+					    	    idx = ((row-1) * imgWidth + xL + 4) / 16;
+					    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+					    	    idx = ((row-1) * imgWidth + xL + 8) / 16;
+					    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+					    	}
+						}
+						idx = ((row+1) * imgWidth + x) / 16;
+						if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
+						idx = ((row+2) * imgWidth + x) / 16;
+						if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
+						idx = ((row+3) * imgWidth + x) / 16;
+						if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
+				    	if (xL > 6) {
+					    	idx = ((row+1) * imgWidth + xL - 4) / 16;
+					    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+					    	idx = ((row+1) * imgWidth + xL - 8) / 16;
+					    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+				    	}
+				    	if (xL < (int)imgWidth-9) {
+				    	    idx = ((row+1) * imgWidth + xL + 4) / 16;
+				    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+				    	    idx = ((row+1) * imgWidth + xL + 8) / 16;
+				    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
+				    	}
+						valid_quadrants[fL + L] = 1;
+						additional_matches++;
+					}
+				}
+			}
+			fL += no_of_feats;
+		}
+	    if (prev_matches == matches) break;
+	    prev_matches = matches;
+	}
+	printf("itt: %d\n", itt);
+
+	printf("matches: %d/%d/%d\n", ideal_no_of_matches, matches, additional_matches);
 	return (matches);
 }
 
@@ -764,93 +1027,216 @@ int& calibration_offset_y) { /* returned vertical offset in pixels */
 	}
 }
 
-/* takes the raw image and camera calibration parameters and returns a rectified image */
-void svs::rectify(unsigned char* raw_image, /* raw image grabbed from camera */
+/* creates a calibration map */
+void svs::make_map(
 float centre_of_distortion_x, /* centre of distortion x coordinate in pixels */
 float centre_of_distortion_y, /* centre of distortion y coordinate in pixels */
 float coeff_0, /* lens distortion polynomial coefficient 0 */
 float coeff_1, /* lens distortion polynomial coefficient 1 */
 float coeff_2, /* lens distortion polynomial coefficient 2 */
 float rotation, /* camera rotation (roll angle) in radians */
-float scale, /* scaling applied */
-unsigned char* rectified_frame_buf) { /* returned rectified image */
+float scale) { /* scaling applied */
 
-	if (calibration_map == NULL) {
+	/* free existing map */
+	if (calibration_map != NULL) free(calibration_map);
 
-		polynomial* distortion_curve = new polynomial();
-		distortion_curve->SetDegree(3);
-		distortion_curve->SetCoeff(0, 0);
-		distortion_curve->SetCoeff(1, coeff_0);
-		distortion_curve->SetCoeff(2, coeff_1);
-		distortion_curve->SetCoeff(3, coeff_2);
+	polynomial* distortion_curve = new polynomial();
+	distortion_curve->SetDegree(3);
+	distortion_curve->SetCoeff(0, 0);
+	distortion_curve->SetCoeff(1, coeff_0);
+	distortion_curve->SetCoeff(2, coeff_1);
+	distortion_curve->SetCoeff(3, coeff_2);
 
-		int half_width = imgWidth / 2;
-		int half_height = imgHeight / 2;
-		calibration_map = new int[imgWidth * imgHeight];
-		for (int x = 0; x < (int) imgWidth; x++) {
+	int half_width = imgWidth / 2;
+	int half_height = imgHeight / 2;
+	calibration_map = new int[imgWidth * imgHeight];
+	for (int x = 0; x < (int) imgWidth; x++) {
 
-			float dx = x - centre_of_distortion_x;
+		float dx = x - centre_of_distortion_x;
 
-			for (int y = 0; y < (int) imgHeight; y++) {
+		for (int y = 0; y < (int) imgHeight; y++) {
 
-				float dy = y - centre_of_distortion_y;
+			float dy = y - centre_of_distortion_y;
 
-				float radial_dist_rectified = (float) sqrt(dx * dx + dy * dy);
-				if (radial_dist_rectified >= 0.01f) {
+			float radial_dist_rectified = (float) sqrt(dx * dx + dy * dy);
+			if (radial_dist_rectified >= 0.01f) {
 
-					double radial_dist_original = distortion_curve->RegVal(
-							radial_dist_rectified);
-					if (radial_dist_original > 0) {
+				double radial_dist_original = distortion_curve->RegVal(
+						radial_dist_rectified);
+				if (radial_dist_original > 0) {
 
-						double ratio = radial_dist_original
-								/ radial_dist_rectified;
-						float x2 = (float) round(centre_of_distortion_x + (dx
-								* ratio));
-						x2 = (x2 - (imgWidth / 2)) * scale;
-						float y2 = (float) round(centre_of_distortion_y + (dy
-								* ratio));
-						y2 = (y2 - (imgHeight / 2)) * scale;
+					double ratio = radial_dist_original
+							/ radial_dist_rectified;
+					float x2 = (float) round(centre_of_distortion_x + (dx
+							* ratio));
+					x2 = (x2 - (imgWidth / 2)) * scale;
+					float y2 = (float) round(centre_of_distortion_y + (dy
+							* ratio));
+					y2 = (y2 - (imgHeight / 2)) * scale;
 
-						// apply rotation
-						double x3 = x2, y3 = y2;
-						double hyp;
-						if (rotation != 0) {
-							hyp = sqrt(x2 * x2 + y2 * y2);
-							if (hyp > 0) {
-								double rot_angle = acos(y2 / hyp);
-								if (x2 < 0)
-									rot_angle = (3.1415927 * 2) - rot_angle;
-								double new_angle = rotation + rot_angle;
-								x3 = hyp * sin(new_angle);
-								y3 = hyp * cos(new_angle);
-							}
+					// apply rotation
+					double x3 = x2, y3 = y2;
+					double hyp;
+					if (rotation != 0) {
+						hyp = sqrt(x2 * x2 + y2 * y2);
+						if (hyp > 0) {
+							double rot_angle = acos(y2 / hyp);
+							if (x2 < 0)
+								rot_angle = (3.1415927 * 2) - rot_angle;
+							double new_angle = rotation + rot_angle;
+							x3 = hyp * sin(new_angle);
+							y3 = hyp * cos(new_angle);
 						}
+					}
 
-						x3 += half_width;
-						y3 += half_height;
+					x3 += half_width;
+					y3 += half_height;
 
-						if (((int) x3 > -1) && ((int) x3 < (int) imgWidth)
-								&& ((int) y3 > -1) && ((int) y3
-								< (int) imgHeight)) {
+					if (((int) x3 > -1) && ((int) x3 < (int) imgWidth)
+							&& ((int) y3 > -1) && ((int) y3
+							< (int) imgHeight)) {
 
-							int n = (y * imgWidth) + x;
-							int n2 = ((int) y3 * imgWidth) + (int) x3;
+						int n = (y * imgWidth) + x;
+						int n2 = ((int) y3 * imgWidth) + (int) x3;
 
-							calibration_map[n] = n2;
-						}
+						calibration_map[n] = n2;
 					}
 				}
 			}
 		}
-		delete distortion_curve;
 	}
+	delete distortion_curve;
+}
 
-	int n = 0;
-	int max = imgWidth * imgHeight * 3;
-	for (int i = 0; i < max; i += 3, n++) {
-		int index = calibration_map[n] * 3;
-		for (int col = 0; col < 3; col++)
-			rectified_frame_buf[i + col] = raw_image[index + col];
+/* takes the raw image and camera calibration parameters and returns a rectified image */
+void svs::rectify(unsigned char* raw_image, /* raw image grabbed from camera */
+unsigned char* rectified_frame_buf) {       /* returned rectified image */
+
+	int max, n, i, idx;
+
+	if (calibration_map != NULL) {
+
+	    n = 0;
+	    max = imgWidth * imgHeight * 3;
+	    for (i = 0; i < max; i += 3, n++) {
+		    idx = calibration_map[n] * 3;
+		    rectified_frame_buf[i] = raw_image[idx];
+		    rectified_frame_buf[i + 1] = raw_image[idx + 1];
+		    rectified_frame_buf[i + 2] = raw_image[idx + 2];
+	    }
+	}
+}
+
+
+/* takes the raw image and camera calibration parameters and returns a rectified image */
+void svs::make_map_int(long centre_of_distortion_x, /* centre of distortion x coordinate in pixels xSVS_MULT */
+long centre_of_distortion_y, /* centre of distortion y coordinate in pixels xSVS_MULT */
+long* coeff, /* three lens distortion polynomial coefficients xSVS_MULT_COEFF */
+long scale_num, /* scaling numerator */
+long scale_denom) { /* scaling denominator */
+
+	const long SVS_MULT = 1;
+	const long SVS_MULT_COEFF = 10000000;
+
+	long v, powr, radial_dist_rectified, radial_dist_original;
+	long i, j, x, y, dx, dy;
+	long n, n2, x2, y2;
+	long ww = imgWidth;
+	long hh = imgHeight;
+	long half_width = ww / 2;
+	long half_height = hh / 2;
+	scale_denom *= SVS_MULT;
+	calibration_map = new int[imgWidth * imgHeight];
+	for (x = 0; x < ww; x++) {
+
+		dx = (x * SVS_MULT) - centre_of_distortion_x;
+
+		for (y = 0; y < hh; y++) {
+
+			dy = (y * SVS_MULT) - centre_of_distortion_y;
+
+			v = dx * dx + dy * dy;
+			/* integer square root */
+			for (radial_dist_rectified = 0; v >= (2* radial_dist_rectified )
+					+ 1; v -= (2* radial_dist_rectified ++) + 1)
+				;
+
+			//float radial_dist_rectified2 = (float) sqrt(dx * dx + dy * dy);
+
+			//printf("radial_dist_rectified %ld %f\n", radial_dist_rectified, radial_dist_rectified2);
+
+			if (radial_dist_rectified >= 0) {
+
+				/* for each polynomial coefficient */
+				radial_dist_original = 0;
+				double radial_dist_original2 = 0;
+				for (i = 0; i < 4; i++) {
+
+					/* pow(radial_dist_rectified, i) */
+					powr = 1;
+					if (i != 0) {
+						j = i;
+						while (j != 0) {
+							powr *= radial_dist_rectified;
+							j--;
+						}
+					} else {
+						powr = 1;
+					}
+
+					//printf("powr %ld %lf\n", powr, pow(radial_dist_rectified, i));
+
+					/*
+					if (coeff[i] >= 0) {
+					    radial_dist_original += (unsigned long)coeff[i] * powr;
+					}
+					else {
+						radial_dist_original -= (unsigned long)(-coeff[i]) * powr;
+					}
+					*/
+					radial_dist_original += coeff[i] * powr;
+					radial_dist_original2 += coeff[i] * pow(radial_dist_rectified, i);
+
+					//printf("powr %ld %lf\n", coeff[i] * powr, (double)coeff[i] * pow(radial_dist_rectified, i));
+				}
+				//printf("radial_dist_original %ld %lf\n", radial_dist_original, radial_dist_original2);
+
+				if (radial_dist_original > 0) {
+
+					radial_dist_original /= SVS_MULT_COEFF;
+					radial_dist_original2 /= SVS_MULT_COEFF;
+					//printf("radial_dist_original %ld %lf\n", radial_dist_original, radial_dist_original2);
+
+					//printf("radial_dist_rectified: %d\n", (int)(radial_dist_rectified/SVS_MULT));
+					//printf("radial_dist_original:  %d\n", (int)(radial_dist_original/SVS_MULT));
+
+					x2 = centre_of_distortion_x + (dx * radial_dist_original
+							/ radial_dist_rectified);
+					x2 = (x2 - (half_width * SVS_MULT)) * scale_num
+							/ scale_denom;
+					y2 = centre_of_distortion_y + (dy * radial_dist_original
+							/ radial_dist_rectified);
+					y2 = (y2 - (half_height * SVS_MULT)) * scale_num
+							/ scale_denom;
+
+					x2 += half_width;
+					y2 += half_height;
+
+					if ((x2 > -1) && (x2 < ww) && (y2 > -1) && (y2 < hh)) {
+
+						n = y * imgWidth + x;
+						n2 = y2 * imgWidth + x2;
+
+						//int diff = calibration_map[(int) n] - (int) n2;
+						//if (diff < 0)
+						//	diff = -diff;
+						//printf("diff: %d\n", diff);
+
+						calibration_map[(int)n] = (int)n2;
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -916,7 +1302,8 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 	int max_hits = 0;
 	int idx0, idx1, xx0, yy0, xx1, yy1, dx, dy, abs_dx, abs_dy, hits;
 	int grad_x, grad_y, index0, index1, sample, horizontal, deviation_sum;
-	int best_index0, best_index1, min_deviation, min_deviation_hits=0, edge_sample;
+	int best_index0, best_index1, min_deviation, min_deviation_hits = 0,
+			edge_sample;
 	int axis, edge_x, edge_y, deviation, predicted_edge_x, predicted_edge_y;
 
 	if (no_of_matches > 40) {
@@ -1038,8 +1425,7 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 				} else {
 					break;
 				}
-			}
-			else {
+			} else {
 				break;
 			}
 		}
@@ -1047,5 +1433,4 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 
 	return (max_hits);
 }
-
 

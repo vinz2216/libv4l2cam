@@ -28,6 +28,7 @@
 #include "polynomial.h"
 
 #define SVS_MAX_FEATURES         2000
+#define SVS_MAX_MATCHES          2000
 #define SVS_MAX_IMAGE_WIDTH      1024
 #define SVS_MAX_IMAGE_HEIGHT     1024
 #define SVS_VERTICAL_SAMPLING    2
@@ -43,8 +44,14 @@ public:
     /* array storing x coordinates of detected features */
     short int* feature_x;
 
+    /* array storing y coordinates of detected features */
+    short int* feature_y;
+
     /* array storing the number of features detected on each row */
     unsigned short int* features_per_row;
+
+    /* array storing the number of features detected on each column */
+    unsigned short int* features_per_col;
 
     /* Array storing a binary descriptor, 32bits in length, for each detected feature.
      * This will be used for matching purposes.*/
@@ -76,6 +83,9 @@ public:
 
     int update_sums(int y, unsigned char* rectified_frame_buf);
     void non_max(int inhibition_radius, unsigned int min_response);
+    int update_sums_vertical(int y, unsigned char* rectified_frame_buf);
+    void non_max_vertical(int inhibition_radius, unsigned int min_response);
+    int get_features_vertical(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y);
     int compute_descriptor(int px, int py, unsigned char* rectified_frame_buf, int no_of_features, int row_mean);
     int get_features(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y);
     void filter(int no_of_possible_matches, int max_disparity_pixels, int tolerance);
@@ -83,7 +93,9 @@ public:
     int fit_plane(int no_of_matches, int max_deviation, int no_of_samples);
 
     void calibrate_offsets(unsigned char* left_image, unsigned char* right_image, int x_range, int y_range, int& calibration_offset_x, int& calibration_offset_y);
-    void rectify(unsigned char* raw_image, float centre_of_distortion_x, float centre_of_distortion_y, float coeff_0, float coeff_1, float coeff_2, float rotation, float scale, unsigned char* rectified_frame_buf);
+    void make_map(float centre_of_distortion_x, float centre_of_distortion_y, float coeff_0, float coeff_1, float coeff_2, float rotation, float scale);
+    void make_map_int(long centre_of_distortion_x, long centre_of_distortion_y, long* coeff, long scale_num, long scale_denom);
+    void rectify(unsigned char* raw_image, unsigned char* rectified_frame_buf);
 
     void save_matches(std::string filename, unsigned char* rectified_frame_buf, int no_of_matches, bool colour);
 
