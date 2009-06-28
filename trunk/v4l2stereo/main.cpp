@@ -365,6 +365,9 @@ int main(int argc, char* argv[]) {
 
   unsigned char* rectification_buffer = NULL;
 
+  /* test */
+  //rectify_images = true;
+
   while(1){
 
     while(c.Get()==0 || c2.Get()==0) usleep(100);
@@ -375,10 +378,18 @@ int main(int argc, char* argv[]) {
     if (rectify_images) {
     	if (rectification_buffer == NULL) {
     		rectification_buffer = new unsigned char[ww * hh * 3];
+
+    		//long coeff2[] = { 0, 103159213, -1049, -439 };
+    		long coeff2[] = { 0, 10315921, -105, -44 };
+    		lcam->make_map_int((long)ww/2, (long)hh/2, coeff2, 1, 1);
+
+    		/* create mappings for image rectification */
+            //lcam->make_map(centre_of_distortion_x0, centre_of_distortion_y0, coeff[0][0], coeff[0][1], coeff[0][2], rotation0, scale0);
+            rcam->make_map(centre_of_distortion_x1, centre_of_distortion_y1, coeff[1][0], coeff[1][1], coeff[1][2], rotation1, scale1);
     	}
-        lcam->rectify(l_, centre_of_distortion_x0, centre_of_distortion_y0, coeff[0][0], coeff[0][1], coeff[0][2], rotation0, scale0, rectification_buffer);
+        lcam->rectify(l_, rectification_buffer);
         memcpy(l_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
-        rcam->rectify(r_, centre_of_distortion_x1, centre_of_distortion_y1, coeff[1][0], coeff[1][1], coeff[1][2], rotation1, scale1, rectification_buffer);
+        rcam->rectify(r_, rectification_buffer);
         memcpy(r_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
     }
 
@@ -388,6 +399,7 @@ int main(int argc, char* argv[]) {
 	for (int cam = 1; cam >= 0; cam--) {
 
 		int no_of_feats = 0;
+		int no_of_feats_vertical = 0;
 		svs* stereocam = NULL;
 		if (cam == 0) {
 			rectified_frame_buf = l_;
@@ -405,10 +417,21 @@ int main(int argc, char* argv[]) {
 	        calib_offset_x,
 	        calib_offset_y);
 
+		if ((cam == 0) || (show_features)) {
+		    no_of_feats_vertical = stereocam->get_features_vertical(
+	            rectified_frame_buf,
+	            inhibition_radius,
+	            minimum_response,
+	            calib_offset_x,
+	            calib_offset_y);
+		}
+
 		//printf("cam %d:  %d\n", cam, no_of_feats);
 
 		/* display the features */
 		if (show_features) {
+
+			/* horizontal features */
 			int row = 0;
 			int feats_remaining = stereocam->features_per_row[row];
 
@@ -432,6 +455,32 @@ int main(int argc, char* argv[]) {
 					feats_remaining = stereocam->features_per_row[row];
 				}
 			}
+
+			/* vertical features */
+			int col = 0;
+			feats_remaining = stereocam->features_per_col[col];
+
+			for (int f = 0; f < no_of_feats_vertical; f++, feats_remaining--) {
+
+				int y = (int)stereocam->feature_y[f];
+				int x = 4 + (col * SVS_VERTICAL_SAMPLING);
+
+				if (cam == 0) {
+				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
+				}
+				else {
+					x += calibration_offset_x;
+					y -= calibration_offset_y;
+				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
+				}
+
+				/* move to the next row */
+				if (feats_remaining <= 0) {
+					col++;
+					feats_remaining = stereocam->features_per_col[col];
+				}
+			}
+
 		}
 
 		calib_offset_x = 0;
@@ -501,7 +550,7 @@ int main(int argc, char* argv[]) {
 		    if (mass[i] > 0) disp2[i] /= mass[i];
 		}
 
-		int tx,ty,bx,by;
+		int tx=0,ty=0,bx=0,by=0;
 		for (int i = 0; i < 3; i++) {
 			if (hist_max[i] > 0) {
 				switch(i) {
