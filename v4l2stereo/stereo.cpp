@@ -443,12 +443,10 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	unsigned int match_prob, best_prob;
 	int idx, max, curr_idx=0, search_idx, winner_idx = 0;
 	int no_of_possible_matches = 0, matches = 0;
-	int itt, prev_matches, disparity_priors_stride;
+	int itt, prev_matches, row_offset, col_offset;
 
 	unsigned int meandescL, meandescR;
 	short meandesc[SVS_DESCRIPTOR_PIXELS];
-
-	disparity_priors_stride = imgWidth/16;
 
 	/* create arrays */
 	if (svs_matches == NULL) {
@@ -718,93 +716,17 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				svs_matches[curr_idx + 2] = y;
 				svs_matches[curr_idx + 3] = disp;
 
-				/* warning: inelegant code ahead */
+				/* update your priors */
 				row = y / SVS_VERTICAL_SAMPLING;
-				idx = (row * imgWidth + xL) / 16;
-				if (disparity_priors[idx] == 0)
-					disparity_priors[idx] = disp;
-				else
-					disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    if (row > 2) {
-			    	idx -= disparity_priors_stride;
-			    	if (disparity_priors[idx] == 0)
-			    		disparity_priors[idx] = disp;
-			    	else
-			    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    	if (xL > 6) {
-				    	idx--;
-				    	if (disparity_priors[idx] == 0)
-				    		disparity_priors[idx] = disp;
-				    	else
-				    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-				    	idx--;
-				    	if (disparity_priors[idx] == 0)
-				    		disparity_priors[idx] = disp;
-				    	else
-				    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    	}
-			    	if (xL < (int)imgWidth-9) {
-			    	    idx = (((row-1) * imgWidth + xL) / 16) + 1;
-			    	    if (disparity_priors[idx] == 0)
-			    	    	disparity_priors[idx] = disp;
-			    	    else
-			    	    	disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    	    idx++;
-			    	    if (disparity_priors[idx] == 0)
-			    	    	disparity_priors[idx] = disp;
-			    	    else
-			    	    	disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    	}
-			    	idx = ((row-2) * imgWidth + xL) / 16;
-			    	if (disparity_priors[idx] == 0)
-			    		disparity_priors[idx] = disp;
-			    	else
-			    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    	idx -= disparity_priors_stride;
-			    	if (disparity_priors[idx] == 0)
-			    		disparity_priors[idx] = disp;
-			    	else
-			    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    }
-			    idx = ((row+1) * imgWidth + xL) / 16;
-			    if (disparity_priors[idx] == 0)
-			    	disparity_priors[idx] = disp;
-			    else
-			    	disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    idx += disparity_priors_stride;
-			    if (disparity_priors[idx] == 0)
-			    	disparity_priors[idx] = disp;
-			    else
-			    	disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    idx += disparity_priors_stride;
-			    if (disparity_priors[idx] == 0)
-			    	disparity_priors[idx] = disp;
-			    else
-			        disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-		    	if (xL > 6) {
-			    	idx = (((row+1) * imgWidth + xL) / 16) - 1;
-			    	if (disparity_priors[idx] == 0)
-			    		disparity_priors[idx] = disp;
-			    	else
-			    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-			    	idx--;
-			    	if (disparity_priors[idx] == 0)
-			    		disparity_priors[idx] = disp;
-			    	else
-			    		disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-		    	}
-		    	if (xL < (int)imgWidth-9) {
-		    	    idx = (((row+1) * imgWidth + xL) / 16) + 1;
-		    	    if (disparity_priors[idx] == 0)
-		    	    	disparity_priors[idx] = disp;
-		    	    else
-		    	    	disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-		    	    idx++;
-		    	    if (disparity_priors[idx] == 0)
-		    	    	disparity_priors[idx] = disp;
-		    	    else
-		    	    	disparity_priors[idx] = (disp+disparity_priors[idx])/2;
-		    	}
+				for (row_offset = -3; row_offset <= 3; row_offset++) {
+					for (col_offset = -1; col_offset <= 1; col_offset++) {
+						idx = (((row + row_offset) * imgWidth + xL) / 16) + col_offset;
+						if (disparity_priors[idx] == 0)
+							disparity_priors[idx] = disp;
+						else
+							disparity_priors[idx] = (disp+disparity_priors[idx])/2;
+					}
+				}
 			}
 
 			if (svs_matches[curr_idx] == 0) {
@@ -846,45 +768,15 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 						svs_matches[curr_idx + 3] = disp_prior;
 						matches++;
 
-						/* warning: inelegant code ahead */
-						if (row > 2) {
-							idx = ((row-1) * imgWidth + x) / 16;
-							if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
-							idx -= disparity_priors_stride;
-							if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
-							idx -= disparity_priors_stride;
-							if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
-					    	if (xL > 16) {
-					    		idx = (((row-1) * imgWidth + xL) / 16) - 1;
-						    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-						    	idx--;
-						    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-					    	}
-					    	if (xL < (int)imgWidth-17) {
-					    	    idx = (((row-1) * imgWidth + xL) / 16) + 1;
-					    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-					    	    idx++;
-					    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-					    	}
+						/* update your priors */
+						for (row_offset = -3; row_offset <= 3; row_offset++) {
+							for (col_offset = -1; col_offset <= 1; col_offset++) {
+								idx = (((row + row_offset) * imgWidth + x) / 16) + col_offset;
+								if (disparity_priors[idx] == 0)
+									disparity_priors[idx] = disp_prior;
+							}
 						}
-						idx = ((row+1) * imgWidth + x) / 16;
-						if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
-						idx += disparity_priors_stride;
-						if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
-						idx += disparity_priors_stride;
-						if (disparity_priors[idx] == 0) disparity_priors[idx] = disp_prior;
-				    	if (xL > 16) {
-					    	idx = (((row+1) * imgWidth + xL) / 16) - 1;
-					    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-					    	idx--;
-					    	if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-				    	}
-				    	if (xL < (int)imgWidth-17) {
-				    	    idx = (((row+1) * imgWidth + xL) / 16) + 1;
-				    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-				    	    idx++;
-				    	    if (disparity_priors[idx] == 0) disparity_priors[idx] = disp;
-				    	}
+
 						valid_quadrants[fL + L] = 1;
 					}
 				}
