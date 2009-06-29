@@ -463,7 +463,7 @@ int main(int argc, char* argv[]) {
 			for (int f = 0; f < no_of_feats_vertical; f++, feats_remaining--) {
 
 				int y = (int)stereocam->feature_y[f];
-				int x = 4 + (col * SVS_VERTICAL_SAMPLING);
+				int x = 4 + (col * SVS_HORIZONTAL_SAMPLING);
 
 				if (cam == 0) {
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
