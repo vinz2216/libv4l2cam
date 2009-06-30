@@ -399,7 +399,7 @@ int main(int argc, char* argv[]) {
 	for (int cam = 1; cam >= 0; cam--) {
 
 		int no_of_feats = 0;
-		int no_of_feats_vertical = 0;
+		int no_of_feats_horizontal = 0;
 		svs* stereocam = NULL;
 		if (cam == 0) {
 			rectified_frame_buf = l_;
@@ -410,7 +410,7 @@ int main(int argc, char* argv[]) {
 			stereocam = rcam;
 		}
 
-		no_of_feats = stereocam->get_features(
+		no_of_feats = stereocam->get_features_vertical(
 	        rectified_frame_buf,
 	        inhibition_radius,
 	        minimum_response,
@@ -418,7 +418,7 @@ int main(int argc, char* argv[]) {
 	        calib_offset_y);
 
 		if ((cam == 0) || (show_features)) {
-		    no_of_feats_vertical = stereocam->get_features_vertical(
+		    no_of_feats_horizontal = stereocam->get_features_horizontal(
 	            rectified_frame_buf,
 	            inhibition_radius,
 	            minimum_response,
@@ -431,7 +431,7 @@ int main(int argc, char* argv[]) {
 		/* display the features */
 		if (show_features) {
 
-			/* horizontal features */
+			/* vertically oriented features */
 			int row = 0;
 			int feats_remaining = stereocam->features_per_row[row];
 
@@ -456,11 +456,11 @@ int main(int argc, char* argv[]) {
 				}
 			}
 
-			/* vertical features */
+			/* horizontally oriented features */
 			int col = 0;
 			feats_remaining = stereocam->features_per_col[col];
 
-			for (int f = 0; f < no_of_feats_vertical; f++, feats_remaining--) {
+			for (int f = 0; f < no_of_feats_horizontal; f++, feats_remaining--) {
 
 				int y = (int)stereocam->feature_y[f];
 				int x = 4 + (col * SVS_HORIZONTAL_SAMPLING);
@@ -474,7 +474,7 @@ int main(int argc, char* argv[]) {
 				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
 				}
 
-				/* move to the next row */
+				/* move to the next column */
 				if (feats_remaining <= 0) {
 					col++;
 					feats_remaining = stereocam->features_per_col[col];

@@ -82,13 +82,11 @@ public:
     /* priors used when processing a video stream */
     int* disparity_priors;
 
-    int update_sums(int y, unsigned char* rectified_frame_buf);
-    void non_max(int inhibition_radius, unsigned int min_response);
-    int update_sums_vertical(int y, unsigned char* rectified_frame_buf);
-    void non_max_vertical(int inhibition_radius, unsigned int min_response);
-    int get_features_vertical(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y);
+    int update_sums(int cols, int y, unsigned char* rectified_frame_buf);
+    void non_max(int cols, int inhibition_radius, unsigned int min_response);
     int compute_descriptor(int px, int py, unsigned char* rectified_frame_buf, int no_of_features, int row_mean);
-    int get_features(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y);
+    int get_features_horizontal(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y);
+    int get_features_vertical(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y);
     void filter(int no_of_possible_matches, int max_disparity_pixels, int tolerance);
     int match(svs* other, int ideal_no_of_matches, int max_disparity_percent, int descriptor_match_threshold, int learnDesc, int learnLuma, int learnDisp, int use_priors);
     int fit_plane(int no_of_matches, int max_deviation, int no_of_samples);
