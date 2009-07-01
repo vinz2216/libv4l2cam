@@ -80,6 +80,12 @@ svs::svs(int width, int height) {
 
 	/* priors */
 	disparity_priors = NULL;
+	disparity_priors_temp = NULL;
+
+	/* disparity histogram peaks */
+	peaks_history = NULL;
+	peaks_history_index = 0;
+	enable_peaks_filter = 0;
 }
 
 svs::~svs() {
@@ -99,6 +105,8 @@ svs::~svs() {
 		delete[] disparity_histogram;
 	if (calibration_map != NULL)
 		delete[] calibration_map;
+	if (peaks_history != NULL)
+		delete[] peaks_history;
 }
 
 /* Updates sliding sums and edge response values along a single row or column
@@ -205,8 +213,10 @@ int svs::compute_descriptor(int px, int py, unsigned char* rectified_frame_buf,
 	unsigned int desc = 0;
 
 	/* find the mean luminance for the patch */
-	for (pixel_offset_idx = 0; pixel_offset_idx < SVS_DESCRIPTOR_PIXELS * 2; pixel_offset_idx += 2) {
-		ix = rectified_frame_buf[pixindex((px + pixel_offsets[pixel_offset_idx]), (py + pixel_offsets[pixel_offset_idx + 1]))];
+	for (pixel_offset_idx = 0; pixel_offset_idx < SVS_DESCRIPTOR_PIXELS * 2; pixel_offset_idx
+			+= 2) {
+		ix
+				= rectified_frame_buf[pixindex((px + pixel_offsets[pixel_offset_idx]), (py + pixel_offsets[pixel_offset_idx + 1]))];
 		meanval += rectified_frame_buf[ix + 2] + rectified_frame_buf[ix + 1]
 				+ rectified_frame_buf[ix];
 	}
@@ -405,12 +415,15 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	if (svs_matches == NULL) {
 		svs_matches = new unsigned int[SVS_MAX_MATCHES * 4];
 		valid_quadrants = new unsigned char[SVS_MAX_MATCHES];
+		peaks_history = new unsigned short[4*SVS_PEAKS_HISTORY];
 	}
 
 	/* create array to store disparity priors */
-	if ((use_priors != 0) && (disparity_priors == NULL)) {
-		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH * SVS_MAX_IMAGE_HEIGHT
-				/ (16*SVS_VERTICAL_SAMPLING)];
+	if (use_priors != 0) {
+		if (disparity_priors == NULL) {
+			disparity_priors = new int[SVS_MAX_IMAGE_WIDTH
+					* SVS_MAX_IMAGE_HEIGHT / (16*SVS_VERTICAL_SAMPLING)];
+		}
 	}
 
 	/* convert max disparity from percent to pixels */
@@ -628,7 +641,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	if (no_of_possible_matches > 1) {
 
 		/* filter the results */
-		filter(no_of_possible_matches, max_disp, 3);
+		filter(no_of_possible_matches, max_disp, 3, use_priors);
 
 		/* sort matches in descending order of probability */
 		if (no_of_possible_matches < ideal_no_of_matches) {
@@ -743,15 +756,17 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			break;
 		prev_matches = matches;
 	}
+
 	return (matches);
 }
 
 /* filtering function removes noise by searching for a peak in the disparity histogram */
 void svs::filter(int no_of_possible_matches, /* the number of stereo matches */
 int max_disparity_pixels, /*maximum disparity in pixels */
-int tolerance) { /* tolerance around the peak in pixels of disparity */
+int tolerance, /* tolerance around the peak in pixels of disparity */
+int enable_secondary) { /* enable secondary filtering (over time) */
 
-	int i, hf;
+	int i, hf, min, max, maxval, p, disp3, disp2_hits;
 	unsigned int tx = 0, ty = 0, bx = 0, by = 0;
 
 	/* create the histogram */
@@ -846,6 +861,52 @@ int tolerance) { /* tolerance around the peak in pixels of disparity */
 			near = 0;
 		}
 
+		if (enable_secondary) {
+
+			/* store history */
+			peaks_history[hf * SVS_PEAKS_HISTORY + peaks_history_index]
+					= (unsigned short) disp2;
+
+			/* secondary filtering over time
+			 * this is only useful if the frame rate is high */
+			if (enable_peaks_filter != 0) {
+				/* clear the histogram */
+				memset(disparity_histogram, 0, max_disparity_pixels
+						* sizeof(int));
+				min = max_disparity_pixels;
+				max = 0;
+				/* create a histogram of peak disparities over the last few frames */
+				for (p = 0; p < SVS_PEAKS_HISTORY; p++) {
+					disp2 = peaks_history[hf * SVS_PEAKS_HISTORY + p] / 5;
+					disparity_histogram[disp2]++;
+					if (disp2 < min)
+						min = disp2;
+					if (disp2 > max)
+						max = disp2;
+				}
+				/* find the peak */
+				maxval = -1;
+				disp3 = 0;
+				for (p = max; p >= min; p--) {
+					if (disparity_histogram[p] > maxval) {
+						maxval = disparity_histogram[p];
+						disp3 = p;
+					}
+				}
+				/* average the disparity values */
+				disp2 = 0;
+				disp2_hits = 0;
+				for (p = 0; p < SVS_PEAKS_HISTORY; p++) {
+					if (peaks_history[hf * SVS_PEAKS_HISTORY + p] / 5 == disp3) {
+						disp2 += peaks_history[hf * SVS_PEAKS_HISTORY + p];
+						disp2_hits++;
+					}
+				}
+				if (disp2_hits > 0)
+					disp2 /= disp2_hits;
+			}
+		}
+
 		/* remove matches too far away from the peak by setting
 		 * their probabilities to zero */
 		unsigned int min_disp = disp2 - tolerance;
@@ -876,6 +937,15 @@ int tolerance) { /* tolerance around the peak in pixels of disparity */
 		if (valid_quadrants[i] == 0) {
 			/* set probability to zero */
 			svs_matches[i * 4] = 0;
+		}
+	}
+
+	if (enable_secondary) {
+		/* increment history counter */
+		peaks_history_index++;
+		if (peaks_history_index >= SVS_PEAKS_HISTORY) {
+			peaks_history_index = 0;
+			enable_peaks_filter = 1;
 		}
 	}
 }
