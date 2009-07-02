@@ -43,6 +43,7 @@ int main(int argc, char* argv[]) {
   bool show_depthmap = false;
   bool show_anaglyph = false;
   bool show_histogram = false;
+  bool show_lines = false;
   bool rectify_images = false;
   int use_priors = 1;
 
@@ -67,6 +68,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --features             Show stereo features");
   opt->addUsage( "     --matches              Show stereo matches");
   opt->addUsage( "     --depth                Show depth map");
+  opt->addUsage( "     --lines                Show lines");
   opt->addUsage( "     --anaglyph             Show anaglyph");
   opt->addUsage( "     --histogram            Show disparity histogram");
   opt->addUsage( "     --calibrate            Calibrate offsets");
@@ -121,6 +123,7 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "features" );
   opt->setFlag(  "matches" );
   opt->setFlag(  "depth" );
+  opt->setFlag(  "lines" );
   opt->setFlag(  "anaglyph" );
   opt->setFlag(  "histogram" );
   opt->setFlag(  "calibrate" );
@@ -160,6 +163,7 @@ int main(int argc, char* argv[]) {
 	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = false;
+	  show_lines = false;
   }
 
   if( opt->getFlag( "histogram" ) ) {
@@ -168,6 +172,7 @@ int main(int argc, char* argv[]) {
 	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = true;
+	  show_lines = false;
   }
 
   if( opt->getFlag( "matches" ) ) {
@@ -176,6 +181,7 @@ int main(int argc, char* argv[]) {
 	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = false;
+	  show_lines = false;
   }
 
   if( opt->getFlag( "depth" ) ) {
@@ -184,6 +190,16 @@ int main(int argc, char* argv[]) {
 	  show_depthmap = true;
 	  show_anaglyph = false;
 	  show_histogram = false;
+	  show_lines = false;
+  }
+
+  if( opt->getFlag( "lines" ) ) {
+	  show_features = false;
+	  show_matches = false;
+	  show_depthmap = false;
+	  show_anaglyph = false;
+	  show_histogram = false;
+	  show_lines = true;
   }
 
   if( opt->getFlag( "anaglyph" ) ) {
@@ -192,6 +208,7 @@ int main(int argc, char* argv[]) {
 	  show_depthmap = false;
 	  show_anaglyph = true;
 	  show_histogram = false;
+	  show_lines = false;
   }
 
   bool calibrate_offsets = false;
@@ -202,6 +219,7 @@ int main(int argc, char* argv[]) {
 	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = false;
+	  show_lines = false;
   }
 
   std::string dev0 = "/dev/video1";
@@ -386,6 +404,8 @@ int main(int argc, char* argv[]) {
   unsigned char* rectification_buffer = NULL;
   unsigned char* depthmap_buffer = NULL;
 
+  linefit *lines = new linefit();
+
   while(1){
 
     while(c.Get()==0 || c2.Get()==0) usleep(100);
@@ -435,13 +455,46 @@ int main(int argc, char* argv[]) {
 	        calib_offset_x,
 	        calib_offset_y);
 
-		if ((cam == 0) || (show_features)) {
+		if ((cam == 0) || (show_features) || (show_lines)) {
 		    no_of_feats_horizontal = stereocam->get_features_horizontal(
 	            rectified_frame_buf,
 	            inhibition_radius,
 	            minimum_response,
 	            calib_offset_x,
 	            calib_offset_y);
+		}
+
+		if (show_lines) {
+            lines->vertically_oriented(
+                no_of_feats,
+        	    stereocam->feature_x,
+        	    stereocam->features_per_row,
+        	    SVS_VERTICAL_SAMPLING,
+        	    10*320/SVS_MAX_IMAGE_WIDTH);
+            lines->horizontally_oriented(
+            	no_of_feats_horizontal,
+        	    stereocam->feature_y,
+        	    stereocam->features_per_col,
+        	    SVS_HORIZONTAL_SAMPLING,
+        	    6*320/SVS_MAX_IMAGE_WIDTH);
+            for (int line = 0; line < lines->line_vertical[0]; line++) {
+                drawing::drawLine(rectified_frame_buf,ww,hh,
+                	lines->line_vertical[line*5 + 1] - calib_offset_x,
+                	lines->line_vertical[line*5 + 2] - calib_offset_y,
+                	lines->line_vertical[line*5 + 3] - calib_offset_x,
+                	lines->line_vertical[line*5 + 4] - calib_offset_y,
+                	255,0,0,
+                	0,false);
+            }
+            for (int line = 0; line < lines->line_horizontal[0]; line++) {
+                drawing::drawLine(rectified_frame_buf,ww,hh,
+                	lines->line_horizontal[line*5 + 1] - calib_offset_x,
+                	lines->line_horizontal[line*5 + 2] - calib_offset_y,
+                	lines->line_horizontal[line*5 + 3] - calib_offset_x,
+                	lines->line_horizontal[line*5 + 4] - calib_offset_y,
+                	0,255,0,
+                	0,false);
+            }
 		}
 
 		//printf("cam %d:  %d\n", cam, no_of_feats);
@@ -729,6 +782,7 @@ int main(int argc, char* argv[]) {
 
   delete lcam;
   delete rcam;
+  delete lines;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
   if (depthmap_buffer != NULL) delete[] depthmap_buffer;
 
