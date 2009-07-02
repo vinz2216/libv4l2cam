@@ -37,11 +37,14 @@ int main(int argc, char* argv[]) {
   int ww = 320;
   int hh = 240;
   int skip_frames = 0;
+  int prev_matches = 0;
   bool show_features = false;
   bool show_matches = false;
+  bool show_depthmap = false;
   bool show_anaglyph = false;
   bool show_histogram = false;
   bool rectify_images = false;
+  int use_priors = 1;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -63,6 +66,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -d  --disparity            Max disparity as a percent of image width");
   opt->addUsage( "     --features             Show stereo features");
   opt->addUsage( "     --matches              Show stereo matches");
+  opt->addUsage( "     --depth                Show depth map");
   opt->addUsage( "     --anaglyph             Show anaglyph");
   opt->addUsage( "     --histogram            Show disparity histogram");
   opt->addUsage( "     --calibrate            Calibrate offsets");
@@ -116,6 +120,7 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "save" );
   opt->setFlag(  "features" );
   opt->setFlag(  "matches" );
+  opt->setFlag(  "depth" );
   opt->setFlag(  "anaglyph" );
   opt->setFlag(  "histogram" );
   opt->setFlag(  "calibrate" );
@@ -152,6 +157,7 @@ int main(int argc, char* argv[]) {
   if( opt->getFlag( "features" ) ) {
 	  show_features = true;
 	  show_matches = false;
+	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = false;
   }
@@ -159,6 +165,7 @@ int main(int argc, char* argv[]) {
   if( opt->getFlag( "histogram" ) ) {
 	  show_features = false;
 	  show_matches = false;
+	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = true;
   }
@@ -166,6 +173,15 @@ int main(int argc, char* argv[]) {
   if( opt->getFlag( "matches" ) ) {
 	  show_features = false;
 	  show_matches = true;
+	  show_depthmap = false;
+	  show_anaglyph = false;
+	  show_histogram = false;
+  }
+
+  if( opt->getFlag( "depth" ) ) {
+	  show_features = false;
+	  show_matches = false;
+	  show_depthmap = true;
 	  show_anaglyph = false;
 	  show_histogram = false;
   }
@@ -173,6 +189,7 @@ int main(int argc, char* argv[]) {
   if( opt->getFlag( "anaglyph" ) ) {
 	  show_features = false;
 	  show_matches = false;
+	  show_depthmap = false;
 	  show_anaglyph = true;
 	  show_histogram = false;
   }
@@ -182,6 +199,7 @@ int main(int argc, char* argv[]) {
 	  calibrate_offsets = true;
 	  show_features = false;
 	  show_matches = false;
+	  show_depthmap = false;
 	  show_anaglyph = false;
 	  show_histogram = false;
   }
@@ -325,6 +343,7 @@ int main(int argc, char* argv[]) {
 	  right_image_title = "Right image features";
   }
   if (show_matches) left_image_title = "Stereo matches";
+  if (show_depthmap) left_image_title = "Depth map";
   if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
   if (show_anaglyph) left_image_title = "Anaglyph";
 
@@ -335,7 +354,7 @@ int main(int argc, char* argv[]) {
 	  (stereo_matches_filename == "")) {
 
       cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-      if ((!show_matches) && (!show_anaglyph)) {
+      if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) {
           cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
       }
   }
@@ -359,14 +378,13 @@ int main(int argc, char* argv[]) {
   int learnDesc = 18;  /* weight associated with feature descriptor match */
   int learnLuma = 7;   /* weight associated with luminance match */
   int learnDisp = 3;   /* weight associated with disparity (bias towards smaller disparities) */
+  int learnPrior = 4;  /* weight associated with prior disparity */
 
   svs* lcam = new svs(ww, hh);
   svs* rcam = new svs(ww, hh);
 
   unsigned char* rectification_buffer = NULL;
-
-  /* test */
-  //rectify_images = true;
+  unsigned char* depthmap_buffer = NULL;
 
   while(1){
 
@@ -495,7 +513,8 @@ int main(int argc, char* argv[]) {
 		learnDesc,
 		learnLuma,
 		learnDisp,
-		1);
+		learnPrior,
+		use_priors);
 
 	/* experimental plane fitting */
 	//lcam->fit_plane(matches, 10, matches);
@@ -607,6 +626,33 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	/* show depth map */
+	if (show_depthmap) {
+		if (depthmap_buffer == NULL) {
+			depthmap_buffer = new unsigned char[ww*hh*3];
+			memset(depthmap_buffer, 0, ww*hh*3*sizeof(unsigned char));
+		}
+		memset(l_, 0, ww*hh*3*sizeof(unsigned char));
+		if (matches == 0) matches = prev_matches;
+		for (int i = 0; i < matches; i++) {
+			int x = lcam->svs_matches[i*4 + 1];
+			int y = lcam->svs_matches[i*4 + 2];
+			int disp = lcam->svs_matches[i*4 + 3];
+			int max_disparity_pixels = max_disparity_percent * ww / 100;
+			int disp_intensity = 50 + (disp * 300 / max_disparity_pixels);
+			if (disp_intensity > 255) disp_intensity = 255;
+			int radius = 10 + (disp/8);
+			if (use_priors != 0) {
+			    int n = (y*ww+x)*3;
+			    int disp_intensity2 = disp_intensity;
+			    disp_intensity = (disp_intensity + depthmap_buffer[n]) / 2;
+		        drawing::drawBlendedSpot(depthmap_buffer, ww, hh, x, y, radius, disp_intensity2, disp_intensity2, disp_intensity2);
+			}
+		    drawing::drawBlendedSpot(l_, ww, hh, x, y, radius, disp_intensity, disp_intensity, disp_intensity);
+		}
+		prev_matches = matches;
+	}
+
 	if (show_anaglyph) {
 		int n = 0;
 		int max = (ww * hh * 3) - 3;
@@ -629,7 +675,7 @@ int main(int argc, char* argv[]) {
 		/* save left and right images to file, then quit */
 		if (save_images) {
 			cvSaveImage("left.jpg", l);
-			if ((!show_matches) && (!show_anaglyph)) cvSaveImage("right.jpg", r);
+			if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage("right.jpg", r);
 			break;
 		}
 
@@ -657,7 +703,7 @@ int main(int argc, char* argv[]) {
 		(!calibrate_offsets) &&
 		(stereo_matches_filename == "")) {
         cvShowImage(left_image_title.c_str(), l);
-        if ((!show_matches) && (!show_anaglyph)) {
+        if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) {
    	        cvShowImage(right_image_title.c_str(), r);
         }
 	}
@@ -674,7 +720,7 @@ int main(int argc, char* argv[]) {
 	  (stereo_matches_filename == "")) {
 
 	  cvDestroyWindow(left_image_title.c_str());
-	  if ((!show_matches) && (!show_anaglyph)) {
+	  if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) {
 	      cvDestroyWindow(right_image_title.c_str());
 	  }
   }
@@ -684,6 +730,7 @@ int main(int argc, char* argv[]) {
   delete lcam;
   delete rcam;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
+  if (depthmap_buffer != NULL) delete[] depthmap_buffer;
 
   return 0;
 }

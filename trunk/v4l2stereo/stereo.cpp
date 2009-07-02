@@ -395,12 +395,13 @@ int descriptor_match_threshold, /* minimum no of descriptor bits to be matched, 
 int learnDesc, /* descriptor match weight */
 int learnLuma, /* luminance match weight */
 int learnDisp, /* disparity weight */
+int learnPrior, /* prior weight */
 int use_priors) { /* if non-zero then use priors, assuming time between frames is small */
 
 	int x, xL = 0, xR, L, R, y, no_of_feats, no_of_feats_left,
-			no_of_feats_right, row, col = 0, bit;
-	int luma_diff, disp_prior, min_disp, max_disp = 0, max_disp_pixels, meanL,
-			meanR, disp = 0, fL = 0, fR = 0, bestR = 0;
+			no_of_feats_right, row, col = 0, bit, disp_diff;
+	int luma_diff, disp_prior = 0, min_disp, max_disp = 0, max_disp_pixels,
+			meanL, meanR, disp = 0, fL = 0, fR = 0, bestR = 0;
 	unsigned int descL, descLanti, descR, desc_match;
 	unsigned int correlation, anticorrelation, total, n;
 	unsigned int match_prob, best_prob;
@@ -416,14 +417,8 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 		svs_matches = new unsigned int[SVS_MAX_MATCHES * 4];
 		valid_quadrants = new unsigned char[SVS_MAX_MATCHES];
 		peaks_history = new unsigned short[4*SVS_PEAKS_HISTORY];
-	}
-
-	/* create array to store disparity priors */
-	if (use_priors != 0) {
-		if (disparity_priors == NULL) {
-			disparity_priors = new int[SVS_MAX_IMAGE_WIDTH
-					* SVS_MAX_IMAGE_HEIGHT / (16*SVS_VERTICAL_SAMPLING)];
-		}
+		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH * SVS_MAX_IMAGE_HEIGHT
+				/ (16*SVS_VERTICAL_SAMPLING)];
 	}
 
 	/* convert max disparity from percent to pixels */
@@ -486,16 +481,6 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 
 			if (use_priors != 0) {
 				disp_prior = disparity_priors[(row * imgWidth + xL) / 16];
-
-				if (disp_prior == 0) {
-					/* no prior available - use default search */
-					min_disp = -10;
-					max_disp = max_disp_pixels;
-				} else {
-					/* narrow the range of search based upon prior */
-					min_disp = disp_prior - 3;
-					max_disp = disp_prior + 3;
-				}
 			}
 
 			/* mean luminance and eigendescriptor for the left camera feature */
@@ -572,6 +557,12 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 														- anticorrelation))
 												* learnDesc) - (luma_diff
 										* learnLuma) - (disp * learnDisp);
+						if (use_priors) {
+							disp_diff = disp - disp_prior;
+							if (disp_diff < 0)
+								disp_diff = -disp_diff;
+							score -= disp_diff * learnPrior;
+						}
 						if (score < 0)
 							score = 0;
 
@@ -635,10 +626,10 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	}
 
 	// clear priors
-	memset(disparity_priors, 0, imgWidth * imgHeight / (16*
-			SVS_VERTICAL_SAMPLING ) * sizeof(int));
+	int priors_length = imgWidth * imgHeight / (16*SVS_VERTICAL_SAMPLING);
+	memset(disparity_priors, 0, priors_length * sizeof(int));
 
-	if (no_of_possible_matches > 1) {
+	if (no_of_possible_matches > 20) {
 
 		/* filter the results */
 		filter(no_of_possible_matches, max_disp, 3, use_priors);
@@ -688,11 +679,13 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 					for (col_offset = -1; col_offset <= 1; col_offset++) {
 						idx = (((row + row_offset) * imgWidth + xL) / 16)
 								+ col_offset;
-						if (disparity_priors[idx] == 0)
-							disparity_priors[idx] = disp;
-						else
-							disparity_priors[idx] = (disp
-									+ disparity_priors[idx]) / 2;
+						if ((idx > -1) && (idx < priors_length)) {
+							if (disparity_priors[idx] == 0)
+								disparity_priors[idx] = disp;
+							else
+								disparity_priors[idx] = (disp
+										+ disparity_priors[idx]) / 2;
+						}
 					}
 				}
 			}
@@ -702,59 +695,61 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			}
 
 		}
-	}
 
-	/* attempt to assign disparities to vertical features */
-	memset(valid_quadrants, 0, SVS_MAX_MATCHES * sizeof(unsigned char));
-	itt = 0;
-	prev_matches = matches;
-	for (itt = 0; itt < 10; itt++) {
-		fL = 0;
-		col = 0;
-		for (x = 4; x < (int) imgWidth - 4; x += SVS_HORIZONTAL_SAMPLING, col++) {
+		/* attempt to assign disparities to vertical features */
+		memset(valid_quadrants, 0, SVS_MAX_MATCHES * sizeof(unsigned char));
+		itt = 0;
+		prev_matches = matches;
+		for (itt = 0; itt < 10; itt++) {
+			fL = 0;
+			col = 0;
+			for (x = 4; x < (int) imgWidth - 4; x += SVS_HORIZONTAL_SAMPLING, col++) {
 
-			no_of_feats = features_per_col[col];
+				no_of_feats = features_per_col[col];
 
-			/* features along the row in the left camera */
-			for (L = 0; L < no_of_feats; L++) {
+				/* features along the row in the left camera */
+				for (L = 0; L < no_of_feats; L++) {
 
-				if (valid_quadrants[fL + L] == 0) {
-					/* y coordinate of the feature in the left camera */
-					y = feature_y[fL + L];
+					if (valid_quadrants[fL + L] == 0) {
+						/* y coordinate of the feature in the left camera */
+						y = feature_y[fL + L];
 
-					/* lookup disparity from priors */
+						/* lookup disparity from priors */
 
-					row = y / SVS_VERTICAL_SAMPLING;
-					disp_prior = disparity_priors[(row * imgWidth + x) / 16];
+						row = y / SVS_VERTICAL_SAMPLING;
+						disp_prior
+								= disparity_priors[(row * imgWidth + x) / 16];
 
-					if ((disp_prior > 0) && (matches < SVS_MAX_MATCHES)) {
-						curr_idx = matches * 4;
-						svs_matches[curr_idx] = 1000;
-						svs_matches[curr_idx + 1] = x;
-						svs_matches[curr_idx + 2] = y;
-						svs_matches[curr_idx + 3] = disp_prior;
-						matches++;
+						if ((disp_prior > 0) && (matches < SVS_MAX_MATCHES)) {
+							curr_idx = matches * 4;
+							svs_matches[curr_idx] = 1000;
+							svs_matches[curr_idx + 1] = x;
+							svs_matches[curr_idx + 2] = y;
+							svs_matches[curr_idx + 3] = disp_prior;
+							matches++;
 
-						/* update your priors */
-						for (row_offset = -3; row_offset <= 3; row_offset++) {
-							for (col_offset = -1; col_offset <= 1; col_offset++) {
-								idx
-										= (((row + row_offset) * imgWidth + x)
-												/ 16) + col_offset;
-								if (disparity_priors[idx] == 0)
-									disparity_priors[idx] = disp_prior;
+							/* update your priors */
+							for (row_offset = -3; row_offset <= 3; row_offset++) {
+								for (col_offset = -1; col_offset <= 1; col_offset++) {
+									idx = (((row + row_offset) * imgWidth + x)
+											/ 16) + col_offset;
+									if ((idx > -1) && (idx < priors_length)) {
+										if (disparity_priors[idx] == 0)
+											disparity_priors[idx] = disp_prior;
+									}
+								}
 							}
-						}
 
-						valid_quadrants[fL + L] = 1;
+							valid_quadrants[fL + L] = 1;
+						}
 					}
 				}
+				fL += no_of_feats;
 			}
-			fL += no_of_feats;
+			if (prev_matches == matches)
+				break;
+			prev_matches = matches;
 		}
-		if (prev_matches == matches)
-			break;
-		prev_matches = matches;
 	}
 
 	return (matches);
