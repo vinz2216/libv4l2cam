@@ -26,6 +26,7 @@
 #include <string.h>
 #include <math.h>
 #include "polynomial.h"
+#include "linefit.h"
 
 #define SVS_MAX_FEATURES         2000
 #define SVS_MAX_MATCHES          2000

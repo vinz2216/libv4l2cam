@@ -7,6 +7,7 @@ CPP_SRCS += \
 ../anyoption.cpp \
 ../drawing.cpp \
 ../libcam.cpp \
+../linefit.cpp \
 ../main.cpp \
 ../polynomial.cpp \
 ../stereo.cpp 
@@ -15,6 +16,7 @@ OBJS += \
 ./anyoption.o \
 ./drawing.o \
 ./libcam.o \
+./linefit.o \
 ./main.o \
 ./polynomial.o \
 ./stereo.o 
@@ -23,6 +25,7 @@ CPP_DEPS += \
 ./anyoption.d \
 ./drawing.d \
 ./libcam.d \
+./linefit.d \
 ./main.d \
 ./polynomial.d \
 ./stereo.d 
