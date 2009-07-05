@@ -43,16 +43,21 @@ void linefit::parallel(
 			best_s = s0;
 		}
 	}
-	for (i = 0; i < n; i++) {
-		s0 = lines[i*5+5];
-		ds = best_s - s0;
-		if ((ds <= -tollerance) ||
-		    (ds >= tollerance)) {
-		    lines[i*5+1] = 0;
-		    lines[i*5+2] = 0;
-		    lines[i*5+3] = 0;
-		    lines[i*5+4] = 0;
+	if (max_hits > 5) {
+		for (i = 0; i < n; i++) {
+			s0 = lines[i*5+5];
+			ds = best_s - s0;
+			if ((ds <= -tollerance) ||
+				(ds >= tollerance)) {
+				lines[i*5+1] = 0;
+				lines[i*5+2] = 0;
+				lines[i*5+3] = 0;
+				lines[i*5+4] = 0;
+			}
 		}
+	}
+	else {
+		lines[0] = 0;
 	}
 }
 
@@ -153,8 +158,8 @@ void linefit::vertically_oriented(
 
 	            if (offset + ((x + (s * y / LINE_SLOPES)) / LINE_SAMPLING) == b) {
 	            	if (tx == -1) {
-	            		tx = x;
-	            		ty = y;
+            		    tx = x;
+            		    ty = y;
 	            	}
 	            	bx = x;
 	            	by = y;

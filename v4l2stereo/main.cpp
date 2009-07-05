@@ -36,7 +36,7 @@ using namespace std;
 int main(int argc, char* argv[]) {
   int ww = 320;
   int hh = 240;
-  int skip_frames = 0;
+  int skip_frames = 1;
   int prev_matches = 0;
   bool show_features = false;
   bool show_matches = false;
@@ -91,6 +91,8 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -o  --output               Saves stereo matches to the given output file");
   opt->addUsage( " -V  --version              Show version number");
   opt->addUsage( "     --save                 Save raw images");
+  opt->addUsage( "     --flipright            Flip the right image");
+  opt->addUsage( "     --flipleft             Flip the left image");
   opt->addUsage( "     --help                 Show help");
   opt->addUsage( "" );
 
@@ -106,6 +108,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "coeff12" );
   opt->setOption(  "rot0" );
   opt->setOption(  "rot1" );
+  opt->setOption(  "save" );
   opt->setOption(  "scale0" );
   opt->setOption(  "scale1" );
   opt->setOption(  "fps", 'f' );
@@ -119,7 +122,8 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "output", 'o' );
   opt->setOption(  "skip", 's' );
   opt->setFlag(  "help" );
-  opt->setFlag(  "save" );
+  opt->setFlag(  "flipleft" );
+  opt->setFlag(  "flipright" );
   opt->setFlag(  "features" );
   opt->setFlag(  "matches" );
   opt->setFlag(  "depth" );
@@ -146,9 +150,24 @@ int main(int argc, char* argv[]) {
       return(0);
   }
 
+  bool flip_left_image = false;
+  if( opt->getFlag( "flipleft" ) )
+  {
+	  flip_left_image = true;
+  }
+
+  bool flip_right_image = false;
+  if( opt->getFlag( "flipright" ) )
+  {
+	  flip_right_image = true;
+  }
+
   bool save_images = false;
-  if( opt->getFlag( "save" ) ) {
-	  save_images = true;
+  std::string save_filename = "";
+  if( opt->getValue( "save" ) != NULL  ) {
+  	  save_filename = opt->getValue("save");
+  	  if (save_filename == "") save_filename = "image_";
+  	  save_images = true;
   }
 
   if( opt->getFlag( "help" ) ) {
@@ -240,12 +259,12 @@ int main(int argc, char* argv[]) {
   	  hh = atoi(opt->getValue("height"));
   }
 
-  int calibration_offset_x = 8;
+  int calibration_offset_x = 16; //8;
   if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
   	  calibration_offset_x = atoi(opt->getValue("offsetx"));
   }
 
-  int calibration_offset_y = -4;
+  int calibration_offset_y = 1; //-4;
   if( opt->getValue( 'y' ) != NULL  || opt->getValue( "offsety" ) != NULL  ) {
   	  calibration_offset_y = atoi(opt->getValue("offsety"));
   }
@@ -280,12 +299,23 @@ int main(int argc, char* argv[]) {
   }
 
   float coeff[2][3];
+
+  /* surveyor svs */
   coeff[0][0] = (float)1.03159213066101;
   coeff[0][1] = (float)-1.04955497590709E-05;
   coeff[0][2] = (float)-4.3939662646153E-06;
   coeff[1][0] = (float)1.03159213066101;
   coeff[1][1] = (float)-1.04955497590709E-05;
   coeff[1][2] = (float)-4.3939662646153E-06;
+
+  /* minoru */
+  coeff[0][0] = (float)1.14295991712303;
+  coeff[0][1] = (float)-0.00178321008445744;
+  coeff[0][2] = (float)2.97387766992807E-06;
+  coeff[1][0] = (float)1.14295991712303;
+  coeff[1][1] = (float)-0.00178321008445744;
+  coeff[1][2] = (float)2.97387766992807E-06;
+
   if( opt->getValue( "coeff00" ) != NULL  ) {
 	  coeff[0][0] = atof(opt->getValue("coeff00"));
 	  rectify_images = true;
@@ -413,16 +443,26 @@ int main(int argc, char* argv[]) {
     c.toIplImage(l);
     c2.toIplImage(r);
 
+    if (flip_right_image) {
+    	if (rectification_buffer == NULL) {
+    		rectification_buffer = new unsigned char[ww * hh * 3];
+    	}
+    	rcam->flip(r_, rectification_buffer);
+    }
+
+    if (flip_left_image) {
+    	if (rectification_buffer == NULL) {
+    		rectification_buffer = new unsigned char[ww * hh * 3];
+    	}
+    	lcam->flip(l_, rectification_buffer);
+    }
+
     if (rectify_images) {
     	if (rectification_buffer == NULL) {
     		rectification_buffer = new unsigned char[ww * hh * 3];
 
-    		//long coeff2[] = { 0, 103159213, -1049, -439 };
-    		long coeff2[] = { 0, 10315921, -105, -44 };
-    		lcam->make_map_int((long)ww/2, (long)hh/2, coeff2, 1, 1);
-
     		/* create mappings for image rectification */
-            //lcam->make_map(centre_of_distortion_x0, centre_of_distortion_y0, coeff[0][0], coeff[0][1], coeff[0][2], rotation0, scale0);
+            lcam->make_map(centre_of_distortion_x0, centre_of_distortion_y0, coeff[0][0], coeff[0][1], coeff[0][2], rotation0, scale0);
             rcam->make_map(centre_of_distortion_x1, centre_of_distortion_y1, coeff[1][0], coeff[1][1], coeff[1][2], rotation1, scale1);
     	}
         lcam->rectify(l_, rectification_buffer);
@@ -727,8 +767,10 @@ int main(int argc, char* argv[]) {
 
 		/* save left and right images to file, then quit */
 		if (save_images) {
-			cvSaveImage("left.jpg", l);
-			if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage("right.jpg", r);
+			std::string filename = save_filename + "0.jpg";
+			cvSaveImage(filename.c_str(), l);
+			filename = save_filename + "1.jpg";
+			if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage(filename.c_str(), r);
 			break;
 		}
 
