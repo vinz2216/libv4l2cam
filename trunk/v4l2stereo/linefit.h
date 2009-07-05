@@ -25,7 +25,7 @@
 #define LINE_SLOPES           20
 #define LINE_MAX_IMAGE_WIDTH  640
 #define LINE_SAMPLING         1
-#define MAX_LINES             6
+#define MAX_LINES             10
 
 class linefit {
 public:

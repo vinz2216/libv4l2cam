@@ -1391,3 +1391,14 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 	return (max_hits);
 }
 
+/* flip the given image so that the camera can be mounted upside down */
+void svs::flip(unsigned char* raw_image, unsigned char* flipped_frame_buf) {
+	int max = imgWidth*imgHeight*3;
+	for (int i = 0; i < max; i+=3) {
+		flipped_frame_buf[i] = raw_image[(max-3-i)];
+		flipped_frame_buf[i+1] = raw_image[(max-3-i+1)];
+		flipped_frame_buf[i+2] = raw_image[(max-3-i+2)];
+	}
+	memcpy(raw_image, flipped_frame_buf, max*sizeof(unsigned char));
+}
+

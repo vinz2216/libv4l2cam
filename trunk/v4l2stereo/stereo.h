@@ -103,6 +103,7 @@ public:
     void make_map(float centre_of_distortion_x, float centre_of_distortion_y, float coeff_0, float coeff_1, float coeff_2, float rotation, float scale);
     void make_map_int(long centre_of_distortion_x, long centre_of_distortion_y, long* coeff, long scale_num, long scale_denom);
     void rectify(unsigned char* raw_image, unsigned char* rectified_frame_buf);
+    void flip(unsigned char* raw_image, unsigned char* flipped_frame_buf);
 
     void save_matches(std::string filename, unsigned char* rectified_frame_buf, int no_of_matches, bool colour);
 
