@@ -32,7 +32,7 @@
 #define SVS_MAX_MATCHES          2000
 #define SVS_MAX_IMAGE_WIDTH      1024
 #define SVS_MAX_IMAGE_HEIGHT     1024
-#define SVS_VERTICAL_SAMPLING    4
+#define SVS_VERTICAL_SAMPLING    2
 #define SVS_HORIZONTAL_SAMPLING  8
 #define SVS_DESCRIPTOR_PIXELS    30
 #define SVS_MAX_LINES            200
@@ -88,7 +88,7 @@ public:
 
     /* priors used when processing a video stream */
     int* disparity_priors;
-    int* disparity_priors_temp;
+    //int* disparity_priors_temp;
 
     int update_sums(int cols, int y, unsigned char* rectified_frame_buf);
     void non_max(int cols, int inhibition_radius, unsigned int min_response);

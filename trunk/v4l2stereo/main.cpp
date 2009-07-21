@@ -259,12 +259,12 @@ int main(int argc, char* argv[]) {
   	  hh = atoi(opt->getValue("height"));
   }
 
-  int calibration_offset_x = 16; //8;
+  int calibration_offset_x = -16;
   if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
   	  calibration_offset_x = atoi(opt->getValue("offsetx"));
   }
 
-  int calibration_offset_y = 1; //-4;
+  int calibration_offset_y = 2;
   if( opt->getValue( 'y' ) != NULL  || opt->getValue( "offsety" ) != NULL  ) {
   	  calibration_offset_y = atoi(opt->getValue("offsety"));
   }
@@ -415,17 +415,17 @@ int main(int argc, char* argv[]) {
 
   /* feature detection params */
   int inhibition_radius = 16;
-  unsigned int minimum_response = 180;
+  unsigned int minimum_response = 300;
 
   /* matching params */
   int ideal_no_of_matches = 200;
-  int descriptor_match_threshold = 5;
+  int descriptor_match_threshold = 0;
 
   /* These weights are used during matching of stereo features.
    * You can adjust them if you wish */
-  int learnDesc = 18;  /* weight associated with feature descriptor match */
-  int learnLuma = 7;   /* weight associated with luminance match */
-  int learnDisp = 3;   /* weight associated with disparity (bias towards smaller disparities) */
+  int learnDesc = 18*5;  /* weight associated with feature descriptor match */
+  int learnLuma = 7*5;   /* weight associated with luminance match */
+  int learnDisp = 1;   /* weight associated with disparity (bias towards smaller disparities) */
   int learnPrior = 4;  /* weight associated with prior disparity */
 
   svs* lcam = new svs(ww, hh);
