@@ -80,7 +80,7 @@ svs::svs(int width, int height) {
 
 	/* priors */
 	disparity_priors = NULL;
-	disparity_priors_temp = NULL;
+	//disparity_priors_temp = NULL;
 
 	/* disparity histogram peaks */
 	peaks_history = NULL;
@@ -112,32 +112,33 @@ svs::~svs() {
 /* Updates sliding sums and edge response values along a single row or column
  * Returns the mean luminance along the row or column */
 int svs::update_sums(int cols, /* if non-zero we're dealing with columns not rows */
-int i, /* row index */
+int i, /* row or column index */
 unsigned char* rectified_frame_buf) { /* image data */
 
-	int j, x, y, idx, max, mean = 0;
+	int j, x, y, idx, max, sum = 0, mean = 0;
 
 	if (cols == 0) {
 		/* compute sums along the row */
 		y = i;
-		idx = pixindex(imgWidth, 0) * y;
+		idx = imgWidth * y * 3 + 2;
 		max = (int) imgWidth;
 
 		row_sum[0] = rectified_frame_buf[idx];
-		for (x = 1; x < max; x++) {
-			idx = pixindex(x, y);
-			row_sum[x] = row_sum[x - 1] + rectified_frame_buf[idx];
+		for (x = 1; x < max; x++, idx += 3) {
+			sum += rectified_frame_buf[idx];
+			row_sum[x] = sum;
 		}
 	} else {
 		/* compute sums along the column */
-		idx = i;
+		idx = i*3+2;
 		x = i;
 		max = (int) imgHeight;
+		int stride = (int)imgWidth*3;
 
 		row_sum[0] = rectified_frame_buf[idx];
-		for (y = 1; y < max; y++) {
-			idx = pixindex(x, y);
-			row_sum[y] = row_sum[y - 1] + rectified_frame_buf[idx];
+		for (y = 1; y < max; y++, idx += stride) {
+			sum += rectified_frame_buf[idx];
+			row_sum[y] = sum;
 		}
 	}
 
@@ -147,13 +148,14 @@ unsigned char* rectified_frame_buf) { /* image data */
 	/* compute peaks */
 	int p0, p1;
 	for (j = 4; j < max - 4; j++) {
+		sum = row_sum[j];
 		/* edge using 2 pixel radius */
-		p0 = (row_sum[j] - row_sum[j - 2]) - (row_sum[j + 2] - row_sum[j]);
+		p0 = (sum - row_sum[j - 2]) - (row_sum[j + 2] - sum);
 		if (p0 < 0)
 			p0 = -p0;
 
 		/* edge using 4 pixel radius */
-		p1 = (row_sum[j] - row_sum[j - 4]) - (row_sum[j + 4] - row_sum[j]);
+		p1 = (sum - row_sum[j - 4]) - (row_sum[j + 4] - sum);
 		if (p1 < 0)
 			p1 = -p1;
 
@@ -169,7 +171,7 @@ void svs::non_max(int cols, /* if non-zero we're dealing with columns not rows *
 int inhibition_radius, /* radius for non-maximal suppression */
 unsigned int min_response) { /* minimum threshold as a percent in the range 0-200 */
 
-	int i, r, max;
+	int i, r, max, max2;
 	unsigned int v;
 
 	/* average response */
@@ -185,7 +187,8 @@ unsigned int min_response) { /* minimum threshold as a percent in the range 0-20
 	/* adjust the threshold */
 	av_peaks = av_peaks * min_response / 100;
 
-	for (i = 4; i < max - inhibition_radius; i++) {
+	max2 = max - inhibition_radius;
+	for (i = 4; i < max2; i++) {
 		if (row_peaks[i] < av_peaks)
 			row_peaks[i] = 0;
 		v = row_peaks[i];
@@ -537,7 +540,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 							+ BitsSetTable256[desc_match >> 24];
 
 					/* were enough bits matched ? */
-					if ((int) correlation > descriptor_match_threshold) {
+					if ((int) correlation >= descriptor_match_threshold) {
 
 						/* bitwise descriptor anti-correlation match */
 						desc_match = descLanti & descR;
@@ -627,9 +630,9 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 
 	// clear priors
 	int priors_length = imgWidth * imgHeight / (16*SVS_VERTICAL_SAMPLING);
-	memset(disparity_priors, 0, priors_length * sizeof(int));
 
 	if (no_of_possible_matches > 20) {
+		memset(disparity_priors, 0, priors_length * sizeof(int));
 
 		/* filter the results */
 		filter(no_of_possible_matches, max_disp, 3, use_priors);
