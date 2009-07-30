@@ -28,7 +28,7 @@
 #include "stereo.h"
 #include "libcam.h"
 
-#define VERSION 1.03
+#define VERSION 1.031
 
 using namespace std;
 
@@ -771,6 +771,14 @@ int main(int argc, char* argv[]) {
 			cvSaveImage(filename.c_str(), l);
 			filename = save_filename + "1.jpg";
 			if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage(filename.c_str(), r);
+
+			/* save stereo matches */
+			if ((stereo_matches_filename != "") &&
+			    ((skip_frames == 0) || (matches > 5))) {
+				lcam->save_matches(stereo_matches_filename, l_, matches, false);
+				printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
+			}
+
 			break;
 		}
 
@@ -786,7 +794,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	/* save stereo matches to a file, then quit */
-	if ((stereo_matches_filename != "") &&
+	if ((stereo_matches_filename != "") && (!save_images) &&
 	    ((skip_frames == 0) || (matches > 5))) {
 		lcam->save_matches(stereo_matches_filename, l_, matches, false);
 		printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
