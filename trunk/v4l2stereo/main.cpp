@@ -40,6 +40,7 @@ int main(int argc, char* argv[]) {
   int prev_matches = 0;
   bool show_features = false;
   bool show_matches = false;
+  bool show_regions = false;
   bool show_depthmap = false;
   bool show_anaglyph = false;
   bool show_histogram = false;
@@ -67,6 +68,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -d  --disparity            Max disparity as a percent of image width");
   opt->addUsage( "     --features             Show stereo features");
   opt->addUsage( "     --matches              Show stereo matches");
+  opt->addUsage( "     --regions              Show regions");
   opt->addUsage( "     --depth                Show depth map");
   opt->addUsage( "     --lines                Show lines");
   opt->addUsage( "     --anaglyph             Show anaglyph");
@@ -125,6 +127,7 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
   opt->setFlag(  "features" );
+  opt->setFlag(  "regions" );
   opt->setFlag(  "matches" );
   opt->setFlag(  "depth" );
   opt->setFlag(  "lines" );
@@ -177,6 +180,7 @@ int main(int argc, char* argv[]) {
   }
 
   if( opt->getFlag( "features" ) ) {
+	  show_regions = false;
 	  show_features = true;
 	  show_matches = false;
 	  show_depthmap = false;
@@ -186,6 +190,7 @@ int main(int argc, char* argv[]) {
   }
 
   if( opt->getFlag( "histogram" ) ) {
+	  show_regions = false;
 	  show_features = false;
 	  show_matches = false;
 	  show_depthmap = false;
@@ -195,6 +200,7 @@ int main(int argc, char* argv[]) {
   }
 
   if( opt->getFlag( "matches" ) ) {
+	  show_regions = false;
 	  show_features = false;
 	  show_matches = true;
 	  show_depthmap = false;
@@ -203,7 +209,18 @@ int main(int argc, char* argv[]) {
 	  show_lines = false;
   }
 
+  if( opt->getFlag( "regions" ) ) {
+	  show_regions = true;
+	  show_features = false;
+	  show_matches = false;
+	  show_depthmap = false;
+	  show_anaglyph = false;
+	  show_histogram = false;
+	  show_lines = false;
+  }
+
   if( opt->getFlag( "depth" ) ) {
+	  show_regions = false;
 	  show_features = false;
 	  show_matches = false;
 	  show_depthmap = true;
@@ -213,6 +230,7 @@ int main(int argc, char* argv[]) {
   }
 
   if( opt->getFlag( "lines" ) ) {
+	  show_regions = false;
 	  show_features = false;
 	  show_matches = false;
 	  show_depthmap = false;
@@ -222,6 +240,7 @@ int main(int argc, char* argv[]) {
   }
 
   if( opt->getFlag( "anaglyph" ) ) {
+	  show_regions = false;
 	  show_features = false;
 	  show_matches = false;
 	  show_depthmap = false;
@@ -232,6 +251,7 @@ int main(int argc, char* argv[]) {
 
   bool calibrate_offsets = false;
   if( opt->getFlag( "calibrate" ) ) {
+	  show_regions = false;
 	  calibrate_offsets = true;
 	  show_features = false;
 	  show_matches = false;
@@ -389,6 +409,10 @@ int main(int argc, char* argv[]) {
   if (show_features) {
 	  left_image_title = "Left image features";
 	  right_image_title = "Right image features";
+  }
+  if (show_regions) {
+	  left_image_title = "Left image regions";
+	  right_image_title = "Right image regions";
   }
   if (show_matches) left_image_title = "Stereo matches";
   if (show_depthmap) left_image_title = "Depth map";
@@ -611,6 +635,74 @@ int main(int argc, char* argv[]) {
 
 	/* experimental plane fitting */
 	//lcam->fit_plane(matches, 10, matches);
+
+	if (show_regions) {
+		lcam->enable_segmentation = 1;
+		if (lcam->low_contrast != NULL) {
+			lcam->segment(l_, matches);
+			memset((void*)l_, '\0', ww*hh*3);
+			int min_vol = ww*hh*1/200;
+			int r=255, g=0, b=0;
+			for (int i = ww*hh-1; i >= 0; i--) {
+				int ID = lcam->low_contrast[i];
+				if ((ID != 0) && (ID < lcam->no_of_regions )) {
+					if ((int)lcam->region_volume[ID] > min_vol) {
+						int disp = lcam->region_disparity[ID];
+						if (disp != 255) {
+							r = 20+disp*10;
+							if (r > 255) r = 255;
+							g = r;
+							b = r;
+							l_[i*3] = b;
+							l_[i*3+1] = g;
+							l_[i*3+2] = r;
+						}
+						//r = lcam->region_colour[ID*3+2];
+						//g = lcam->region_colour[ID*3+1];
+						//b = lcam->region_colour[ID*3];
+						//l_[i*3] = b;
+						//l_[i*3+1] = g;
+						//l_[i*3+2] = r;
+					}
+				}
+			}
+
+			/*
+			for (int i = 0; i < lcam->no_of_regions; i++) {
+				if ((int)lcam->region_volume[i] > min_vol) {
+					drawing::drawCross(
+							l_, ww, hh,
+							(int)lcam->region_centre[i*2],
+							(int)lcam->region_centre[i*2+1],
+							4, 255,0,0, 1);
+				}
+			} */
+
+			for (int i = 0; i < lcam->prev_region_centre[lcam->region_history_index][0]; i++) {
+				int ctr = lcam->region_history_index;
+				int j0 = lcam->prev_region_centre[ctr][i*4+3];
+				int j = j0;
+				int k = lcam->prev_region_centre[ctr][i*4+4];
+			    int prev_x = lcam->prev_region_centre[ctr][i*4+1];
+			    int prev_y = lcam->prev_region_centre[ctr][i*4+2];
+
+			    int n = 0;
+				while ((j != 65535) && (n < SVS_REGION_HISTORY-1)) {
+					int x = lcam->prev_region_centre[j][k*4+1];
+					int y = lcam->prev_region_centre[j][k*4+2];
+					int j2 = lcam->prev_region_centre[j][k*4+3];
+					k = lcam->prev_region_centre[j][k*4+4];
+					j = j2;
+					if (j == lcam->region_history_index) break;
+					drawing::drawLine(l_,ww,hh,prev_x,prev_y,x,y,0,255,0,1,false);
+				    prev_x = x;
+				    prev_y = y;
+					n++;
+				}
+			}
+
+		}
+	}
 
 	/* show disparity histogram */
 	if (show_histogram) {
