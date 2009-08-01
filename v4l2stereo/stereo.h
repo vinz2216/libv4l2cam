@@ -38,6 +38,9 @@
 #define SVS_MAX_LINES            200
 #define SVS_PEAKS_HISTORY        10
 
+#define SVS_MAX_REGIONS          200
+#define SVS_REGION_HISTORY       100
+
 #define pixindex(xx, yy)  ((yy * imgWidth + xx) * 3)
 
 class svs {
@@ -65,6 +68,30 @@ public:
 
     /* buffer which stores sliding sum */
     int* row_sum;
+
+    /* low cotrast areas of the image */
+    unsigned short* low_contrast;
+    int enable_segmentation;
+    int enable_region_tracking;
+
+    /* region volume in pixels */
+    unsigned int* region_volume;
+
+    /* centre of each region */
+    unsigned int* region_centre;
+    unsigned short** prev_region_centre;
+    int region_history_index;
+
+    unsigned char* region_disparity;
+
+    /* bounding box of each region */
+    unsigned short* region_bounding_box;
+
+    /* colour of each region */
+    unsigned int* region_colour;
+
+    /* number of detected regions */
+    int no_of_regions;
 
     /* buffer used to find peaks in edge space */
     unsigned int* row_peaks;
@@ -98,6 +125,7 @@ public:
     void filter(int no_of_possible_matches, int max_disparity_pixels, int tolerance, int enable_secondary);
     int match(svs* other, int ideal_no_of_matches, int max_disparity_percent, int descriptor_match_threshold, int learnDesc, int learnLuma, int learnDisp, int learnPrior, int use_priors);
     int fit_plane(int no_of_matches, int max_deviation, int no_of_samples);
+    void segment(unsigned char* rectified_frame_buf, int no_of_matches);
 
     void calibrate_offsets(unsigned char* left_image, unsigned char* right_image, int x_range, int y_range, int& calibration_offset_x, int& calibration_offset_y);
     void make_map(float centre_of_distortion_x, float centre_of_distortion_y, float coeff_0, float coeff_1, float coeff_2, float rotation, float scale);
