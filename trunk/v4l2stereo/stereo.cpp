@@ -76,14 +76,14 @@ svs::svs(int width, int height) {
 	enable_segmentation = 0;
 	enable_region_tracking = 0;
 	low_contrast = NULL;
-    region_volume = NULL;
-    region_centre = NULL;
-    prev_region_centre = NULL;
-    region_history_index = -1;
-    region_bounding_box = NULL;
-    region_colour = NULL;
-    region_disparity = NULL;
-    no_of_regions = 0;
+	region_volume = NULL;
+	region_centre = NULL;
+	prev_region_centre = NULL;
+	region_history_index = -1;
+	region_bounding_box = NULL;
+	region_colour = NULL;
+	region_disparity = NULL;
+	no_of_regions = 0;
 
 	/* array stores matching probabilities (prob,x,y,disp) */
 	svs_matches = NULL;
@@ -111,20 +111,20 @@ svs::~svs() {
 	if (region_disparity != NULL)
 		delete[] region_disparity;
 	if (low_contrast != NULL)
-	    delete[] low_contrast;
+		delete[] low_contrast;
 	if (region_volume != NULL)
-        delete[] region_volume;
+		delete[] region_volume;
 	if (region_centre != NULL) {
-        delete[] region_centre;
+		delete[] region_centre;
 		for (int i = 0; i < SVS_REGION_HISTORY; i++) {
-            delete[] prev_region_centre[i];
+			delete[] prev_region_centre[i];
 		}
 		delete[] prev_region_centre;
 	}
 	if (region_bounding_box != NULL)
-        delete[] region_bounding_box;
+		delete[] region_bounding_box;
 	if (region_colour != NULL)
-        delete[] region_colour;
+		delete[] region_colour;
 	if (svs_matches != NULL)
 		delete[] svs_matches;
 	if (valid_quadrants != NULL)
@@ -143,9 +143,10 @@ svs::~svs() {
  * Returns the mean luminance along the row or column */
 int svs::update_sums(int cols, /* if non-zero we're dealing with columns not rows */
 int i, /* row or column index */
-unsigned char* rectified_frame_buf) { /* image data */
+unsigned char* rectified_frame_buf, /* image data */
+int segment) { /* if non zero update low contrast areas used for segmentation */
 
-	int j, x, y, idx, max, sum = 0, mean = 0;
+	int j, k, x, y, idx, max, sum = 0, mean = 0;
 
 	if (cols == 0) {
 		/* compute sums along the row */
@@ -160,10 +161,10 @@ unsigned char* rectified_frame_buf) { /* image data */
 		}
 	} else {
 		/* compute sums along the column */
-		idx = i*3+2;
+		idx = i * 3 + 2;
 		x = i;
 		max = (int) imgHeight;
-		int stride = (int)imgWidth*3;
+		int stride = (int) imgWidth * 3;
 
 		row_sum[0] = rectified_frame_buf[idx];
 		for (y = 1; y < max; y++, idx += stride) {
@@ -195,33 +196,35 @@ unsigned char* rectified_frame_buf) { /* image data */
 		mean_peaks += p0 + p1;
 	}
 
+	/* create a map of low contrast areas, to be used for segmentation */
 	if (enable_segmentation) {
 		if (low_contrast == NULL) {
-			low_contrast = new unsigned short[SVS_MAX_IMAGE_WIDTH * SVS_MAX_IMAGE_HEIGHT];
-		    region_volume = new unsigned int[SVS_MAX_REGIONS];
-		    region_centre = new unsigned int[SVS_MAX_REGIONS*2];
-		    prev_region_centre = new unsigned short*[SVS_REGION_HISTORY];
-		    region_disparity = new unsigned char[SVS_MAX_REGIONS];
-		    for (j = 0; j < SVS_REGION_HISTORY; j++) {
-		        prev_region_centre[j] = new unsigned short[SVS_MAX_REGIONS*4+1];
-		        prev_region_centre[j][0] = 0;
-		    }
-		    region_bounding_box = new unsigned short[SVS_MAX_REGIONS*4];
-		    region_colour = new unsigned int[SVS_MAX_REGIONS*3];
+			low_contrast = new unsigned short[SVS_MAX_IMAGE_WIDTH
+					* SVS_MAX_IMAGE_HEIGHT];
+			region_volume = new unsigned int[SVS_MAX_REGIONS];
+			region_centre = new unsigned int[SVS_MAX_REGIONS * 2];
+			prev_region_centre = new unsigned short*[SVS_REGION_HISTORY];
+			region_disparity = new unsigned char[SVS_MAX_REGIONS * 3];
+			for (j = 0; j < SVS_REGION_HISTORY; j++) {
+				prev_region_centre[j] = new unsigned short[SVS_MAX_REGIONS * 4
+						+ 1];
+				prev_region_centre[j][0] = 0;
+			}
+			region_bounding_box = new unsigned short[SVS_MAX_REGIONS * 4];
+			region_colour = new unsigned int[SVS_MAX_REGIONS * 3];
 		}
 		mean_peaks /= (max - 8); //*100/100;
 		if (cols == 0) {
 			for (j = 4; j < max - 4; j++) {
 				if (row_peaks[j] < mean_peaks)
-					low_contrast[i*imgWidth + j] = 65535;
+					low_contrast[i * imgWidth + j] = 65535;
 			}
-		}
-		else {
+		} else {
 			for (j = 4; j < max - 4; j++) {
 				if (row_peaks[j] > mean_peaks) {
-					for (int k = -4; k < 4; k++) {
-						low_contrast[j*imgWidth + i + k] = 0;
-						low_contrast[j*imgWidth + i + k - imgWidth] = 0;
+					for (k = -4; k < 4; k++) {
+						low_contrast[j * imgWidth + i + k] = 0;
+						low_contrast[j * imgWidth + i + k - imgWidth] = 0;
 					}
 				}
 			}
@@ -331,8 +334,8 @@ int svs::get_features_vertical(unsigned char* rectified_frame_buf, /* image data
 int inhibition_radius, /* radius for non-maximal supression */
 unsigned int minimum_response, /* minimum threshold */
 int calibration_offset_x, /* calibration x offset in pixels */
-int calibration_offset_y) /* calibration y offset in pixels */
-{
+int calibration_offset_y, /* calibration y offset in pixels */
+int segment) {
 
 	unsigned short int no_of_feats;
 	int x, y, row_mean, start_x;
@@ -354,7 +357,7 @@ int calibration_offset_y) /* calibration y offset in pixels */
 
 		if ((y >= 4) && (y <= (int) imgHeight - 4)) {
 
-			row_mean = update_sums(0, y, rectified_frame_buf);
+			row_mean = update_sums(0, y, rectified_frame_buf, segment);
 			non_max(0, inhibition_radius, minimum_response);
 
 			/* store the features */
@@ -394,8 +397,7 @@ int calibration_offset_y) /* calibration y offset in pixels */
 int svs::get_features_horizontal(unsigned char* rectified_frame_buf, /* image data */
 int inhibition_radius, /* radius for non-maximal supression */
 unsigned int minimum_response, /* minimum threshold */
-int calibration_offset_x, int calibration_offset_y) {
-
+int calibration_offset_x, int calibration_offset_y, int segment) {
 	unsigned short int no_of_feats;
 	int x, y, col_mean, start_y;
 	int no_of_features = 0;
@@ -423,7 +425,7 @@ int calibration_offset_x, int calibration_offset_y) {
 
 		if ((x >= 4) && (x <= (int) imgWidth - 4)) {
 
-			col_mean = update_sums(1, x, rectified_frame_buf);
+			col_mean = update_sums(1, x, rectified_frame_buf, segment);
 			non_max(1, inhibition_radius, minimum_response);
 
 			/* store the features */
@@ -1461,32 +1463,31 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 
 /* flip the given image so that the camera can be mounted upside down */
 void svs::flip(unsigned char* raw_image, unsigned char* flipped_frame_buf) {
-	int max = imgWidth*imgHeight*3;
-	for (int i = 0; i < max; i+=3) {
-		flipped_frame_buf[i] = raw_image[(max-3-i)];
-		flipped_frame_buf[i+1] = raw_image[(max-3-i+1)];
-		flipped_frame_buf[i+2] = raw_image[(max-3-i+2)];
+	int max = imgWidth * imgHeight * 3;
+	for (int i = 0; i < max; i += 3) {
+		flipped_frame_buf[i] = raw_image[(max - 3 - i)];
+		flipped_frame_buf[i + 1] = raw_image[(max - 3 - i + 1)];
+		flipped_frame_buf[i + 2] = raw_image[(max - 3 - i + 2)];
 	}
-	memcpy(raw_image, flipped_frame_buf, max*sizeof(unsigned char));
+	memcpy(raw_image, flipped_frame_buf, max * sizeof(unsigned char));
 }
 
-void svs::segment(
-	unsigned char* rectified_frame_buf,
-	int no_of_matches)
-{
-    int x, xx, y, n2, n, n3, ctr=0, max_x, max_y, i, j;
-    int stride = imgWidth * SVS_VERTICAL_SAMPLING;
-    unsigned short ID=0, next_ID=0, v;
-    int min_length = (int)imgWidth / 50;
-    unsigned short curr_ID[50];
-    unsigned short curr_ID_hits[50];
-    int dx,dy,min_dist,min_vol, prev_region_history_index, curr_ID_index = 0;
-	int tx,ty,bx,by,cx,cy,disp,best_disp, max_hits=0;
-    no_of_regions = 0;
-    if (enable_segmentation) {
-    	next_ID = 1;
-    	max_x = (int)imgWidth-4;
-    	max_y = (int)imgHeight - (SVS_VERTICAL_SAMPLING*5);
+void svs::segment(unsigned char* rectified_frame_buf, int no_of_matches) {
+	int x, y, n2, n, n3, ctr = 0, max_x, max_y, i, j;
+	int stride = imgWidth * SVS_VERTICAL_SAMPLING;
+	unsigned short ID = 0, next_ID = 0, v;
+	int min_length = (int) imgWidth / 50;
+	unsigned short curr_ID[50];
+	unsigned short curr_ID_hits[50];
+	int dx, dy, min_dist, min_vol, prev_region_history_index, curr_ID_index = 0;
+	int r, g, b, tx, ty, bx, by, cx, cy, disp, best_disp, max_hits = 0;
+	int above, below, left, right, vol;
+	int above_hits, below_hits, left_hits, right_hits;
+	no_of_regions = 0;
+	if (enable_segmentation) {
+		next_ID = 1;
+		max_x = (int) imgWidth - 4;
+		max_y = (int) imgHeight - (SVS_VERTICAL_SAMPLING * 5);
 		for (y = 4; y < max_y; y += SVS_VERTICAL_SAMPLING) {
 			n = y * imgWidth + 4;
 			for (x = 4; x < max_x; x++, n++, ctr++) {
@@ -1503,30 +1504,31 @@ void svs::segment(
 							curr_ID[curr_ID_index] = v;
 							curr_ID_hits[curr_ID_index] = 1;
 							curr_ID_index++;
-							if (curr_ID_index > 49) curr_ID_index = 49;
+							if (curr_ID_index > 49)
+								curr_ID_index = 49;
 						}
 					}
-					if (low_contrast[n-1] == 0) {
+					if (low_contrast[n - 1] == 0) {
 						ctr = 0;
 						curr_ID_index = 0;
 					}
-					if (low_contrast[n+1] == 0) {
+					if (low_contrast[n + 1] == 0) {
 						if (ctr > min_length) {
 							if (curr_ID_index == 0) {
 								ID = next_ID;
 								region_volume[ID] = 0;
-								region_centre[ID*2] = 0;
-								region_centre[ID*2+1] = 0;
-								region_bounding_box[ID*4] = imgWidth;
-								region_bounding_box[ID*4+1] = imgHeight;
-								region_bounding_box[ID*4+2] = 0;
-								region_bounding_box[ID*4+3] = 0;
-								region_colour[ID*3] = 0;
-								region_colour[ID*3+1] = 0;
-								region_colour[ID*3+2] = 0;
-								if (next_ID < SVS_MAX_REGIONS-1) next_ID++;
-							}
-							else {
+								region_centre[ID * 2] = 0;
+								region_centre[ID * 2 + 1] = 0;
+								region_bounding_box[ID * 4] = imgWidth;
+								region_bounding_box[ID * 4 + 1] = imgHeight;
+								region_bounding_box[ID * 4 + 2] = 0;
+								region_bounding_box[ID * 4 + 3] = 0;
+								region_colour[ID * 3] = 0;
+								region_colour[ID * 3 + 1] = 0;
+								region_colour[ID * 3 + 2] = 0;
+								if (next_ID < SVS_MAX_REGIONS - 1)
+									next_ID++;
+							} else {
 								max_hits = 0;
 								for (i = 0; i < curr_ID_index; i++) {
 									if (curr_ID_hits[i] > max_hits) {
@@ -1537,29 +1539,45 @@ void svs::segment(
 							}
 
 							/* update volume and bounding box */
-							region_volume[ID] += (unsigned short)ctr;
-							n2 = ID*4;
-							if (x-ctr < region_bounding_box[n2]) region_bounding_box[n2] = (unsigned short)x-ctr;
-							if (y < region_bounding_box[n2+1]) region_bounding_box[n2+1] = (unsigned short)y;
-							if (x > region_bounding_box[n2+2]) region_bounding_box[n2+2] = (unsigned short)x;
-							if (y > region_bounding_box[n2+3]) region_bounding_box[n2+3] = (unsigned short)y;
+							region_volume[ID] += (unsigned short) ctr;
+							n2 = ID * 4;
+							if (x - ctr < region_bounding_box[n2])
+								region_bounding_box[n2] = (unsigned short) x
+										- ctr;
+							if (y < region_bounding_box[n2 + 1])
+								region_bounding_box[n2 + 1]
+										= (unsigned short) y;
+							if (x > region_bounding_box[n2 + 2])
+								region_bounding_box[n2 + 2]
+										= (unsigned short) x;
+							if (y > region_bounding_box[n2 + 3])
+								region_bounding_box[n2 + 3]
+										= (unsigned short) y;
 
-							for (n2 = n-ctr; n2 <= n; n2++) {
+							r = 0;
+							g = 0;
+							b = 0;
+							cx = 0;
+							cy = 0;
+							for (n2 = n - ctr; n2 <= n; n2++) {
 								low_contrast[n2] = ID;
-								xx = x + n2 - n;
-								region_centre[ID*2] += xx;
-								region_centre[ID*2+1] += y;
-								n3 = n2*3;
-								region_colour[ID*3] += rectified_frame_buf[n3++];
-								region_colour[ID*3+1] += rectified_frame_buf[n3++];
-								region_colour[ID*3+2] += rectified_frame_buf[n3++];
-								if (low_contrast[n2+stride] == 65535) {
-									low_contrast[n2+stride] = ID;
+								cx += x + n2 - n;
+								cy += y;
+								n3 = n2 * 3;
+								b += rectified_frame_buf[n3++];
+								g += rectified_frame_buf[n3++];
+								r += rectified_frame_buf[n3++];
+								if (low_contrast[n2 + stride] == 65535) {
+									low_contrast[n2 + stride] = ID;
 								}
 							}
-						}
-						else {
-							for (n2 = n-ctr; n2 <= n; n2++) {
+							region_centre[ID * 2] += cx;
+							region_centre[ID * 2 + 1] += cy;
+							region_colour[ID * 3] += b;
+							region_colour[ID * 3 + 1] += g;
+							region_colour[ID * 3 + 2] += r;
+						} else {
+							for (n2 = n - ctr; n2 <= n; n2++) {
 								low_contrast[n2] = 0;
 							}
 						}
@@ -1574,87 +1592,145 @@ void svs::segment(
 			if (region_history_index >= SVS_REGION_HISTORY)
 				region_history_index = 0;
 
-
-			min_vol = imgWidth*imgHeight*1/200;
+			min_vol = imgWidth * imgHeight * 1 / 200;
 			n = 0;
 			no_of_regions = next_ID;
 			for (i = 0; i < no_of_regions; i++) {
-				int vol = region_volume[i];
+				vol = region_volume[i];
 				if (vol != 0) {
-					region_centre[i*2] /= vol;
-					region_centre[i*2+1] /= vol;
+					region_centre[i * 2] /= vol;
+					region_centre[i * 2 + 1] /= vol;
 					if (vol > min_vol) {
-					    prev_region_centre[region_history_index][n*4+1] = region_centre[i*2];
-					    prev_region_centre[region_history_index][n*4+2] = region_centre[i*2+1];
-					    prev_region_centre[region_history_index][n*4+3] = 65535;
-					    prev_region_centre[region_history_index][n*4+4] = i;
-					    n++;
+						prev_region_centre[region_history_index][n * 4 + 1]
+								= region_centre[i * 2];
+						prev_region_centre[region_history_index][n * 4 + 2]
+								= region_centre[i * 2 + 1];
+						prev_region_centre[region_history_index][n * 4 + 3]
+								= 65535;
+						prev_region_centre[region_history_index][n * 4 + 4] = i;
+						n++;
 					}
-					region_colour[i*3] /= vol;
-					region_colour[i*3+1] /= vol;
-					region_colour[i*3+2] /= vol;
+					region_colour[i * 3] /= vol;
+					region_colour[i * 3 + 1] /= vol;
+					region_colour[i * 3 + 2] /= vol;
 				}
 			}
 			prev_region_centre[region_history_index][0] = n;
 
 			/* compute depth of regions */
 			for (i = 0; i < n; i++) {
-				j = (int)prev_region_centre[region_history_index][i*4+4];
-				tx = region_bounding_box[j*4];
-				ty = region_bounding_box[j*4+1];
-				bx = region_bounding_box[j*4+2];
-				by = region_bounding_box[j*4+3];
-				cx = tx + ((bx-tx)/2);
-				cy = ty + ((by-ty)/2);
-				if (max_hits > 0) memset((void*)disparity_histogram, '\0', (SVS_MAX_IMAGE_WIDTH / 2)*sizeof(int));
+				j = (int) prev_region_centre[region_history_index][i * 4 + 4];
+				tx = region_bounding_box[j * 4];
+				ty = region_bounding_box[j * 4 + 1] - 5;
+				bx = region_bounding_box[j * 4 + 2];
+				by = region_bounding_box[j * 4 + 3] + 5;
+				cx = tx + ((bx - tx) / 2);
+				cy = ty + ((by - ty) / 2);
+				if (max_hits > 0)
+					memset((void*) disparity_histogram, '\0',
+							(SVS_MAX_IMAGE_WIDTH / 2) * sizeof(int));
 				max_hits = 0;
 				best_disp = 255;
+				above = 0;
+				below = 0;
+				left = 0;
+				right = 0;
+				above_hits = 0;
+				below_hits = 0;
+				left_hits = 0;
+				right_hits = 0;
 				for (n2 = 0; n2 < no_of_matches; n2++) {
-					x = svs_matches[n2*4+1];
+					x = svs_matches[n2 * 4 + 1];
 					if ((x > tx) && (x < bx)) {
-					    y = svs_matches[n2*4+2];
-					    if ((y > ty) && (y < by)) {
-					        disp = svs_matches[n2*4+3];
-					        disparity_histogram[disp]++;
-					        if (disparity_histogram[disp] > max_hits) {
-					        	max_hits = disparity_histogram[disp];
-					        	best_disp = disp;
-					        }
-					    }
+						y = svs_matches[n2 * 4 + 2];
+						if ((y > ty) && (y < by)) {
+							disp = svs_matches[n2 * 4 + 3];
+							if (y < cy) {
+								above += disp;
+								above_hits++;
+							} else {
+								below += disp;
+								below_hits++;
+							}
+							if (x < cx) {
+								left += disp;
+								left_hits++;
+							} else {
+								right += disp;
+								right_hits++;
+							}
+							disparity_histogram[disp]++;
+							if (disparity_histogram[disp] > max_hits) {
+								max_hits = disparity_histogram[disp];
+								best_disp = disp;
+							}
+						}
 					}
 				}
-				region_disparity[j] = (unsigned char)best_disp;
+				region_disparity[j * 3] = (unsigned char) best_disp;
+				region_disparity[j * 3 + 1] = 127;
+				region_disparity[j * 3 + 2] = 127;
+				if ((left_hits > 0) && (right_hits > 0)) {
+					left /= left_hits;
+					right /= right_hits;
+					int b = right - left;
+					if ((b < 20) && (b > -20))
+						region_disparity[j * 3 + 1] = 127 + b;
+
+					//printf("slope: %d\n", left - right);
+				}
+				if ((above_hits > 0) && (below_hits > 0)) {
+					above /= above_hits;
+					below /= below_hits;
+					b = below - above;
+					if ((b < 20) && (b > -20))
+						region_disparity[j * 3 + 2] = 127 + b;
+					//printf("slope: %d\n", above - below);
+				}
 			}
 
 			/* track regions */
 			if (enable_region_tracking != 0) {
-				min_dist = imgWidth * 4/100;
+				min_dist = imgWidth * 4 / 100;
 				for (i = 0; i < n; i++) {
-					x = (int)prev_region_centre[region_history_index][i*4+1];
-					y = (int)prev_region_centre[region_history_index][i*4+2];
+					x = (int) prev_region_centre[region_history_index][i * 4
+							+ 1];
+					y = (int) prev_region_centre[region_history_index][i * 4
+							+ 2];
 					prev_region_history_index = region_history_index - 1;
-					if (prev_region_history_index < 0) prev_region_history_index += SVS_REGION_HISTORY;
+					if (prev_region_history_index < 0)
+						prev_region_history_index += SVS_REGION_HISTORY;
 					ctr = 0;
-					while (ctr < SVS_REGION_HISTORY*3/4) {
+					while (ctr < SVS_REGION_HISTORY * 3 / 4) {
 						n2 = prev_region_centre[prev_region_history_index][0];
 						for (j = 0; j < n2; j++) {
-							dx = (int)prev_region_centre[prev_region_history_index][j*4+1] - x;
+							dx
+									= (int) prev_region_centre[prev_region_history_index][j
+											* 4 + 1] - x;
 							if ((dx > -min_dist) && (dx < min_dist)) {
-								dy = (int)prev_region_centre[prev_region_history_index][j*4+2] - y;
+								dy
+										= (int) prev_region_centre[prev_region_history_index][j
+												* 4 + 2] - y;
 								if ((dy > -min_dist) && (dy < min_dist)) {
-									prev_region_centre[region_history_index][i*4+3] = prev_region_history_index;
-									prev_region_centre[region_history_index][i*4+4] = j;
+									prev_region_centre[region_history_index][i
+											* 4 + 3]
+											= prev_region_history_index;
+									prev_region_centre[region_history_index][i
+											* 4 + 4] = j;
 									ctr = 9999;
 									j = n2;
 								}
 							}
 						}
 						prev_region_history_index--;
-						if (prev_region_history_index < 0) prev_region_history_index += SVS_REGION_HISTORY;
+						if (prev_region_history_index < 0)
+							prev_region_history_index += SVS_REGION_HISTORY;
 						ctr++;
 					}
 				}
 			}
 		}
-    }
+	}
 }
+
+

@@ -517,7 +517,8 @@ int main(int argc, char* argv[]) {
 	        inhibition_radius,
 	        minimum_response,
 	        calib_offset_x,
-	        calib_offset_y);
+	        calib_offset_y,
+	        1-cam);
 
 		if ((cam == 0) || (show_features) || (show_lines)) {
 		    no_of_feats_horizontal = stereocam->get_features_horizontal(
@@ -525,7 +526,8 @@ int main(int argc, char* argv[]) {
 	            inhibition_radius,
 	            minimum_response,
 	            calib_offset_x,
-	            calib_offset_y);
+	            calib_offset_y,
+	            1-cam);
 		}
 
 		if (show_lines) {
@@ -643,29 +645,54 @@ int main(int argc, char* argv[]) {
 			memset((void*)l_, '\0', ww*hh*3);
 			int min_vol = ww*hh*1/200;
 			int r=255, g=0, b=0;
-			for (int i = ww*hh-1; i >= 0; i--) {
-				int ID = lcam->low_contrast[i];
-				if ((ID != 0) && (ID < lcam->no_of_regions )) {
-					if ((int)lcam->region_volume[ID] > min_vol) {
-						int disp = lcam->region_disparity[ID];
-						if (disp != 255) {
-							r = 20+disp*10;
-							if (r > 255) r = 255;
-							g = r;
-							b = r;
-							l_[i*3] = b;
-							l_[i*3+1] = g;
-							l_[i*3+2] = r;
+			int i = 0;
+			for (int y = 0; y < hh; y++) {
+				for (int x = 0; x < ww; x++, i++) {
+					int ID = lcam->low_contrast[i];
+					if ((ID > 0) && (ID < lcam->no_of_regions )) {
+						if ((int)lcam->region_volume[ID] > min_vol) {
+							int disp = lcam->region_disparity[ID*3];
+							int slope_x = (int)lcam->region_disparity[ID*3+1] - 127;
+							int slope_y = (int)lcam->region_disparity[ID*3+2] - 127;
+							if (disp != 255) {
+								if (!((slope_x == 0) && (slope_y == 0))) {
+									int region_tx = lcam->region_bounding_box[ID*4];
+									int region_ty = lcam->region_bounding_box[ID*4+1];
+									int region_bx = lcam->region_bounding_box[ID*4+2];
+									int region_by = lcam->region_bounding_box[ID*4+3];
+								    int disp_horizontal = 0;
+								    if (region_bx > region_tx) {
+								        disp_horizontal =
+								    	    -(slope_x/2) + ((x - region_tx) * slope_x /
+								             (region_bx - region_tx));
+								    }
+								    int disp_vertical = 0;
+								    if (region_by > region_ty) {
+								        disp_vertical =
+								    	    -(slope_y/2) + ((y - region_ty) * slope_y /
+								             (region_by - region_ty));
+								    }
+								    disp += disp_horizontal + disp_vertical;
+								    if (disp < 0) disp = 0;
+								}
+								r = 20+disp*5;
+								if (r > 255) r = 255;
+								g = r;
+								b = r;
+								l_[i*3] = b;
+								l_[i*3+1] = g;
+								l_[i*3+2] = r;
+							}
+							//r = lcam->region_colour[ID*3+2];
+							//g = lcam->region_colour[ID*3+1];
+							//b = lcam->region_colour[ID*3];
+							//l_[i*3] = b;
+							//l_[i*3+1] = g;
+							//l_[i*3+2] = r;
 						}
-						//r = lcam->region_colour[ID*3+2];
-						//g = lcam->region_colour[ID*3+1];
-						//b = lcam->region_colour[ID*3];
-						//l_[i*3] = b;
-						//l_[i*3+1] = g;
-						//l_[i*3+2] = r;
 					}
-				}
-			}
+			    }
+		    }
 
 			/*
 			for (int i = 0; i < lcam->no_of_regions; i++) {
