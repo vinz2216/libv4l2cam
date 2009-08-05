@@ -643,7 +643,7 @@ int main(int argc, char* argv[]) {
 		if (lcam->low_contrast != NULL) {
 			lcam->segment(l_, matches);
 			memset((void*)l_, '\0', ww*hh*3);
-			int min_vol = ww*hh*1/200;
+			int min_vol = ww*hh/500;
 			int r=255, g=0, b=0;
 			int i = 0;
 			for (int y = 0; y < hh; y++) {
@@ -683,12 +683,14 @@ int main(int argc, char* argv[]) {
 								l_[i*3+1] = g;
 								l_[i*3+2] = r;
 							}
-							//r = lcam->region_colour[ID*3+2];
-							//g = lcam->region_colour[ID*3+1];
-							//b = lcam->region_colour[ID*3];
-							//l_[i*3] = b;
-							//l_[i*3+1] = g;
-							//l_[i*3+2] = r;
+							/*
+							r = lcam->region_colour[ID*3+2];
+							g = lcam->region_colour[ID*3+1];
+							b = lcam->region_colour[ID*3];
+							l_[i*3] = b;
+							l_[i*3+1] = g;
+							l_[i*3+2] = r;
+							*/
 						}
 					}
 			    }
@@ -705,29 +707,30 @@ int main(int argc, char* argv[]) {
 				}
 			} */
 
-			for (int i = 0; i < lcam->prev_region_centre[lcam->region_history_index][0]; i++) {
-				int ctr = lcam->region_history_index;
-				int j0 = lcam->prev_region_centre[ctr][i*4+3];
-				int j = j0;
-				int k = lcam->prev_region_centre[ctr][i*4+4];
-			    int prev_x = lcam->prev_region_centre[ctr][i*4+1];
-			    int prev_y = lcam->prev_region_centre[ctr][i*4+2];
+			if (lcam->region_history_index > -1) {
+				for (i = 0; i < lcam->prev_region_centre[lcam->region_history_index][0]; i++) {
+					int ctr = lcam->region_history_index;
+					int j0 = lcam->prev_region_centre[ctr][i*4+3];
+					int j = j0;
+					int k = lcam->prev_region_centre[ctr][i*4+4];
+					int prev_x = lcam->prev_region_centre[ctr][i*4+1];
+					int prev_y = lcam->prev_region_centre[ctr][i*4+2];
 
-			    int n = 0;
-				while ((j != 65535) && (n < SVS_REGION_HISTORY-1)) {
-					int x = lcam->prev_region_centre[j][k*4+1];
-					int y = lcam->prev_region_centre[j][k*4+2];
-					int j2 = lcam->prev_region_centre[j][k*4+3];
-					k = lcam->prev_region_centre[j][k*4+4];
-					j = j2;
-					if (j == lcam->region_history_index) break;
-					drawing::drawLine(l_,ww,hh,prev_x,prev_y,x,y,0,255,0,1,false);
-				    prev_x = x;
-				    prev_y = y;
-					n++;
+					int n = 0;
+					while ((j != 65535) && (n < SVS_REGION_HISTORY-1)) {
+						int x = lcam->prev_region_centre[j][k*4+1];
+						int y = lcam->prev_region_centre[j][k*4+2];
+						int j2 = lcam->prev_region_centre[j][k*4+3];
+						k = lcam->prev_region_centre[j][k*4+4];
+						j = j2;
+						if (j == lcam->region_history_index) break;
+						drawing::drawLine(l_,ww,hh,prev_x,prev_y,x,y,0,255,0,1,false);
+						prev_x = x;
+						prev_y = y;
+						n++;
+					}
 				}
 			}
-
 		}
 	}
 
