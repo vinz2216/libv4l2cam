@@ -9,6 +9,7 @@ CPP_SRCS += \
 ../libcam.cpp \
 ../linefit.cpp \
 ../main.cpp \
+../motionmodel.cpp \
 ../polynomial.cpp \
 ../stereo.cpp 
 
@@ -18,6 +19,7 @@ OBJS += \
 ./libcam.o \
 ./linefit.o \
 ./main.o \
+./motionmodel.o \
 ./polynomial.o \
 ./stereo.o 
 
@@ -27,6 +29,7 @@ CPP_DEPS += \
 ./libcam.d \
 ./linefit.d \
 ./main.d \
+./motionmodel.d \
 ./polynomial.d \
 ./stereo.d 
 
@@ -35,7 +38,7 @@ CPP_DEPS += \
 %.o: ../%.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C++ Compiler'
-	g++ -I/opt/opencv/include/opencv -O3 -g3 -Wall -c -fmessage-length=0 -lcam -lcv -lcxcore -lcvaux -lhighgui -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o"$@" "$<"
+	g++ -I/opt/opencv/include/opencv -O0 -g3 -Wall -c -fmessage-length=0 -lcam -lcv -lcxcore -lcvaux -lhighgui -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o"$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
