@@ -26,9 +26,10 @@
 #include "anyoption.h"
 #include "drawing.h"
 #include "stereo.h"
+//#include "motionmodel.h"
 #include "libcam.h"
 
-#define VERSION 1.031
+#define VERSION 1.032
 
 using namespace std;
 
@@ -47,6 +48,7 @@ int main(int argc, char* argv[]) {
   bool show_lines = false;
   bool rectify_images = false;
   int use_priors = 1;
+  int FOV_degrees = 50;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -66,6 +68,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -x  --offsetx              Calibration x offset in pixels");
   opt->addUsage( " -y  --offsety              Calibration y offset in pixels");
   opt->addUsage( " -d  --disparity            Max disparity as a percent of image width");
+  opt->addUsage( "     --ground               y coordinate of the ground plane as percent of image height");
   opt->addUsage( "     --features             Show stereo features");
   opt->addUsage( "     --matches              Show stereo matches");
   opt->addUsage( "     --regions              Show regions");
@@ -98,6 +101,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --help                 Show help");
   opt->addUsage( "" );
 
+  opt->setOption(  "ground" );
   opt->setOption(  "cd0x" );
   opt->setOption(  "cd0y" );
   opt->setOption(  "cd1x" );
@@ -259,6 +263,13 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = false;
+  }
+
+  int enable_ground_priors = 0;
+  int ground_y_percent = 50;
+  if( opt->getValue( "ground" ) != NULL  ) {
+	  enable_ground_priors = 1;
+	  ground_y_percent = atoi(opt->getValue("ground"));
   }
 
   std::string dev0 = "/dev/video1";
@@ -442,8 +453,7 @@ int main(int argc, char* argv[]) {
   unsigned int minimum_response = 300;
 
   /* matching params */
-  int ideal_no_of_matches = 200;
-  int descriptor_match_threshold = 0;
+  int ideal_no_of_matches = 400;
 
   /* These weights are used during matching of stereo features.
    * You can adjust them if you wish */
@@ -451,9 +461,11 @@ int main(int argc, char* argv[]) {
   int learnLuma = 7*5;   /* weight associated with luminance match */
   int learnDisp = 1;   /* weight associated with disparity (bias towards smaller disparities) */
   int learnPrior = 4;  /* weight associated with prior disparity */
+  int groundPrior = 200; /* weight for ground plane prior */
 
   svs* lcam = new svs(ww, hh);
   svs* rcam = new svs(ww, hh);
+  //motionmodel* motion = new motionmodel();
 
   unsigned char* rectification_buffer = NULL;
   unsigned char* depthmap_buffer = NULL;
@@ -528,6 +540,18 @@ int main(int argc, char* argv[]) {
 	            calib_offset_x,
 	            calib_offset_y,
 	            1-cam);
+
+		    /*
+			motion->Update(
+				stereocam->feature_x,
+				stereocam->feature_y,
+				stereocam->features_per_row,
+				stereocam->features_per_col,
+				FOV_degrees,
+				hh/SVS_VERTICAL_SAMPLING,
+				ww/SVS_HORIZONTAL_SAMPLING,
+				ww, hh);
+		    */
 		}
 
 		if (show_lines) {
@@ -624,15 +648,19 @@ int main(int argc, char* argv[]) {
 		calib_offset_y = 0;
 	}
 
+	/* set ground plane parameters */
+	lcam->enable_ground_priors = enable_ground_priors;
+	lcam->ground_y_percent = ground_y_percent;
+
 	int matches = lcam->match(
 		rcam,
 		ideal_no_of_matches,
 		max_disparity_percent,
-		descriptor_match_threshold,
 		learnDesc,
 		learnLuma,
 		learnDisp,
 		learnPrior,
+		groundPrior,
 		use_priors);
 
 	/* experimental plane fitting */
@@ -833,11 +861,14 @@ int main(int argc, char* argv[]) {
 
 	/* show disparity as spots */
 	if (show_matches) {
+
 		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*4 + 1];
-			int y = lcam->svs_matches[i*4 + 2];
-			int disp = lcam->svs_matches[i*4 + 3];
-		    drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
+			if (lcam->svs_matches[i*4] > 0) {
+			    int x = lcam->svs_matches[i*4 + 1];
+			    int y = lcam->svs_matches[i*4 + 2];
+			    int disp = lcam->svs_matches[i*4 + 3];
+		        drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
+			}
 		}
 	}
 
@@ -954,6 +985,7 @@ int main(int argc, char* argv[]) {
 
   delete lcam;
   delete rcam;
+  //delete motion;
   delete lines;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
   if (depthmap_buffer != NULL) delete[] depthmap_buffer;
