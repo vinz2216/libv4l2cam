@@ -29,7 +29,7 @@
 //#include "motionmodel.h"
 #include "libcam.h"
 
-#define VERSION 1.032
+#define VERSION 1.041
 
 using namespace std;
 
@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
   bool show_lines = false;
   bool rectify_images = false;
   int use_priors = 1;
-  int FOV_degrees = 50;
+  //int FOV_degrees = 50;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -449,7 +449,7 @@ int main(int argc, char* argv[]) {
   unsigned char *r_=(unsigned char *)r->imageData;
 
   /* feature detection params */
-  int inhibition_radius = 16;
+  int inhibition_radius = 6;
   unsigned int minimum_response = 300;
 
   /* matching params */
@@ -461,6 +461,7 @@ int main(int argc, char* argv[]) {
   int learnLuma = 7*5;   /* weight associated with luminance match */
   int learnDisp = 1;   /* weight associated with disparity (bias towards smaller disparities) */
   int learnPrior = 4;  /* weight associated with prior disparity */
+  int learnGrad = 10;  /* weight associated with horizontal gradient */
   int groundPrior = 200; /* weight for ground plane prior */
 
   svs* lcam = new svs(ww, hh);
@@ -660,6 +661,7 @@ int main(int argc, char* argv[]) {
 		learnLuma,
 		learnDisp,
 		learnPrior,
+		learnGrad,
 		groundPrior,
 		use_priors);
 
@@ -992,5 +994,6 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
+
 
 

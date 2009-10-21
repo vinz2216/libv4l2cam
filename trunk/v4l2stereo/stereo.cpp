@@ -76,6 +76,9 @@ svs::svs(int width, int height) {
 	/* buffer which stores sliding sum */
 	row_sum = new int[SVS_MAX_IMAGE_WIDTH];
 
+	/* horizontal luminance gradient for each feature */
+	gradient = new unsigned char[SVS_MAX_FEATURES];
+
 	/* buffer used to find peaks in edge space */
 	row_peaks = new unsigned int[SVS_MAX_IMAGE_WIDTH];
 
@@ -109,6 +112,7 @@ svs::~svs() {
 	delete[] descriptor;
 	delete[] mean;
 	delete[] row_sum;
+	delete[] gradient;
 	delete[] row_peaks;
 	if (region_disparity != NULL)
 		delete[] region_disparity;
@@ -188,7 +192,7 @@ int segment) { /* if non zero update low contrast areas used for segmentation */
 		if (p0 < 0)
 			p0 = -p0;
 
-		/* edge using 4 pixel radius */
+		/* edge using 2 pixel radius */
 		p1 = (sum - row_sum[j - 2]) - (row_sum[j + 2] - sum);
 		if (p1 < 0)
 			p1 = -p1;
@@ -342,7 +346,7 @@ int calibration_offset_y, /* calibration y offset in pixels */
 int segment) {
 
 	unsigned short int no_of_feats;
-	int x, y, row_mean, start_x;
+	int x, y, row_mean, start_x, prev_x, mid_x, grad;
 	int no_of_features = 0;
 	int row_idx = 0;
 
@@ -365,11 +369,23 @@ int segment) {
 			non_max(0, inhibition_radius, minimum_response);
 
 			/* store the features */
+			prev_x = start_x;
 			for (x = start_x; x > 15; x--) {
 				if (row_peaks[x] > 0) {
 
 					if (compute_descriptor(x, y, rectified_frame_buf,
 							no_of_features, row_mean) == 0) {
+
+						//if (prev_x > -1) {
+							mid_x = prev_x + ((x - prev_x)/2);
+							if (x != mid_x) {
+								grad =
+								    ((row_sum[mid_x] - row_sum[x]) -
+								    (row_sum[prev_x] - row_sum[mid_x])) /
+								    (mid_x - x);
+							    gradient[no_of_features] = (unsigned char)(grad + 127);
+							}
+						//}
 
 						feature_x[no_of_features++] = (short int) (x
 								+ calibration_offset_x);
@@ -379,6 +395,7 @@ int segment) {
 							printf("stereo feature buffer full\n");
 							break;
 						}
+						prev_x = x;
 					}
 				}
 			}
@@ -436,16 +453,13 @@ int calibration_offset_x, int calibration_offset_y, int segment) {
 			for (y = start_y; y > 15; y--) {
 				if (row_peaks[y] > 0) {
 
-					if (compute_descriptor(x, y, rectified_frame_buf,
-							no_of_features, col_mean) == 0) {
-						feature_y[no_of_features++] = (short int) (y
-								+ calibration_offset_y);
-						no_of_feats++;
-						if (no_of_features == SVS_MAX_FEATURES) {
-							x = imgWidth;
-							printf("stereo feature buffer full\n");
-							break;
-						}
+					feature_y[no_of_features++] = (short int) (y
+							+ calibration_offset_y);
+					no_of_feats++;
+					if (no_of_features == SVS_MAX_FEATURES) {
+						x = imgWidth;
+						printf("stereo feature buffer full\n");
+						break;
 					}
 				}
 			}
@@ -469,6 +483,7 @@ int learnDesc, /* descriptor match weight */
 int learnLuma, /* luminance match weight */
 int learnDisp, /* disparity weight */
 int learnPrior, /* prior weight */
+int learnGrad, /* horizontal gradient weight */
 int groundPrior, /* prior for ground plane */
 int use_priors) { /* if non-zero then use priors, assuming time between frames is small */
 
@@ -482,6 +497,8 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 	int idx, max, curr_idx = 0, search_idx, winner_idx = 0;
 	int no_of_possible_matches = 0, matches = 0;
 	int itt, prev_matches, row_offset, col_offset;
+	int grad_diff0, gradL0, grad_diff1, gradL1, grad_anti;
+	int p, pmax=1;
 
 	unsigned int meandescL, meandescR;
 	short meandesc[SVS_DESCRIPTOR_PIXELS];
@@ -576,6 +593,11 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				n >>= 1;
 			}
 
+			gradL0 = gradient[fL + L];
+			if (L < no_of_feats_left - 1) {
+			    gradL1 = gradient[fL + L + 1];
+			}
+
 			total = 0;
 
 			/* features along the row in the right camera */
@@ -622,11 +644,29 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 							+ BitsSetTable256[(desc_match >> 16) & 0xff]
 							+ BitsSetTable256[desc_match >> 24];
 
+					grad_anti = (255 - gradL0) - (int)(other->gradient[fR + R]);
+					if (grad_anti < 0) grad_anti = -grad_anti;
+
+					grad_diff0 = gradL0 - (int)(other->gradient[fR + R]);
+					if (grad_diff0 < 0) grad_diff0 = -grad_diff0;
+					grad_diff0 = (255 - grad_diff0) - (255 - grad_anti);
+
+					if (R < no_of_feats_right - 1) {
+						grad_anti = (255 - gradL1) - (int)(other->gradient[fR + R + 1]);
+						if (grad_anti < 0) grad_anti = -grad_anti;
+
+						grad_diff1 = gradL1 - (int)(other->gradient[fR + R + 1]);
+					    if (grad_diff1 < 0) grad_diff1 = -grad_diff1;
+					    grad_diff1 = (255 - grad_diff1) - (255 - grad_anti);
+					}
+
 					if (luma_diff < 0)
 						luma_diff = -luma_diff;
 					int score =
-							10000 + (max_disp * learnDisp)
-									+ (((int) correlation
+							10000 + (max_disp * learnDisp) +
+							(grad_diff0 * learnGrad) +
+							(grad_diff1 * learnGrad) +
+									(((int) correlation
 											+ (int) (SVS_DESCRIPTOR_PIXELS
 													- anticorrelation))
 											* learnDesc) - (luma_diff
@@ -666,39 +706,50 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			/* non-zero total matching score */
 			if (total > 0) {
 
-				/* convert matching scores to probabilities */
-				best_prob = 0;
-				for (R = 0; R < no_of_feats_right; R++) {
-					if (row_peaks[R] > 0) {
-						match_prob = row_peaks[R] * 1000 / total;
-						if (match_prob > best_prob) {
-							best_prob = match_prob;
-							bestR = R;
+				/* several candidate disparities per feature
+				   observing the principle of least commitment */
+				for (p = 0; p < pmax; p++) {
+
+					/* convert matching scores to probabilities */
+					best_prob = 0;
+					for (R = 0; R < no_of_feats_right; R++) {
+						if (row_peaks[R] > 0) {
+							match_prob = row_peaks[R] * 1000 / total;
+							if (match_prob > best_prob) {
+								best_prob = match_prob;
+								bestR = R;
+							}
 						}
 					}
-				}
 
-				if ((best_prob > 0) && (best_prob < 1000)
-						&& (no_of_possible_matches < SVS_MAX_FEATURES)) {
+					if ((best_prob > 0) &&
+						(best_prob < 1000) &&
+					    (no_of_possible_matches < SVS_MAX_FEATURES)) {
 
-					/* x coordinate of the feature in the right camera */
-					xR = other->feature_x[fR + bestR];
+						/* x coordinate of the feature in the right camera */
+						xR = other->feature_x[fR + bestR];
 
-					/* possible disparity */
-					disp = xL - xR;
+						/* possible disparity */
+						disp = xL - xR;
 
-					if ((disp >= -10) && (disp < max_disp_pixels)) {
-						if (disp < 0)
-							disp = 0;
-						/* add the best result to the list of possible matches */
-						svs_matches[no_of_possible_matches * 4] = best_prob;
-						svs_matches[no_of_possible_matches * 4 + 1]
-								= (unsigned int) xL;
-						svs_matches[no_of_possible_matches * 4 + 2]
-								= (unsigned int) y;
-						svs_matches[no_of_possible_matches * 4 + 3]
-								= (unsigned int) disp;
-						no_of_possible_matches++;
+						if ((disp >= -10) &&
+							(disp < max_disp_pixels)) {
+							if (disp < 0)
+								disp = 0;
+							/* add the best result to the list of possible matches */
+							svs_matches[no_of_possible_matches * 4] = best_prob;
+							svs_matches[no_of_possible_matches * 4 + 1]
+									= (unsigned int) xL;
+							svs_matches[no_of_possible_matches * 4 + 2]
+									= (unsigned int) y;
+							svs_matches[no_of_possible_matches * 4 + 3]
+									= (unsigned int) disp;
+							if (p > 0) {
+								svs_matches[no_of_possible_matches * 4 + 1] += imgWidth;
+							}
+							no_of_possible_matches++;
+							row_peaks[bestR] = 0;
+						}
 					}
 				}
 			}
@@ -728,7 +779,10 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				+= 4) {
 
 			match_prob = svs_matches[curr_idx];
-			winner_idx = -1;
+			if (match_prob > 0)
+				winner_idx = curr_idx;
+			else
+			    winner_idx = -1;
 
 			search_idx = curr_idx + 4;
 			max = no_of_possible_matches * 4;
@@ -758,19 +812,29 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				svs_matches[curr_idx + 3] = disp;
 
 				/* update your priors */
-				row = y / SVS_VERTICAL_SAMPLING;
-				for (row_offset = -3; row_offset <= 3; row_offset++) {
-					for (col_offset = -1; col_offset <= 1; col_offset++) {
-						idx = (((row + row_offset) * imgWidth + xL) / 16)
-								+ col_offset;
-						if ((idx > -1) && (idx < priors_length)) {
-							if (disparity_priors[idx] == 0)
-								disparity_priors[idx] = disp;
-							else
-								disparity_priors[idx] = (disp
-										+ disparity_priors[idx]) / 2;
+				if (svs_matches[winner_idx + 1] >= imgWidth) {
+					svs_matches[winner_idx + 1] -= imgWidth;
+				}
+				else {
+					if ((matches < 200) &&
+						(best_prob > 1)) {
+
+						row = y / SVS_VERTICAL_SAMPLING;
+						for (row_offset = -3; row_offset <= 3; row_offset++) {
+							for (col_offset = -1; col_offset <= 1; col_offset++) {
+								idx = (((row + row_offset) * imgWidth + xL) / 16)
+										+ col_offset;
+								if ((idx > -1) && (idx < priors_length)) {
+									if (disparity_priors[idx] == 0)
+										disparity_priors[idx] = disp;
+									else
+										disparity_priors[idx] = (disp
+												+ disparity_priors[idx]) / 2;
+								}
+							}
 						}
 					}
+
 				}
 			}
 
@@ -801,10 +865,10 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 						/* lookup disparity from priors */
 
 						row = y / SVS_VERTICAL_SAMPLING;
-						disp_prior
-								= disparity_priors[(row * imgWidth + x) / 16];
+						disp_prior = disparity_priors[(row * imgWidth + x) / 16];
 
-						if ((disp_prior > 0) && (matches < SVS_MAX_MATCHES)) {
+						if ((disp_prior > 0) &&
+							(matches < SVS_MAX_MATCHES)) {
 							curr_idx = matches * 4;
 							svs_matches[curr_idx] = 1000;
 							svs_matches[curr_idx + 1] = x;
@@ -813,6 +877,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 							matches++;
 
 							/* update your priors */
+
 							for (row_offset = -3; row_offset <= 3; row_offset++) {
 								for (col_offset = -1; col_offset <= 1; col_offset++) {
 									idx = (((row + row_offset) * imgWidth + x)
@@ -845,12 +910,11 @@ void svs::filter_plane(
     int no_of_possible_matches, /* the number of stereo matches */
     int max_disparity_pixels) /*maximum disparity in pixels */
 {
-    int i, j, hf, hist_max, w = SVS_FILTER_SAMPLING, w2, n, horizontal = 0;
+    int i, hf, hist_max, w = SVS_FILTER_SAMPLING, w2, n, horizontal = 0;
     unsigned int x, y, disp, tx = 0, ty = 0, bx = 0, by = 0;
     int hist_thresh, hist_mean, hist_mean_hits, mass, disp2;
     int min_ww, max_ww, m, ww, d;
     int ww0, ww1, disp0, disp1, cww, dww, ddisp;
-    int max_hits;
     no_of_planes = 0;
 
     /* clear quadrants */
@@ -1151,7 +1215,9 @@ void svs::filter_plane(
 
             /* if the point is within a known plane region then force
                its disparity onto the plane */
+            /*
             x = svs_matches[i * 4 + 1];
+            if (x > imgWidth) x -= imgWidth;
             y = svs_matches[i * 4 + 2];
             max_hits = 0;
             for (j = no_of_planes-1; j >= 0; j--) {
@@ -1164,7 +1230,7 @@ void svs::filter_plane(
 
                         max_hits = plane[j*9+7];
 
-                        /* find the disparity value at this point on the plane */
+                        // find the disparity value at this point on the plane
                         if (plane[j*9+4] == 1) {
 
                             disp = plane[j*9+5] +
@@ -1180,17 +1246,18 @@ void svs::filter_plane(
                                      (plane[j*9+3] - plane[j*9+1]));
                         }
 
-                        /* ignore big disparities, which are likely to be noise */
+                        // ignore big disparities, which are likely to be noise
                         if (disp < 4) {
-                            /* update disparity for this stereo match */
+                            // update disparity for this stereo match
                             svs_matches[i * 4 + 3] = disp;
 
-                            /* non zero match probability resurects this stereo match */
+                            // non zero match probability resurects this stereo match
                             svs_matches[i * 4] = 1;
                         }
                     }
                 }
             }
+*/
         }
     }
 }

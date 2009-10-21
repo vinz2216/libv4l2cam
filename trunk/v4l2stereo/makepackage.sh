@@ -13,3 +13,4 @@ cp v4l2stereo ../deb/usr/bin
 cd ..
 sudo chmod -R 0755 .
 dpkg -b deb v4l2stereo.deb
+alien -r v4l2stereo.deb
