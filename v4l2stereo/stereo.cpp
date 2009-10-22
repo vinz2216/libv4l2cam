@@ -76,9 +76,6 @@ svs::svs(int width, int height) {
 	/* buffer which stores sliding sum */
 	row_sum = new int[SVS_MAX_IMAGE_WIDTH];
 
-	/* horizontal luminance gradient for each feature */
-	gradient = new unsigned char[SVS_MAX_FEATURES];
-
 	/* buffer used to find peaks in edge space */
 	row_peaks = new unsigned int[SVS_MAX_IMAGE_WIDTH];
 
@@ -112,7 +109,6 @@ svs::~svs() {
 	delete[] descriptor;
 	delete[] mean;
 	delete[] row_sum;
-	delete[] gradient;
 	delete[] row_peaks;
 	if (region_disparity != NULL)
 		delete[] region_disparity;
@@ -328,7 +324,9 @@ int svs::compute_descriptor(int px, int py, unsigned char* rectified_frame_buf,
 		if (meanval > 255)
 			meanval = 255;
 
-		mean[no_of_features] = (unsigned char) (meanval / 3);
+		meanval /= 16;
+		if (meanval > 15) meanval = 15;
+		mean[no_of_features] = (unsigned char)meanval;
 		descriptor[no_of_features] = desc;
 		return (0);
 	} else {
@@ -376,16 +374,18 @@ int segment) {
 					if (compute_descriptor(x, y, rectified_frame_buf,
 							no_of_features, row_mean) == 0) {
 
-						//if (prev_x > -1) {
-							mid_x = prev_x + ((x - prev_x)/2);
-							if (x != mid_x) {
-								grad =
-								    ((row_sum[mid_x] - row_sum[x]) -
-								    (row_sum[prev_x] - row_sum[mid_x])) /
-								    (mid_x - x);
-							    gradient[no_of_features] = (unsigned char)(grad + 127);
-							}
-						//}
+						mid_x = prev_x + ((x - prev_x)/2);
+						if (x != mid_x) {
+							grad =
+								((row_sum[mid_x] - row_sum[x]) -
+								(row_sum[prev_x] - row_sum[mid_x])) /
+								((prev_x - x)*4);
+							/* limit gradient into a 4 bit range */
+							if (grad < -7) grad = -7;
+							if (grad > 7) grad = 7;
+							/* pack the value into the upper 4 bits */
+							mean[no_of_features] |= ((unsigned char)(grad + 8) << 4);
+						}
 
 						feature_x[no_of_features++] = (short int) (x
 								+ calibration_offset_x);
@@ -578,7 +578,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			}
 
 			/* mean luminance and eigendescriptor for the left camera feature */
-			meanL = mean[fL + L];
+			meanL = mean[fL + L] & 15;
 			descL = descriptor[fL + L] & meandescL;
 
 			/* invert bits of the descriptor for anti-correlation matching */
@@ -593,9 +593,9 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 				n >>= 1;
 			}
 
-			gradL0 = gradient[fL + L];
+			gradL0 = mean[fL + L] >> 4;
 			if (L < no_of_feats_left - 1) {
-			    gradL1 = gradient[fL + L + 1];
+			    gradL1 = mean[fL + L + 1] >> 4;
 			}
 
 			total = 0;
@@ -618,7 +618,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 						disp = 0;
 
 					/* mean luminance for the right camera feature */
-					meanR = other->mean[fR + R];
+					meanR = other->mean[fR + R] & 15;
 
 					/* is the mean luminance similar? */
 					luma_diff = meanR - meanL;
@@ -644,20 +644,20 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 							+ BitsSetTable256[(desc_match >> 16) & 0xff]
 							+ BitsSetTable256[desc_match >> 24];
 
-					grad_anti = (255 - gradL0) - (int)(other->gradient[fR + R]);
+					grad_anti = (15 - gradL0) - (int)(other->mean[fR + R] >> 4);
 					if (grad_anti < 0) grad_anti = -grad_anti;
 
-					grad_diff0 = gradL0 - (int)(other->gradient[fR + R]);
+					grad_diff0 = gradL0 - (int)(other->mean[fR + R] >> 4);
 					if (grad_diff0 < 0) grad_diff0 = -grad_diff0;
-					grad_diff0 = (255 - grad_diff0) - (255 - grad_anti);
+					grad_diff0 = (15 - grad_diff0) - (15 - grad_anti);
 
 					if (R < no_of_feats_right - 1) {
-						grad_anti = (255 - gradL1) - (int)(other->gradient[fR + R + 1]);
+						grad_anti = (15 - gradL1) - (int)(other->mean[fR + R + 1] >> 4);
 						if (grad_anti < 0) grad_anti = -grad_anti;
 
-						grad_diff1 = gradL1 - (int)(other->gradient[fR + R + 1]);
+						grad_diff1 = gradL1 - (int)(other->mean[fR + R + 1] >> 4);
 					    if (grad_diff1 < 0) grad_diff1 = -grad_diff1;
-					    grad_diff1 = (255 - grad_diff1) - (255 - grad_anti);
+					    grad_diff1 = (15 - grad_diff1) - (15 - grad_anti);
 					}
 
 					if (luma_diff < 0)

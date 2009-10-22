@@ -51,9 +51,6 @@ public:
     /* array storing x coordinates of detected features */
     short int* feature_x;
 
-    /* horizontal luminance gradient between feature points */
-    unsigned char* gradient;
-
     /* array storing y coordinates of detected features */
     short int* feature_y;
 
