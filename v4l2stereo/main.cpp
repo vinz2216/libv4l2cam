@@ -94,6 +94,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -f  --fps                  Frames per second");
   opt->addUsage( " -s  --skip                 Skip this number of frames");
   opt->addUsage( " -o  --output               Saves stereo matches to the given output file");
+  opt->addUsage( "     --log                  Logs stereo matches to the given output file (only when no file exists)");
   opt->addUsage( " -V  --version              Show version number");
   opt->addUsage( "     --save                 Save raw images");
   opt->addUsage( "     --flipright            Flip the right image");
@@ -126,6 +127,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "offsety", 'y' );
   opt->setOption(  "disparity", 'd' );
   opt->setOption(  "output", 'o' );
+  opt->setOption(  "log" );
   opt->setOption(  "skip", 's' );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
@@ -403,6 +405,11 @@ int main(int argc, char* argv[]) {
   if( opt->getValue( 'o' ) != NULL  || opt->getValue( "output" ) != NULL  ) {
 	  stereo_matches_filename = opt->getValue("output");
 	  skip_frames = 6;
+  }
+
+  std::string log_stereo_matches_filename = "";
+  if( opt->getValue( "log" ) != NULL  ) {
+	  log_stereo_matches_filename = opt->getValue("log");
   }
 
   if( opt->getValue( 's' ) != NULL  || opt->getValue( "skip" ) != NULL  ) {
@@ -776,8 +783,8 @@ int main(int argc, char* argv[]) {
 	    hist_max[2] = 0;
 
 		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*4 + 1];
-			int disp = lcam->svs_matches[i*4 + 3];
+			int x = lcam->svs_matches[i*5 + 1];
+			int disp = lcam->svs_matches[i*5 + 3];
 			disparity_histogram[2][disp]++;
 			if (x < ww/2)
 				disparity_histogram[0][disp]++;
@@ -863,12 +870,12 @@ int main(int argc, char* argv[]) {
 
 	/* show disparity as spots */
 	if (show_matches) {
-
 		for (int i = 0; i < matches; i++) {
-			if (lcam->svs_matches[i*4] > 0) {
-			    int x = lcam->svs_matches[i*4 + 1];
-			    int y = lcam->svs_matches[i*4 + 2];
-			    int disp = lcam->svs_matches[i*4 + 3];
+			if ((lcam->svs_matches[i*5] > 0) &&
+			   (lcam->svs_matches[i*5+4] != 9999)) {
+			    int x = lcam->svs_matches[i*5 + 1];
+			    int y = lcam->svs_matches[i*5 + 2];
+			    int disp = lcam->svs_matches[i*5 + 3];
 		        drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
 			}
 		}
@@ -883,9 +890,9 @@ int main(int argc, char* argv[]) {
 		memset(l_, 0, ww*hh*3*sizeof(unsigned char));
 		if (matches == 0) matches = prev_matches;
 		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*4 + 1];
-			int y = lcam->svs_matches[i*4 + 2];
-			int disp = lcam->svs_matches[i*4 + 3];
+			int x = lcam->svs_matches[i*5 + 1];
+			int y = lcam->svs_matches[i*5 + 2];
+			int disp = lcam->svs_matches[i*5 + 3];
 			int max_disparity_pixels = max_disparity_percent * ww / 100;
 			int disp_intensity = 50 + (disp * 300 / max_disparity_pixels);
 			if (disp_intensity > 255) disp_intensity = 255;
@@ -915,6 +922,13 @@ int main(int argc, char* argv[]) {
 					l_[n+2] = r_[n2+2];
 				}
 			}
+		}
+	}
+
+	/* log stereo matches */
+	if ((log_stereo_matches_filename != "")) {
+		if (lcam->log_matches(log_stereo_matches_filename, l_, matches, true)) {
+		    printf("%d stereo matches logged to %s\n", matches, log_stereo_matches_filename.c_str());
 		}
 	}
 

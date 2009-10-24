@@ -54,9 +54,10 @@ svs::svs(int width, int height) {
 	feature_x = new short int[SVS_MAX_FEATURES];
 	feature_y = new short int[SVS_MAX_FEATURES];
 
+    disparity_histogram = new unsigned short int[SVS_MAX_IMAGE_WIDTH/2];
     disparity_histogram_plane = new int[(SVS_MAX_IMAGE_WIDTH/SVS_FILTER_SAMPLING)*(SVS_MAX_IMAGE_WIDTH / 2)];
     disparity_plane_fit = new int[SVS_MAX_IMAGE_WIDTH / SVS_FILTER_SAMPLING];
-    plane = new int[11*9];
+    plane = new int[15*9];
 
 	calibration_map = NULL;
 
@@ -133,6 +134,8 @@ svs::~svs() {
 		delete[] valid_quadrants;
 	if (disparity_priors != NULL)
 		delete[] disparity_priors;
+	if (disparity_histogram != NULL)
+		delete[] disparity_histogram;
 	if (disparity_histogram_plane != NULL)
 		delete[] disparity_histogram_plane;
 	if (disparity_plane_fit != NULL)
@@ -375,7 +378,7 @@ int segment) {
 							no_of_features, row_mean) == 0) {
 
 						mid_x = prev_x + ((x - prev_x)/2);
-						if (x != mid_x) {
+						if (x != prev_x) {
 							grad =
 								((row_sum[mid_x] - row_sum[x]) -
 								(row_sum[prev_x] - row_sum[mid_x])) /
@@ -485,8 +488,8 @@ int learnDisp, /* disparity weight */
 int learnPrior, /* prior weight */
 int learnGrad, /* horizontal gradient weight */
 int groundPrior, /* prior for ground plane */
-int use_priors) { /* if non-zero then use priors, assuming time between frames is small */
-
+int use_priors) /* if non-zero then use priors, assuming time between frames is small */
+{
 	int x, xL = 0, xR, L, R, y, no_of_feats, no_of_feats_left,
 			no_of_feats_right, row, col = 0, bit, disp_diff;
 	int luma_diff, disp_prior = 0, min_disp, max_disp = 0, max_disp_pixels,
@@ -505,7 +508,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 
 	/* create arrays */
 	if (svs_matches == NULL) {
-		svs_matches = new unsigned int[SVS_MAX_MATCHES * 4];
+		svs_matches = new unsigned int[SVS_MAX_MATCHES * 5];
 		valid_quadrants = new unsigned char[SVS_MAX_MATCHES];
 		disparity_priors = new int[SVS_MAX_IMAGE_WIDTH * SVS_MAX_IMAGE_HEIGHT
 				/ (16*SVS_VERTICAL_SAMPLING)];
@@ -737,15 +740,15 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 							if (disp < 0)
 								disp = 0;
 							/* add the best result to the list of possible matches */
-							svs_matches[no_of_possible_matches * 4] = best_prob;
-							svs_matches[no_of_possible_matches * 4 + 1]
+							svs_matches[no_of_possible_matches * 5] = best_prob;
+							svs_matches[no_of_possible_matches * 5 + 1]
 									= (unsigned int) xL;
-							svs_matches[no_of_possible_matches * 4 + 2]
+							svs_matches[no_of_possible_matches * 5 + 2]
 									= (unsigned int) y;
-							svs_matches[no_of_possible_matches * 4 + 3]
+							svs_matches[no_of_possible_matches * 5 + 3]
 									= (unsigned int) disp;
 							if (p > 0) {
-								svs_matches[no_of_possible_matches * 4 + 1] += imgWidth;
+								svs_matches[no_of_possible_matches * 5 + 1] += imgWidth;
 							}
 							no_of_possible_matches++;
 							row_peaks[bestR] = 0;
@@ -776,7 +779,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 		curr_idx = 0;
 		search_idx = 0;
 		for (matches = 0; matches < ideal_no_of_matches; matches++, curr_idx
-				+= 4) {
+				+= 5) {
 
 			match_prob = svs_matches[curr_idx];
 			if (match_prob > 0)
@@ -784,14 +787,14 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 			else
 			    winner_idx = -1;
 
-			search_idx = curr_idx + 4;
-			max = no_of_possible_matches * 4;
+			search_idx = curr_idx + 5;
+			max = no_of_possible_matches * 5;
 			while (search_idx < max) {
 				if (svs_matches[search_idx] > match_prob) {
 					match_prob = svs_matches[search_idx];
 					winner_idx = search_idx;
 				}
-				search_idx += 4;
+				search_idx += 5;
 			}
 			if (winner_idx > -1) {
 
@@ -869,7 +872,7 @@ int use_priors) { /* if non-zero then use priors, assuming time between frames i
 
 						if ((disp_prior > 0) &&
 							(matches < SVS_MAX_MATCHES)) {
-							curr_idx = matches * 4;
+							curr_idx = matches * 5;
 							svs_matches[curr_idx] = 1000;
 							svs_matches[curr_idx + 1] = x;
 							svs_matches[curr_idx + 2] = y;
@@ -920,9 +923,13 @@ void svs::filter_plane(
     /* clear quadrants */
     memset(valid_quadrants, 0, no_of_possible_matches * sizeof(unsigned char));
 
+    /* default plane */
+    for (i = no_of_possible_matches-1; i >= 0; i--)
+    	svs_matches[i * 5 + 4] = 9999;
+
     /* create disparity histograms within different
      * zones of the image */
-    for (hf = 0; hf < 11; hf++) {
+    for (hf = 0; hf < 15; hf++) {
 
         switch (hf) {
 
@@ -998,7 +1005,9 @@ void svs::filter_plane(
         // right hemifield 0
         case 7: {
             tx = imgWidth * 2 / 3;
+            ty = 0;
             bx = imgWidth;
+            by = imgHeight;
             horizontal = 1;
             break;
         }
@@ -1026,6 +1035,43 @@ void svs::filter_plane(
             horizontal = 0;
             break;
         }
+        // left upper
+        case 11: {
+            tx = 0;
+            ty = 0;
+            bx = imgWidth / 3;
+            by = imgHeight / 2;
+            horizontal = 1;
+            break;
+        }
+        // left lower
+        case 12: {
+            tx = 0;
+            ty = imgHeight / 2;
+            bx = imgWidth / 3;
+            by = imgHeight;
+            horizontal = 1;
+            break;
+        }
+        // right upper
+        case 13: {
+            tx = imgWidth * 2 / 3;
+            ty = 0;
+            bx = imgWidth;
+            by = imgHeight / 2;
+            horizontal = 1;
+            break;
+        }
+        // right lower
+        case 14: {
+            tx = imgWidth * 2 / 3;
+            ty = imgHeight / 2;
+            bx = imgWidth;
+            by = imgHeight;
+            horizontal = 1;
+            break;
+        }
+
         }
 
         /* clear the histogram */
@@ -1040,11 +1086,11 @@ void svs::filter_plane(
         /* update the disparity histogram */
         n = 0;
         for (i = no_of_possible_matches-1; i >= 0; i--) {
-            x = svs_matches[i * 4 + 1];
+            x = svs_matches[i * 5 + 1];
             if ((x > tx) && (x < bx)) {
-                y = svs_matches[i * 4 + 2];
+                y = svs_matches[i * 5 + 2];
                 if ((y > ty) && (y < by)) {
-                    disp = svs_matches[i * 4 + 3];
+                    disp = svs_matches[i * 5 + 3];
                     if ((int) disp < max_disparity_pixels) {
                         if (horizontal != 0) {
                             n = (((x - tx) / SVS_FILTER_SAMPLING)
@@ -1139,11 +1185,12 @@ void svs::filter_plane(
         int plane_disp1 = 0;
         int hits = 0;
         for (i = no_of_possible_matches-1; i >= 0; i--) {
-            x = svs_matches[i * 4 + 1];
+        	if (svs_matches[i * 5 + 4] == 9999) {
+            x = svs_matches[i * 5 + 1];
             if ((x > tx) && (x < bx)) {
-                y = svs_matches[i * 4 + 2];
+                y = svs_matches[i * 5 + 2];
                 if ((y > ty) && (y < by)) {
-                    disp = svs_matches[i * 4 + 3];
+                    disp = svs_matches[i * 5 + 3];
 
                     if (horizontal != 0) {
                         ww = (x - tx) / SVS_FILTER_SAMPLING;
@@ -1161,12 +1208,13 @@ void svs::filter_plane(
                     }
 
                     /* check how far this is from the plane */
-                    if (((int)disp >= disp2-2) &&
-                            ((int)disp <= disp2+2) &&
-                            ((int)disp < max_disparity_pixels)) {
+                    if (((int)disp >= disp2-1) &&
+                        ((int)disp <= disp2+1) &&
+                        ((int)disp < max_disparity_pixels)) {
 
                         /* inlier detected - this disparity lies along the plane */
                         valid_quadrants[i]++;
+                        svs_matches[i * 5 + 4] = no_of_planes;
                         hits++;
 
                         /* keep note of the bounds of the plane */
@@ -1189,6 +1237,7 @@ void svs::filter_plane(
                     }
                 }
             }
+        	}
         }
         if (hits > 5) {
             /* add a detected plane */
@@ -1205,59 +1254,10 @@ void svs::filter_plane(
         }
     }
 
-    /* deal with the outliers */
+    /* remove outliers */
     for (i = no_of_possible_matches-1; i >= 0; i--) {
         if (valid_quadrants[i] == 0) {
-
-            /* by default set outlier probability to zero,
-               which eliminates it from further enquiries */
-            svs_matches[i * 4] = 0;
-
-            /* if the point is within a known plane region then force
-               its disparity onto the plane */
-            /*
-            x = svs_matches[i * 4 + 1];
-            if (x > imgWidth) x -= imgWidth;
-            y = svs_matches[i * 4 + 2];
-            max_hits = 0;
-            for (j = no_of_planes-1; j >= 0; j--) {
-                if ((x > (unsigned int)plane[j*9+0]) &&
-                        (x < (unsigned int)plane[j*9+2]) &&
-                        (y > (unsigned int)plane[j*9+1]) &&
-                        (y < (unsigned int)plane[j*9+3])) {
-
-                    if (max_hits < plane[j*9+7]) {
-
-                        max_hits = plane[j*9+7];
-
-                        // find the disparity value at this point on the plane
-                        if (plane[j*9+4] == 1) {
-
-                            disp = plane[j*9+5] +
-                                   ((x - plane[j*9+0]) *
-                                    (plane[j*9+6] - plane[j*9+5]) /
-                                    (plane[j*9+2] - plane[j*9+0]));
-                        }
-                        else {
-
-                            disp = plane[j*9+5] +
-                                    ((y - plane[j*9+1]) *
-                                     (plane[j*9+6] - plane[j*9+5]) /
-                                     (plane[j*9+3] - plane[j*9+1]));
-                        }
-
-                        // ignore big disparities, which are likely to be noise
-                        if (disp < 4) {
-                            // update disparity for this stereo match
-                            svs_matches[i * 4 + 3] = disp;
-
-                            // non zero match probability resurects this stereo match
-                            svs_matches[i * 4] = 1;
-                        }
-                    }
-                }
-            }
-*/
+            svs_matches[i * 5] = 0;
         }
     }
 }
@@ -1533,9 +1533,9 @@ bool colour) { /* whether to additionally save colour of each match */
 
 			MatchData *m = new MatchData[no_of_matches];
 			for (int i = 0; i < no_of_matches; i++) {
-				m[i].x = svs_matches[i * 4 + 1];
-				m[i].y = svs_matches[i * 4 + 2];
-				m[i].disparity = svs_matches[i * 4 + 3];
+				m[i].x = svs_matches[i * 5 + 1];
+				m[i].y = svs_matches[i * 5 + 2];
+				m[i].disparity = svs_matches[i * 5 + 3];
 			}
 
 			fwrite(m, sizeof(MatchData), no_of_matches, file);
@@ -1552,9 +1552,9 @@ bool colour) { /* whether to additionally save colour of each match */
 			int n;
 			MatchDataColour *m = new MatchDataColour[no_of_matches];
 			for (int i = 0; i < no_of_matches; i++) {
-				m[i].x = svs_matches[i * 4 + 1];
-				m[i].y = svs_matches[i * 4 + 2];
-				m[i].disparity = svs_matches[i * 4 + 3];
+				m[i].x = svs_matches[i * 5 + 1];
+				m[i].y = svs_matches[i * 5 + 2];
+				m[i].disparity = svs_matches[i * 5 + 3];
 				n = ((m[i].y * imgWidth) + m[i].x) * 3;
 				m[i].r = rectified_frame_buf[n + 2];
 				m[i].g = rectified_frame_buf[n + 1];
@@ -1568,6 +1568,88 @@ bool colour) { /* whether to additionally save colour of each match */
 		fclose(file);
 	}
 }
+
+/*!
+ * \brief returns true if the given file exists
+ * \param filename name of the file
+ */
+bool svs::FileExists(
+	std::string filename)
+{
+    std::ifstream inf;
+
+    bool flag = false;
+    inf.open(filename.c_str());
+    if (inf.good()) flag = true;
+    inf.close();
+    return(flag);
+}
+
+/* logs stereo matches to file for use by other programs */
+bool svs::log_matches(std::string filename, /* filename to save as */
+unsigned char* rectified_frame_buf, /* left image data */
+int no_of_matches, /* number of stereo matches */
+bool colour) { /* whether to additionally save colour of each match */
+
+	bool logged = false;
+
+	if (!FileExists(filename)) {
+		FILE *file = fopen(filename.c_str(), "wb");
+		if (file != NULL) {
+
+			if (!colour) {
+
+				struct MatchData {
+					unsigned short int probability;
+					unsigned short int x;
+					unsigned short int y;
+					unsigned short int disparity;
+				};
+
+				MatchData *m = new MatchData[no_of_matches];
+				for (int i = 0; i < no_of_matches; i++) {
+					m[i].probability = (unsigned short int)svs_matches[i * 5];
+					m[i].x = (unsigned short int)svs_matches[i * 5 + 1];
+					m[i].y = (unsigned short int)svs_matches[i * 5 + 2];
+					m[i].disparity = (unsigned short int)svs_matches[i * 5 + 3];
+				}
+
+				fwrite(m, sizeof(MatchData), no_of_matches, file);
+				delete[] m;
+			} else {
+				struct MatchDataColour {
+					unsigned short int probability;
+					unsigned short int x;
+					unsigned short int y;
+					unsigned short int disparity;
+					unsigned char r, g, b;
+					unsigned char pack;
+				};
+
+				int n;
+				MatchDataColour *m = new MatchDataColour[no_of_matches];
+				for (int i = 0; i < no_of_matches; i++) {
+					m[i].probability = (unsigned short int)svs_matches[i * 5];
+					m[i].x = (unsigned short int)svs_matches[i * 5 + 1];
+					m[i].y = (unsigned short int)svs_matches[i * 5 + 2];
+					m[i].disparity = (unsigned short int)svs_matches[i * 5 + 3];
+					n = ((m[i].y * imgWidth) + m[i].x) * 3;
+					m[i].r = rectified_frame_buf[n + 2];
+					m[i].g = rectified_frame_buf[n + 1];
+					m[i].b = rectified_frame_buf[n];
+				}
+
+				fwrite(m, sizeof(MatchDataColour), no_of_matches, file);
+				delete[] m;
+			}
+
+			fclose(file);
+			logged = true;
+		}
+	}
+	return(logged);
+}
+
 
 /* experimental plane fitting */
 int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
@@ -1595,8 +1677,8 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 				if (index0 != index1) {
 					hits = 0;
 					deviation_sum = 0;
-					idx0 = index0 * 4;
-					idx1 = index1 * 4;
+					idx0 = index0 * 5;
+					idx1 = index1 * 5;
 					if (axis == 0) {
 						/* oriented along the x axis */
 						xx0 = svs_matches[idx0 + 1];
@@ -1633,8 +1715,8 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 					if (grad_y != 0) {
 						for (edge_sample = 0; edge_sample < no_of_matches; edge_sample
 								+= 2) {
-							edge_x = svs_matches[edge_sample * 4 + 1];
-							edge_y = svs_matches[edge_sample * 4 + 2];
+							edge_x = svs_matches[edge_sample * 5 + 1];
+							edge_y = svs_matches[edge_sample * 5 + 2];
 							deviation = 0;
 
 							if (horizontal == 1) {
@@ -1900,12 +1982,12 @@ void svs::segment(unsigned char* rectified_frame_buf, int no_of_matches) {
 				left_hits = 0;
 				right_hits = 0;
 				for (n2 = 0; n2 < no_of_matches; n2++) {
-					if (svs_matches[n2 * 4] > 0) {
-						x = svs_matches[n2 * 4 + 1];
+					if (svs_matches[n2 * 5] > 0) {
+						x = svs_matches[n2 * 5 + 1];
 						if ((x > tx) && (x < bx)) {
-							y = svs_matches[n2 * 4 + 2];
+							y = svs_matches[n2 * 5 + 2];
 							if ((y > ty) && (y < by)) {
-								disp = svs_matches[n2 * 4 + 3];
+								disp = svs_matches[n2 * 5 + 3];
 								if (y < cy) {
 									above += disp;
 									above_hits++;

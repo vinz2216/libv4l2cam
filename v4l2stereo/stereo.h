@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <fstream>
 #include "polynomial.h"
 #include "linefit.h"
 
@@ -104,6 +105,7 @@ public:
     unsigned char* valid_quadrants;
 
     /* array used to store a disparity histogram */
+    unsigned short int* disparity_histogram;
     int* disparity_histogram_plane;
     int* disparity_plane_fit;
 
@@ -143,7 +145,9 @@ public:
     void rectify(unsigned char* raw_image, unsigned char* rectified_frame_buf);
     void flip(unsigned char* raw_image, unsigned char* flipped_frame_buf);
 
+    bool FileExists(std::string filename);
     void save_matches(std::string filename, unsigned char* rectified_frame_buf, int no_of_matches, bool colour);
+    bool log_matches(std::string filename, unsigned char* rectified_frame_buf, int no_of_matches, bool colour);
 
     svs(int width, int height);
     ~svs();

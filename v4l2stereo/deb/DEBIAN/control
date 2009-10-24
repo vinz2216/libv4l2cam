@@ -3,7 +3,7 @@ Version: 1.041
 Section: utils
 Maintainer: Bob Mottram <fuzzgun@gmail.com>
 Architecture: all
-Depends: libgtk2.0-dev libavcodec-dev libavformat-dev libjpeg62-dev libtiff4-dev
+Depends: libgtk2.0-dev, libavcodec-dev, libavformat-dev, libjpeg62-dev, libtiff4-dev
 Recommends: 
 Suggests: 
 Essential: no
