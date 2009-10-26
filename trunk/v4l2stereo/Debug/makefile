@@ -43,7 +43,7 @@ all: v4l2stereo
 v4l2stereo: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	g++ -L/opt/opencv/lib /opt/opencv/lib/libcxcore.so /opt/opencv/lib/libcvaux.so /opt/opencv/lib/libcv.so /opt/opencv/lib/libhighgui.so -o"v4l2stereo" $(OBJS) $(USER_OBJS) $(LIBS)
+	g++ -L/usr/lib /usr/lib/libcxcore.so /usr/lib/libcvaux.so /usr/lib/libcv.so /usr/lib/libhighgui.so -o"v4l2stereo" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
