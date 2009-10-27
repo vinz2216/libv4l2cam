@@ -944,7 +944,7 @@ int main(int argc, char* argv[]) {
 			/* save stereo matches */
 			if ((stereo_matches_filename != "") &&
 			    ((skip_frames == 0) || (matches > 5))) {
-				lcam->save_matches(stereo_matches_filename, l_, matches, false);
+				lcam->save_matches(stereo_matches_filename, l_, matches, true);
 				printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
 			}
 
