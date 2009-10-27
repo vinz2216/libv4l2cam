@@ -1526,25 +1526,28 @@ bool colour) { /* whether to additionally save colour of each match */
 		if (!colour) {
 
 			struct MatchData {
-				float x;
-				float y;
-				float disparity;
+				unsigned short int probability;
+				unsigned short int x;
+				unsigned short int y;
+				unsigned short int disparity;
 			};
 
 			MatchData *m = new MatchData[no_of_matches];
 			for (int i = 0; i < no_of_matches; i++) {
-				m[i].x = svs_matches[i * 5 + 1];
-				m[i].y = svs_matches[i * 5 + 2];
-				m[i].disparity = svs_matches[i * 5 + 3];
+				m[i].probability = (unsigned short int)svs_matches[i * 5];
+				m[i].x = (unsigned short int)svs_matches[i * 5 + 1];
+				m[i].y = (unsigned short int)svs_matches[i * 5 + 2];
+				m[i].disparity = (unsigned short int)svs_matches[i * 5 + 3];
 			}
 
 			fwrite(m, sizeof(MatchData), no_of_matches, file);
 			delete[] m;
 		} else {
 			struct MatchDataColour {
-				float x;
-				float y;
-				float disparity;
+				unsigned short int probability;
+				unsigned short int x;
+				unsigned short int y;
+				unsigned short int disparity;
 				unsigned char r, g, b;
 				unsigned char pack;
 			};
@@ -1552,9 +1555,10 @@ bool colour) { /* whether to additionally save colour of each match */
 			int n;
 			MatchDataColour *m = new MatchDataColour[no_of_matches];
 			for (int i = 0; i < no_of_matches; i++) {
-				m[i].x = svs_matches[i * 5 + 1];
-				m[i].y = svs_matches[i * 5 + 2];
-				m[i].disparity = svs_matches[i * 5 + 3];
+				m[i].probability = (unsigned short int)svs_matches[i * 5];
+				m[i].x = (unsigned short int)svs_matches[i * 5 + 1];
+				m[i].y = (unsigned short int)svs_matches[i * 5 + 2];
+				m[i].disparity = (unsigned short int)svs_matches[i * 5 + 3];
 				n = ((m[i].y * imgWidth) + m[i].x) * 3;
 				m[i].r = rectified_frame_buf[n + 2];
 				m[i].g = rectified_frame_buf[n + 1];
