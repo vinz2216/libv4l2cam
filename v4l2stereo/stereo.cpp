@@ -79,6 +79,7 @@ svs::svs(int width, int height) {
 
 	/* buffer used to find peaks in edge space */
 	row_peaks = new unsigned int[SVS_MAX_IMAGE_WIDTH];
+	temp_row_peaks = new unsigned int[SVS_MAX_IMAGE_WIDTH];
 
 	/* low contrast areas of the image */
 	enable_segmentation = 0;
@@ -111,6 +112,7 @@ svs::~svs() {
 	delete[] mean;
 	delete[] row_sum;
 	delete[] row_peaks;
+	delete[] temp_row_peaks;
 	if (region_disparity != NULL)
 		delete[] region_disparity;
 	if (low_contrast != NULL)
@@ -202,6 +204,8 @@ int segment) { /* if non zero update low contrast areas used for segmentation */
 		av_peaks += p;
 	}
 	av_peaks /= (max - 8);
+
+	memcpy((void*)temp_row_peaks, (void*)row_peaks, max*sizeof(unsigned int));
 
 	/* create a map of low contrast areas, to be used for segmentation */
 	if (enable_segmentation) {
@@ -390,8 +394,17 @@ int segment) {
 							mean[no_of_features] |= ((unsigned char)(grad + 8) << 4);
 						}
 
-						feature_x[no_of_features++] = (short int) (x
-								+ calibration_offset_x);
+						feature_x[no_of_features] = (short int) (x + calibration_offset_x)*SVS_SUB_PIXEL;
+
+						/* parabolic sub-pixel interpolation */
+						int denom = 2 * ((int)temp_row_peaks[x-1] - (2*(int)temp_row_peaks[x]) + (int)temp_row_peaks[x+1]);
+						if (denom != 0) {
+						    int num = (int)temp_row_peaks[x-1] - (int)temp_row_peaks[x+1];
+						    feature_x[no_of_features] += (num*SVS_SUB_PIXEL)/denom;
+						}
+
+						no_of_features++;
+
 						no_of_feats++;
 						if (no_of_features == SVS_MAX_FEATURES) {
 							y = imgHeight;
@@ -574,7 +587,7 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 		for (L = 0; L < no_of_feats_left; L++) {
 
 			/* x coordinate of the feature in the left camera */
-			xL = feature_x[fL + L];
+			xL = feature_x[fL + L] / SVS_SUB_PIXEL;
 
 			if (use_priors != 0) {
 				disp_prior = disparity_priors[(row * imgWidth + xL) / 16];
@@ -610,7 +623,7 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 				row_peaks[R] = 0;
 
 				/* x coordinate of the feature in the right camera */
-				xR = other->feature_x[fR + R];
+				xR = other->feature_x[fR + R] / SVS_SUB_PIXEL;
 
 				/* compute disparity */
 				disp = xL - xR;
@@ -730,25 +743,25 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 					    (no_of_possible_matches < SVS_MAX_FEATURES)) {
 
 						/* x coordinate of the feature in the right camera */
-						xR = other->feature_x[fR + bestR];
+						xR = other->feature_x[fR + bestR] / SVS_SUB_PIXEL;
 
 						/* possible disparity */
 						disp = xL - xR;
 
-						if ((disp >= -10) &&
+						if ((disp >= min_disp) &&
 							(disp < max_disp_pixels)) {
 							if (disp < 0)
 								disp = 0;
 							/* add the best result to the list of possible matches */
 							svs_matches[no_of_possible_matches * 5] = best_prob;
 							svs_matches[no_of_possible_matches * 5 + 1]
-									= (unsigned int) xL;
+									= (unsigned int) feature_x[fL + L];
 							svs_matches[no_of_possible_matches * 5 + 2]
 									= (unsigned int) y;
 							svs_matches[no_of_possible_matches * 5 + 3]
-									= (unsigned int) disp;
+									= (unsigned int) (feature_x[fL + L] - other->feature_x[fR + bestR]);
 							if (p > 0) {
-								svs_matches[no_of_possible_matches * 5 + 1] += imgWidth;
+								svs_matches[no_of_possible_matches * 5 + 1] += imgWidth*SVS_SUB_PIXEL;
 							}
 							no_of_possible_matches++;
 							row_peaks[bestR] = 0;
@@ -815,13 +828,14 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 				svs_matches[curr_idx + 3] = disp;
 
 				/* update your priors */
-				if (svs_matches[winner_idx + 1] >= imgWidth) {
-					svs_matches[winner_idx + 1] -= imgWidth;
+				if (svs_matches[winner_idx + 1] >= imgWidth*SVS_SUB_PIXEL) {
+					svs_matches[winner_idx + 1] -= imgWidth*SVS_SUB_PIXEL;
 				}
 				else {
 					if ((matches < 200) &&
 						(best_prob > 1)) {
 
+						disp /= SVS_SUB_PIXEL;
 						row = y / SVS_VERTICAL_SAMPLING;
 						for (row_offset = -3; row_offset <= 3; row_offset++) {
 							for (col_offset = -1; col_offset <= 1; col_offset++) {
@@ -874,9 +888,9 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 							(matches < SVS_MAX_MATCHES)) {
 							curr_idx = matches * 5;
 							svs_matches[curr_idx] = 1000;
-							svs_matches[curr_idx + 1] = x;
+							svs_matches[curr_idx + 1] = x*SVS_SUB_PIXEL;
 							svs_matches[curr_idx + 2] = y;
-							svs_matches[curr_idx + 3] = disp_prior;
+							svs_matches[curr_idx + 3] = disp_prior*SVS_SUB_PIXEL;
 							matches++;
 
 							/* update your priors */
@@ -1086,11 +1100,11 @@ void svs::filter_plane(
         /* update the disparity histogram */
         n = 0;
         for (i = no_of_possible_matches-1; i >= 0; i--) {
-            x = svs_matches[i * 5 + 1];
+            x = svs_matches[i * 5 + 1]/SVS_SUB_PIXEL;
             if ((x > tx) && (x < bx)) {
                 y = svs_matches[i * 5 + 2];
                 if ((y > ty) && (y < by)) {
-                    disp = svs_matches[i * 5 + 3];
+                    disp = svs_matches[i * 5 + 3]/SVS_SUB_PIXEL;
                     if ((int) disp < max_disparity_pixels) {
                         if (horizontal != 0) {
                             n = (((x - tx) / SVS_FILTER_SAMPLING)
@@ -1186,11 +1200,11 @@ void svs::filter_plane(
         int hits = 0;
         for (i = no_of_possible_matches-1; i >= 0; i--) {
         	if (svs_matches[i * 5 + 4] == 9999) {
-            x = svs_matches[i * 5 + 1];
+            x = svs_matches[i * 5 + 1]/SVS_SUB_PIXEL;
             if ((x > tx) && (x < bx)) {
                 y = svs_matches[i * 5 + 2];
                 if ((y > ty) && (y < by)) {
-                    disp = svs_matches[i * 5 + 3];
+                    disp = svs_matches[i * 5 + 3]/SVS_SUB_PIXEL;
 
                     if (horizontal != 0) {
                         ww = (x - tx) / SVS_FILTER_SAMPLING;
@@ -1685,8 +1699,8 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 					idx1 = index1 * 5;
 					if (axis == 0) {
 						/* oriented along the x axis */
-						xx0 = svs_matches[idx0 + 1];
-						xx1 = svs_matches[idx1 + 1];
+						xx0 = svs_matches[idx0 + 1]/SVS_SUB_PIXEL;
+						xx1 = svs_matches[idx1 + 1]/SVS_SUB_PIXEL;
 					} else {
 						/* oriented along the y axis */
 						xx0 = svs_matches[idx0 + 2];
@@ -1719,7 +1733,7 @@ int svs::fit_plane(int no_of_matches, int max_deviation, int no_of_samples) {
 					if (grad_y != 0) {
 						for (edge_sample = 0; edge_sample < no_of_matches; edge_sample
 								+= 2) {
-							edge_x = svs_matches[edge_sample * 5 + 1];
+							edge_x = svs_matches[edge_sample * 5 + 1]/SVS_SUB_PIXEL;
 							edge_y = svs_matches[edge_sample * 5 + 2];
 							deviation = 0;
 
@@ -1987,11 +2001,11 @@ void svs::segment(unsigned char* rectified_frame_buf, int no_of_matches) {
 				right_hits = 0;
 				for (n2 = 0; n2 < no_of_matches; n2++) {
 					if (svs_matches[n2 * 5] > 0) {
-						x = svs_matches[n2 * 5 + 1];
+						x = svs_matches[n2 * 5 + 1]/SVS_SUB_PIXEL;
 						if ((x > tx) && (x < bx)) {
 							y = svs_matches[n2 * 5 + 2];
 							if ((y > ty) && (y < by)) {
-								disp = svs_matches[n2 * 5 + 3];
+								disp = svs_matches[n2 * 5 + 3]/SVS_SUB_PIXEL;
 								if (y < cy) {
 									above += disp;
 									above_hits++;

@@ -29,7 +29,7 @@
 //#include "motionmodel.h"
 #include "libcam.h"
 
-#define VERSION 1.041
+#define VERSION 1.042
 
 using namespace std;
 
@@ -783,8 +783,8 @@ int main(int argc, char* argv[]) {
 	    hist_max[2] = 0;
 
 		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*5 + 1];
-			int disp = lcam->svs_matches[i*5 + 3];
+			int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
+			int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
 			disparity_histogram[2][disp]++;
 			if (x < ww/2)
 				disparity_histogram[0][disp]++;
@@ -873,9 +873,9 @@ int main(int argc, char* argv[]) {
 		for (int i = 0; i < matches; i++) {
 			if ((lcam->svs_matches[i*5] > 0) &&
 			   (lcam->svs_matches[i*5+4] != 9999)) {
-			    int x = lcam->svs_matches[i*5 + 1];
+			    int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
 			    int y = lcam->svs_matches[i*5 + 2];
-			    int disp = lcam->svs_matches[i*5 + 3];
+			    int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
 		        drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
 			}
 		}
@@ -890,9 +890,9 @@ int main(int argc, char* argv[]) {
 		memset(l_, 0, ww*hh*3*sizeof(unsigned char));
 		if (matches == 0) matches = prev_matches;
 		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*5 + 1];
+			int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
 			int y = lcam->svs_matches[i*5 + 2];
-			int disp = lcam->svs_matches[i*5 + 3];
+			int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
 			int max_disparity_pixels = max_disparity_percent * ww / 100;
 			int disp_intensity = 50 + (disp * 300 / max_disparity_pixels);
 			if (disp_intensity > 255) disp_intensity = 255;
