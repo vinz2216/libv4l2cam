@@ -39,6 +39,7 @@
 #define SVS_MAX_LINES            200
 #define SVS_PEAKS_HISTORY        10
 #define SVS_FILTER_SAMPLING      40
+#define SVS_SUB_PIXEL            32
 
 #define SVS_MAX_REGIONS          200
 #define SVS_REGION_HISTORY       100
@@ -97,6 +98,7 @@ public:
 
     /* buffer used to find peaks in edge space */
     unsigned int* row_peaks;
+    unsigned int* temp_row_peaks;
 
     /* array stores matching probabilities (prob,x,y,disp) */
     unsigned int* svs_matches;
