@@ -876,7 +876,7 @@ int main(int argc, char* argv[]) {
 			    int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
 			    int y = lcam->svs_matches[i*5 + 2];
 			    int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
-	            drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
+	            if (disp < ww/2) drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
 			}
 		}
 	}
