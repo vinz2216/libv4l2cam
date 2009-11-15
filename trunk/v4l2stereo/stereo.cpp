@@ -514,7 +514,7 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 	int no_of_possible_matches = 0, matches = 0;
 	int itt, prev_matches, row_offset, col_offset;
 	int grad_diff0, gradL0, grad_diff1, gradL1, grad_anti;
-	int p, pmax=1;
+	int p, pmax=1, prev_right_x, right_x;
 
 	unsigned int meandescL, meandescR;
 	short meandesc[SVS_DESCRIPTOR_PIXELS];
@@ -582,6 +582,8 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 			if (meandesc[bit] > 0)
 				meandescR |= n;
 		}
+
+		int prev_matches = no_of_possible_matches;
 
 		/* features along the row in the left camera */
 		for (L = 0; L < no_of_feats_left; L++) {
@@ -750,8 +752,8 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 
 						if ((disp >= min_disp) &&
 							(disp < max_disp_pixels)) {
-							if (disp < 0)
-								disp = 0;
+							if (disp < 0) disp = 0;
+
 							/* add the best result to the list of possible matches */
 							svs_matches[no_of_possible_matches * 5] = best_prob;
 							svs_matches[no_of_possible_matches * 5 + 1]
@@ -764,10 +766,30 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 								svs_matches[no_of_possible_matches * 5 + 1] += imgWidth*SVS_SUB_PIXEL;
 							}
 							no_of_possible_matches++;
+
 							row_peaks[bestR] = 0;
-						}
+					    }
 					}
 				}
+			}
+		}
+
+		/* apply ordering constraint within the right image */
+		prev_right_x = 0;
+		for (int m = no_of_possible_matches-1; m >= prev_matches; m--) {
+			right_x = (int)svs_matches[m*5 + 1] + (int)svs_matches[m*5 + 3];
+			if (right_x < prev_right_x) {
+			    /* set probability to zero if rays cross */
+				if (svs_matches[(m+1) * 5] >= svs_matches[m * 5]) {
+				    svs_matches[m * 5] = 0;
+				}
+				else {
+					svs_matches[(m+1) * 5] = 0;
+					prev_right_x = right_x;
+				}
+			}
+			else {
+			    prev_right_x = right_x;
 			}
 		}
 
@@ -776,7 +798,6 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 		fR += no_of_feats_right;
 	}
 
-	// clear priors
 	int priors_length = imgWidth * imgHeight / (16*SVS_VERTICAL_SAMPLING);
 
 	if (no_of_possible_matches > 20) {
@@ -880,13 +901,13 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 						y = feature_y[fL + L];
 
 						/* lookup disparity from priors */
-
 						row = y / SVS_VERTICAL_SAMPLING;
 						disp_prior = disparity_priors[(row * imgWidth + x) / 16];
 
 						if ((disp_prior > 0) &&
 							(matches < SVS_MAX_MATCHES)) {
 							curr_idx = matches * 5;
+
 							svs_matches[curr_idx] = 1000;
 							svs_matches[curr_idx + 1] = x*SVS_SUB_PIXEL;
 							svs_matches[curr_idx + 2] = y;
@@ -894,7 +915,6 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 							matches++;
 
 							/* update your priors */
-
 							for (row_offset = -3; row_offset <= 3; row_offset++) {
 								for (col_offset = -1; col_offset <= 1; col_offset++) {
 									idx = (((row + row_offset) * imgWidth + x)
