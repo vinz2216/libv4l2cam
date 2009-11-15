@@ -160,10 +160,13 @@ int segment) { /* if non zero update low contrast areas used for segmentation */
 		y = i;
 		idx = imgWidth * y * 3 + 2;
 		max = (int) imgWidth;
+		int w = max*3*2;
 
 		row_sum[0] = rectified_frame_buf[idx];
 		for (x = 1; x < max; x++, idx += 3) {
-			sum += rectified_frame_buf[idx];
+			sum += rectified_frame_buf[idx] +
+			       rectified_frame_buf[idx - w] +
+			       rectified_frame_buf[idx + w];
 			row_sum[x] = sum;
 		}
 	} else {
@@ -184,22 +187,27 @@ int segment) { /* if non zero update low contrast areas used for segmentation */
 	mean = row_sum[max - 1] / (max * 2);
 
 	/* compute peaks */
-	int p0, p1, p;
+	int p0, p1, p2, p;
 	av_peaks = 0;
-	for (j = 4; j < max - 4; j++) {
+	for (j = 6; j < max - 6; j++) {
 		sum = row_sum[j];
 		/* edge using 1 pixel radius */
 		p0 = (sum - row_sum[j - 1]) - (row_sum[j + 1] - sum);
 		if (p0 < 0)
 			p0 = -p0;
 
-		/* edge using 2 pixel radius */
-		p1 = (sum - row_sum[j - 2]) - (row_sum[j + 2] - sum);
+		/* edge using 3 pixel radius */
+		p1 = (sum - row_sum[j - 3]) - (row_sum[j + 3] - sum);
 		if (p1 < 0)
 			p1 = -p1;
 
+		/* edge using 5 pixel radius */
+		p2 = (sum - row_sum[j - 5]) - (row_sum[j + 5] - sum);
+		if (p2 < 0)
+			p2 = -p2;
+
 		/* overall edge response */
-		p = (p0 + p1) * 32;
+		p = p0*8 + p1*2 + p2;
 		row_peaks[j] = p;
 		av_peaks += p;
 	}
@@ -779,7 +787,7 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 		for (int m = no_of_possible_matches-1; m >= prev_matches; m--) {
 			right_x = (int)svs_matches[m*5 + 1] + (int)svs_matches[m*5 + 3];
 			if (right_x < prev_right_x) {
-			    /* set probability to zero if rays cross */
+			    /* set probability to zero if rays cross (occlusion) */
 				if (svs_matches[(m+1) * 5] >= svs_matches[m * 5]) {
 				    svs_matches[m * 5] = 0;
 				}
