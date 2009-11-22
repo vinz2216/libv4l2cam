@@ -6,6 +6,7 @@
 CPP_SRCS += \
 ../anyoption.cpp \
 ../drawing.cpp \
+../fast.cpp \
 ../libcam.cpp \
 ../linefit.cpp \
 ../main.cpp \
@@ -16,6 +17,7 @@ CPP_SRCS += \
 OBJS += \
 ./anyoption.o \
 ./drawing.o \
+./fast.o \
 ./libcam.o \
 ./linefit.o \
 ./main.o \
@@ -26,6 +28,7 @@ OBJS += \
 CPP_DEPS += \
 ./anyoption.d \
 ./drawing.d \
+./fast.d \
 ./libcam.d \
 ./linefit.d \
 ./main.d \
