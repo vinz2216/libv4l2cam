@@ -26,7 +26,8 @@
 #include "anyoption.h"
 #include "drawing.h"
 #include "stereo.h"
-//#include "motionmodel.h"
+#include "motionmodel.h"
+#include "fast.h"
 #include "libcam.h"
 
 #define VERSION 1.042
@@ -47,6 +48,7 @@ int main(int argc, char* argv[]) {
   bool show_histogram = false;
   bool show_lines = false;
   bool rectify_images = false;
+  bool show_FAST = false;
   int use_priors = 1;
   //int FOV_degrees = 50;
 
@@ -91,6 +93,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --rot1                 Calibration rotation of the right camera in radians");
   opt->addUsage( "     --scale0               Calibration scale of the left camera");
   opt->addUsage( "     --scale1               Calibration scale of the right camera");
+  opt->addUsage( "     --fast                 Show FAST corners");
   opt->addUsage( " -f  --fps                  Frames per second");
   opt->addUsage( " -s  --skip                 Skip this number of frames");
   opt->addUsage( " -o  --output               Saves stereo matches to the given output file");
@@ -113,6 +116,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "coeff10" );
   opt->setOption(  "coeff11" );
   opt->setOption(  "coeff12" );
+  opt->setOption(  "fast" );
   opt->setOption(  "rot0" );
   opt->setOption(  "rot1" );
   opt->setOption(  "save" );
@@ -193,6 +197,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = false;
+	  show_FAST = false;
   }
 
   if( opt->getFlag( "histogram" ) ) {
@@ -203,6 +208,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = true;
 	  show_lines = false;
+	  show_FAST = false;
   }
 
   if( opt->getFlag( "matches" ) ) {
@@ -213,6 +219,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = false;
+	  show_FAST = false;
   }
 
   if( opt->getFlag( "regions" ) ) {
@@ -223,6 +230,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = false;
+	  show_FAST = false;
   }
 
   if( opt->getFlag( "depth" ) ) {
@@ -233,6 +241,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = false;
+	  show_FAST = false;
   }
 
   if( opt->getFlag( "lines" ) ) {
@@ -243,6 +252,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = true;
+	  show_FAST = false;
   }
 
   if( opt->getFlag( "anaglyph" ) ) {
@@ -253,6 +263,7 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = true;
 	  show_histogram = false;
 	  show_lines = false;
+	  show_FAST = false;
   }
 
   bool calibrate_offsets = false;
@@ -265,6 +276,21 @@ int main(int argc, char* argv[]) {
 	  show_anaglyph = false;
 	  show_histogram = false;
 	  show_lines = false;
+	  show_FAST = false;
+  }
+
+  int desired_corner_features = 50;
+  if( opt->getValue( "fast" ) != NULL  ) {
+	  show_regions = false;
+	  calibrate_offsets = false;
+	  show_features = false;
+	  show_matches = false;
+	  show_depthmap = false;
+	  show_anaglyph = false;
+	  show_histogram = false;
+	  show_lines = false;
+	  show_FAST = true;
+	  desired_corner_features = atoi(opt->getValue("fast"));
   }
 
   int enable_ground_priors = 0;
@@ -457,7 +483,7 @@ int main(int argc, char* argv[]) {
 
   /* feature detection params */
   int inhibition_radius = 6;
-  unsigned int minimum_response = 300;
+  unsigned int minimum_response = 250;
 
   /* matching params */
   int ideal_no_of_matches = 400;
@@ -467,13 +493,13 @@ int main(int argc, char* argv[]) {
   int learnDesc = 18*5;  /* weight associated with feature descriptor match */
   int learnLuma = 7*5;   /* weight associated with luminance match */
   int learnDisp = 1;   /* weight associated with disparity (bias towards smaller disparities) */
-  int learnPrior = 4;  /* weight associated with prior disparity */
-  int learnGrad = 10;  /* weight associated with horizontal gradient */
+  int learnGrad = 4;  /* weight associated with horizontal gradient */
   int groundPrior = 200; /* weight for ground plane prior */
 
   svs* lcam = new svs(ww, hh);
   svs* rcam = new svs(ww, hh);
-  //motionmodel* motion = new motionmodel();
+  motionmodel* motion = new motionmodel();
+  fast* corners = new fast();
 
   unsigned char* rectification_buffer = NULL;
   unsigned char* depthmap_buffer = NULL;
@@ -667,13 +693,9 @@ int main(int argc, char* argv[]) {
 		learnDesc,
 		learnLuma,
 		learnDisp,
-		learnPrior,
 		learnGrad,
 		groundPrior,
 		use_priors);
-
-	/* experimental plane fitting */
-	//lcam->fit_plane(matches, 10, matches);
 
 	if (show_regions) {
 		lcam->enable_segmentation = 1;
@@ -970,6 +992,51 @@ int main(int argc, char* argv[]) {
 		break;
 	}
 
+	// test
+	/*
+	int step1 = 5;
+	int max_idx=ww-2;
+	for (int y = hh/2; y >= hh/4; y-=step1, max_idx/=2) {
+		int idx = 0;
+		for (int x = 0; x < max_idx; x++, idx++) {
+			int n = ((y*ww) + x)*3;
+
+			for (int cam = 0; cam < 2; cam++) {
+				unsigned char* im = l_;
+				if (cam == 1) im = r_;
+				int diff = ((int)im[n]+(int)im[n+1]) -
+				           ((int)im[n+4]+(int)im[n+5]);
+				//printf("%d %d %d\n", diff, l_[n], l_[n+3]);
+				for (int j = 0; j < step1; j++) {
+					n = (((y-step1-j)*ww) + idx)*3;
+					if (diff > 0) {
+						im[n] = 255;
+						im[n+1] = 255;
+						im[n+2] = 255;
+						//printf("high\n");
+					}
+					else {
+						im[n] = 0;
+						im[n+1] = 0;
+						im[n+2] = 0;
+					}
+				}
+			}
+		}
+		if (max_idx < 2) break;
+	}
+	*/
+
+	//motion->update(l_,ww,hh);
+	//motion->show(l_,ww,hh);
+
+	if (show_FAST) {
+		corners->update(l_,ww,hh, desired_corner_features,0);
+		corners->show(l_,ww,hh);
+		corners->update(r_,ww,hh, desired_corner_features,1);
+		corners->show(r_,ww,hh);
+	}
+
 	/* display the left and right images */
 	if ((!save_images) &&
 		(!calibrate_offsets) &&
@@ -983,7 +1050,8 @@ int main(int argc, char* argv[]) {
     skip_frames--;
     if (skip_frames < 0) skip_frames = 0;
 
-    if( (cvWaitKey(10) & 255) == 27 ) break;
+    int wait = cvWaitKey(10) & 255;
+    if( wait == 27 ) break;
   }
 
   /* destroy the left and right images */
@@ -1001,7 +1069,8 @@ int main(int argc, char* argv[]) {
 
   delete lcam;
   delete rcam;
-  //delete motion;
+  delete motion;
+  delete corners;
   delete lines;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
   if (depthmap_buffer != NULL) delete[] depthmap_buffer;

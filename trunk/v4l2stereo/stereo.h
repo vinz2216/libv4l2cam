@@ -118,10 +118,6 @@ public:
     /* maps raw image pixels to rectified pixels */
     int* calibration_map;
 
-    /* priors used when processing a video stream */
-    int* disparity_priors;
-    //int* disparity_priors_temp;
-
     unsigned int av_peaks;
 
     /* non zero if ground plane is to be used */
@@ -137,7 +133,7 @@ public:
     int get_features_horizontal(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y, int segment);
     int get_features_vertical(unsigned char* rectified_frame_buf, int inhibition_radius, unsigned int minimum_response, int calibration_offset_x, int calibration_offset_y, int segment);
     void filter_plane(int no_of_possible_matches, int max_disparity_pixels);
-    int match(svs* other, int ideal_no_of_matches, int max_disparity_percent, int learnDesc, int learnLuma, int learnDisp, int learnPrior, int learnGrad, int groundPrior, int use_priors);
+    int match(svs* other, int ideal_no_of_matches, int max_disparity_percent, int learnDesc, int learnLuma, int learnDisp, int learnGrad, int groundPrior, int use_priors);
     int fit_plane(int no_of_matches, int max_deviation, int no_of_samples);
     void segment(unsigned char* rectified_frame_buf, int no_of_matches);
 
