@@ -26,7 +26,7 @@
 #include "anyoption.h"
 #include "drawing.h"
 #include "stereo.h"
-#include "motionmodel.h"
+//#include "motionmodel.h"
 #include "fast.h"
 #include "libcam.h"
 
@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
   bool rectify_images = false;
   bool show_FAST = false;
   int use_priors = 1;
+  int matches;
   //int FOV_degrees = 50;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
@@ -498,8 +499,9 @@ int main(int argc, char* argv[]) {
 
   svs* lcam = new svs(ww, hh);
   svs* rcam = new svs(ww, hh);
-  motionmodel* motion = new motionmodel();
-  fast* corners = new fast();
+  //motionmodel* motion = new motionmodel();
+  fast* corners_left = new fast();
+  fast* corners_right = new fast();
 
   unsigned char* rectification_buffer = NULL;
   unsigned char* depthmap_buffer = NULL;
@@ -540,6 +542,8 @@ int main(int argc, char* argv[]) {
         rcam->rectify(r_, rectification_buffer);
         memcpy(r_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
     }
+
+    if (!show_FAST) {
 
     int calib_offset_x = calibration_offset_x;
     int calib_offset_y = calibration_offset_y;
@@ -686,7 +690,7 @@ int main(int argc, char* argv[]) {
 	lcam->enable_ground_priors = enable_ground_priors;
 	lcam->ground_y_percent = ground_y_percent;
 
-	int matches = lcam->match(
+	matches = lcam->match(
 		rcam,
 		ideal_no_of_matches,
 		max_disparity_percent,
@@ -696,6 +700,7 @@ int main(int argc, char* argv[]) {
 		learnGrad,
 		groundPrior,
 		use_priors);
+    }
 
 	if (show_regions) {
 		lcam->enable_segmentation = 1;
@@ -1031,10 +1036,16 @@ int main(int argc, char* argv[]) {
 	//motion->show(l_,ww,hh);
 
 	if (show_FAST) {
-		corners->update(l_,ww,hh, desired_corner_features,0);
-		corners->show(l_,ww,hh);
-		corners->update(r_,ww,hh, desired_corner_features,1);
-		corners->show(r_,ww,hh);
+		corners_left->update(l_,ww,hh, desired_corner_features);
+		corners_left->show(l_,ww,hh);
+		corners_right->update(r_,ww,hh, desired_corner_features);
+		corners_right->show(r_,ww,hh);
+
+		corners_left->match_interocular(
+			ww, hh,
+			corners_right->get_no_of_corners(),
+			corners_right->get_corners(),
+			ww/10);
 	}
 
 	/* display the left and right images */
@@ -1069,8 +1080,9 @@ int main(int argc, char* argv[]) {
 
   delete lcam;
   delete rcam;
-  delete motion;
-  delete corners;
+  //delete motion;
+  delete corners_left;
+  delete corners_right;
   delete lines;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
   if (depthmap_buffer != NULL) delete[] depthmap_buffer;
