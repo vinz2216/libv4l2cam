@@ -30,8 +30,12 @@
 #define FAST_MAX_CORNERS 8192
 #define FAST_MAX_CORNERS_PREVIOUS 200
 #define FAST_MAX_IMAGE_HEIGHT 1024
+#define FAST_MIN_CORNERS 50
 #define FAST_IMAGE_SCALES 3
+#define FAST_DESCRIPTOR_PIXELS 30
+#define FAST_SUBPIXEL 32
 #define Compare(X, Y) ((X)>=(Y))
+#define fastpixindex(xx, yy)  ((yy * img_width + xx) * 3)
 
 typedef struct { int x, y; } xy;
 
@@ -43,27 +47,34 @@ private:
 	void detect_nonmax(unsigned char* im, int xsize, int ysize, int stride, int b, int* ret_num_corners);
 	void nonmax_suppression(xy* corners, int* scores, int num_corners);
 	void make_offsets(int* pixel, int row_stride);
-	void data_association(unsigned char* img_mono, int img_width, int img_height, int current_no_of_corners, xy* current_corners, int prev_no_of_corners, xy* prev_corners, unsigned char* matches, int max_disparity, int temporal);
+	void match_temporal(unsigned char* img_mono, int img_width, int img_height, int current_no_of_corners, xy* current_corners, int prev_no_of_corners, xy* prev_corners, unsigned char* matches, int max_disparity);
 
 	int previous_no_of_corners;
 	xy* previous_corners;
 	xy* corners;
-	xy* nonmax;
 	int* scores;
-	int num_nonmax;
 	int* row_start;
 	unsigned char* img_mono;
 	unsigned char* prev_img_mono;
 	int threshold;
 	unsigned char* temporal_matches;
-	unsigned char* interocular_matches;
+	unsigned short* interocular_disparity;
+	unsigned short* previous_interocular_disparity;
+	int temporal_offset_x;
+	int temporal_offset_y;
+	int track_ctr;
+
+	xy* nonmax;
+	int num_nonmax;
 
 public:
-	void show(unsigned char *outbuf, int img_width, int img_height);
-	int update(unsigned char* img, int img_width, int img_height, int desired_features);
-	void save(std::string filename);
-	void match_interocular(int img_width, int img_height, int no_of_corners_right, int* corners_right, int max_disparity);
+	void show(unsigned char *outbuf, int img_width, int img_height, int show_tracking);
+	int update(unsigned char* img, int img_width, int img_height, int desired_features, int use_tracking);
+	void save_matches(std::string filename, unsigned char* img, int img_width, bool colour);
+	void match_interocular(	int img_width, int img_height, int no_of_stereo_matches, unsigned int* stereo_matches);
+
 	int get_no_of_corners();
+	int get_no_of_disparities();
 	int* get_corners();
 
 	fast();

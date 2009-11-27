@@ -459,6 +459,7 @@ int main(int argc, char* argv[]) {
 	  left_image_title = "Left image regions";
 	  right_image_title = "Right image regions";
   }
+  if (show_FAST) left_image_title = "FAST corners";
   if (show_matches) left_image_title = "Stereo matches";
   if (show_depthmap) left_image_title = "Depth map";
   if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
@@ -471,7 +472,7 @@ int main(int argc, char* argv[]) {
 	  (stereo_matches_filename == "")) {
 
       cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-      if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) {
+      if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
           cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
       }
   }
@@ -501,7 +502,6 @@ int main(int argc, char* argv[]) {
   svs* rcam = new svs(ww, hh);
   //motionmodel* motion = new motionmodel();
   fast* corners_left = new fast();
-  fast* corners_right = new fast();
 
   unsigned char* rectification_buffer = NULL;
   unsigned char* depthmap_buffer = NULL;
@@ -542,8 +542,6 @@ int main(int argc, char* argv[]) {
         rcam->rectify(r_, rectification_buffer);
         memcpy(r_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
     }
-
-    if (!show_FAST) {
 
     int calib_offset_x = calibration_offset_x;
     int calib_offset_y = calibration_offset_y;
@@ -700,7 +698,7 @@ int main(int argc, char* argv[]) {
 		learnGrad,
 		groundPrior,
 		use_priors);
-    }
+
 
 	if (show_regions) {
 		lcam->enable_segmentation = 1;
@@ -990,7 +988,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	/* save stereo matches to a file, then quit */
-	if ((stereo_matches_filename != "") && (!save_images) &&
+	if ((stereo_matches_filename != "") && (!save_images) && (!show_FAST) &&
 	    ((skip_frames == 0) || (matches > 5))) {
 		lcam->save_matches(stereo_matches_filename, l_, matches, false);
 		printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
@@ -1036,16 +1034,20 @@ int main(int argc, char* argv[]) {
 	//motion->show(l_,ww,hh);
 
 	if (show_FAST) {
-		corners_left->update(l_,ww,hh, desired_corner_features);
-		corners_left->show(l_,ww,hh);
-		corners_right->update(r_,ww,hh, desired_corner_features);
-		corners_right->show(r_,ww,hh);
+		corners_left->update(l_,ww,hh, desired_corner_features,1);
 
 		corners_left->match_interocular(
 			ww, hh,
-			corners_right->get_no_of_corners(),
-			corners_right->get_corners(),
-			ww/10);
+			matches, lcam->svs_matches);
+
+		/* save stereo matches to a file, then quit */
+		if ((stereo_matches_filename != "") && (!save_images) &&
+		    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 5))) {
+			corners_left->save_matches(stereo_matches_filename, l_, ww, false);
+			break;
+		}
+
+		corners_left->show(l_,ww,hh,1);
 	}
 
 	/* display the left and right images */
@@ -1082,7 +1084,6 @@ int main(int argc, char* argv[]) {
   delete rcam;
   //delete motion;
   delete corners_left;
-  delete corners_right;
   delete lines;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
   if (depthmap_buffer != NULL) delete[] depthmap_buffer;
