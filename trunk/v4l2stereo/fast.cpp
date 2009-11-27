@@ -3,13 +3,14 @@
 fast::fast() {
     scores = new int[FAST_MAX_CORNERS];
     corners = new xy[FAST_MAX_CORNERS];
-    nonmax = new xy[FAST_MAX_CORNERS];
+    nonmax = new xy[FAST_MAX_CORNERS_PREVIOUS];
     row_start = new int[FAST_MAX_IMAGE_HEIGHT];
     img_mono = NULL;
     prev_img_mono = NULL;
     previous_corners = new xy[FAST_MAX_CORNERS_PREVIOUS];
     temporal_matches = new unsigned char[FAST_MAX_CORNERS_PREVIOUS];
-    interocular_matches = NULL;
+    interocular_disparity = NULL;
+    previous_interocular_disparity = NULL;
     previous_no_of_corners = 0;
     threshold = 100;
     num_nonmax = 0;
@@ -22,8 +23,11 @@ fast::~fast() {
     delete[] row_start;
     delete[] previous_corners;
     delete[] temporal_matches;
-    if (interocular_matches != NULL) {
-        delete[] interocular_matches;
+    if (interocular_disparity != NULL) {
+        delete[] interocular_disparity;
+    }
+    if (previous_interocular_disparity != NULL) {
+    	delete[] previous_interocular_disparity;
     }
     if (img_mono != NULL) {
     	delete[] img_mono;
@@ -6031,7 +6035,9 @@ void fast::nonmax_suppression(
     		if ((corners[i].x < 0) || (corners[i].x > 320)) {
     			printf("corner out of range %d\n", corners[i].x);
     		}
-    		nonmax[num_nonmax++] = corners[i];
+    		if (num_nonmax < FAST_MAX_CORNERS_PREVIOUS) {
+    		    nonmax[num_nonmax++] = corners[i];
+    		}
     		cont:
     			;
     	}
@@ -6059,7 +6065,8 @@ int fast::update(
 	unsigned char* img,
 	int img_width,
 	int img_height,
-	int desired_features)
+	int desired_features,
+	int use_tracking)
 {
 	int i,n;
 
@@ -6069,9 +6076,12 @@ int fast::update(
 	}
 
 	/* remember previous corner positions so that we can track them */
-	if (num_nonmax > FAST_MAX_CORNERS_PREVIOUS) num_nonmax = FAST_MAX_CORNERS_PREVIOUS;
-	if (num_nonmax > 0) memcpy(previous_corners, nonmax, num_nonmax*sizeof(xy));
-	previous_no_of_corners = num_nonmax;
+    if (num_nonmax > FAST_MAX_CORNERS_PREVIOUS) num_nonmax = FAST_MAX_CORNERS_PREVIOUS;
+	if (num_nonmax > FAST_MIN_CORNERS) {
+	    memcpy(previous_corners, nonmax, num_nonmax*sizeof(xy));
+	    if (previous_interocular_disparity != NULL) memcpy(previous_interocular_disparity, interocular_disparity, num_nonmax*sizeof(unsigned short));
+	    previous_no_of_corners = num_nonmax;
+	}
 
 	n = img_width*img_height-1;
 	for (i = img_width*img_height*3-1; i >= 2; i -= 3, n--) {
@@ -6085,6 +6095,10 @@ int fast::update(
 		threshold -= 5;
 		if (threshold < 2) threshold=2;
 		detect_nonmax(img_mono, img_width, img_height, img_width, threshold, &ret_num_corners);
+		if (ret_num_corners < desired_features-10) {
+			threshold -= 5;
+			if (threshold < 2) threshold=2;
+		}
 	}
 	if (ret_num_corners > desired_features+10) {
 		threshold += 5;
@@ -6094,7 +6108,8 @@ int fast::update(
 	if (num_nonmax > FAST_MAX_CORNERS_PREVIOUS) num_nonmax = FAST_MAX_CORNERS_PREVIOUS;
 
 	/* track corners from one frame to the next */
-	data_association(img_mono, img_width, img_height, num_nonmax, nonmax, previous_no_of_corners, previous_corners, temporal_matches, 16, 1);
+    if ((use_tracking != 0) && (num_nonmax > FAST_MIN_CORNERS))
+    	match_temporal(img_mono, img_width, img_height, num_nonmax, nonmax, previous_no_of_corners, previous_corners, temporal_matches, 16);
 
     return (ret_num_corners);
 }
@@ -6103,14 +6118,17 @@ int fast::update(
 void fast::show(
     unsigned char *outbuf,
     int img_width,
-    int img_height)
+    int img_height,
+    int show_tracking)
 {
-    int f,x,y,x2,y2,n,dx,dy,xx,yy,idx;
+    int f,x,y,x2,y2,n,dx,dy,xx,yy,idx,disp;
 
     for (f = 0; f < num_nonmax; f++) {
     	idx = (int)temporal_matches[f] - 1;
-    	if ((idx > -1) &&
-    		(idx < previous_no_of_corners)) {
+    	if ((show_tracking == 0) ||
+    		(num_nonmax < FAST_MIN_CORNERS) ||
+    		((idx > -1) &&
+    		(idx < previous_no_of_corners))) {
 			x = nonmax[f].x;
 			y = nonmax[f].y;
 
@@ -6152,52 +6170,55 @@ void fast::show(
 			outbuf[n++] = 72;
 			outbuf[n] = 255;
 
-			if (interocular_matches != NULL) {
-				x2 = (int)interocular_matches[f] - 1;
-				if (x2 > -1) {
-					x2 = x-x2;
-					for (xx = x; xx >= x2; xx--) {
-						if (xx > 0) {
-							n = (y*img_width+xx)*3;
-							outbuf[n++] = 0;
-							outbuf[n++] = 255;
-							outbuf[n] = 0;
-						}
-						else {
-							break;
+			if ((show_tracking != 0) &&
+			    (num_nonmax > FAST_MIN_CORNERS)) {
+				if (interocular_disparity != NULL) {
+					disp = (int)interocular_disparity[f] - 1;
+					if (disp > -1) {
+						disp = disp / FAST_SUBPIXEL;
+						for (xx = x; xx >= x-disp; xx--) {
+							if (xx > 0) {
+								n = ((y-1)*img_width+xx)*3;
+								outbuf[n++] = 0;
+								outbuf[n++] = 255;
+								outbuf[n] = 0;
+							}
+							else {
+								break;
+							}
 						}
 					}
 				}
-			}
 
-			x2 = previous_corners[idx].x;
-			y2 = previous_corners[idx].y;
-			dx = x2 - x;
-			dy = y2 - y;
-			if (abs(dx) > abs(dy)) {
-				xx = x;
-				while (xx != x2) {
-					xx += dx/abs(dx);
-					yy = y + ((xx-x)*dy/dx);
-					if ((yy > 0) && (yy < img_height)) {
-						n = (yy*img_width+xx)*3;
-						outbuf[n++] = 84;
-						outbuf[n++] = 72;
-						outbuf[n] = 255;
-					}
-				}
-			}
-			else {
-				if (dy != 0) {
-					yy = y;
-					while (yy != y2) {
-						yy += dy/abs(dy);
-						xx = x + ((yy-y)*dx/dy);
-						if ((xx > 0) && (xx < img_width)) {
+				x2 = previous_corners[idx].x;
+				y2 = previous_corners[idx].y;
+				dx = x2 - x;
+				dy = y2 - y;
+				if (abs(dx) > abs(dy)) {
+					xx = x;
+					while (xx != x2) {
+						xx += dx/abs(dx);
+						yy = y + ((xx-x)*dy/dx);
+						if ((yy > 0) && (yy < img_height)) {
 							n = (yy*img_width+xx)*3;
 							outbuf[n++] = 84;
 							outbuf[n++] = 72;
 							outbuf[n] = 255;
+						}
+					}
+				}
+				else {
+					if (dy != 0) {
+						yy = y;
+						while (yy != y2) {
+							yy += dy/abs(dy);
+							xx = x + ((yy-y)*dx/dy);
+							if ((xx > 0) && (xx < img_width)) {
+								n = (yy*img_width+xx)*3;
+								outbuf[n++] = 84;
+								outbuf[n++] = 72;
+								outbuf[n] = 255;
+							}
 						}
 					}
 				}
@@ -6207,7 +6228,7 @@ void fast::show(
 }
 
 
-void fast::data_association(
+void fast::match_temporal(
     unsigned char* img_mono,
     int img_width,
     int img_height,
@@ -6216,23 +6237,24 @@ void fast::data_association(
     int prev_no_of_corners,
     xy* prev_corners,
     unsigned char* matches,
-    int max_disparity,
-    int temporal)
+    int max_disparity)
 {
     /* First we make an estimate of the overall movement of all features.
        This enables us to handle sudden jumps caused by dropped frames,
        delays or sudden changes in pose */
 
 	unsigned char idx;
-	int offset_x,offset_y,i,j,n,hits,x,y,dist,min_dist,xx;
-	int best_offset_x=0,best_offset_y=0;
+	int offset_x,offset_y,gradient,i,j,n;
+	int hits,hits_left,hits_right,x,y;
+	int best_offset_x=0,best_offset_y=0,best_gradient=0;
+	int best_offset_x_left=0,best_offset_y_left=0,best_gradient_left=0;
+	int best_offset_x_right=0,best_offset_y_right=0,best_gradient_right=0;
 	int max_offset_x = img_width/4;
 	int max_offset_y = img_height/4;
-	int max_hits=0;
-	int hits_threshold = current_no_of_corners * 90/100;
+	int max_hits=0,max_hits_left=0,max_hits_right=0;
+	int hits_threshold = current_no_of_corners * 95/100;
 	const int radius = 1;
-
-	if (temporal == 0) max_offset_y = img_height/8;
+	const int gradient_divisor = 100;
 
 	memset((void*)prev_img_mono, '\0', img_width*img_height);
 	memset((void*)matches, '\0', FAST_MAX_CORNERS_PREVIOUS);
@@ -6251,86 +6273,227 @@ void fast::data_association(
 		}
 	}
 
-	for (offset_y = -max_offset_y; offset_y < max_offset_y; offset_y++) {
-		for (offset_x = -max_offset_x; offset_x < max_offset_x; offset_x++) {
-			hits = 0;
+	int half_width = img_width/2;
 
-			for (i = current_no_of_corners-1; i >= 0; i--) {
-				x = current_corners[i].x - offset_x;
-				y = current_corners[i].y - offset_y;
-				if ((x > 0) && (x < img_width) &&
-					(y > 0) && (y < img_height)) {
-					n = y * img_width + x;
-					if (prev_img_mono[n] != 0) {
-						hits++;
+    for (gradient = -5; gradient < 5; gradient++) {
+		offset_y = -max_offset_y;
+		while (offset_y < max_offset_y) {
+			offset_x = -max_offset_x;
+			while (offset_x < max_offset_x) {
+				hits = 0;
+				hits_left = 0;
+				hits_right = 0;
+
+				for (i = current_no_of_corners-1; i >= 0; i--) {
+					x = current_corners[i].x - offset_x;
+					y = current_corners[i].y - offset_y;
+					if (gradient != 0) {
+						y += ((current_corners[i].x - half_width) * gradient / gradient_divisor);
+					}
+					if ((x > 0) && (x < img_width) &&
+						(y > 0) && (y < img_height)) {
+						n = y * img_width + x;
+						if (prev_img_mono[n] != 0) {
+							hits++;
+							if (current_corners[i].x < half_width) {
+								hits_left++;
+							}
+							else {
+								hits_right++;
+							}
+						}
+					}
+				}
+
+				if (hits_left > max_hits_left) {
+					max_hits_left = hits_left;
+					best_offset_x_left = offset_x;
+					best_offset_y_left = offset_y;
+					best_gradient_left = gradient;
+				}
+
+				if (hits_right > max_hits_right) {
+					max_hits_right = hits_right;
+					best_offset_x_right = offset_x;
+					best_offset_y_right = offset_y;
+					best_gradient_right = gradient;
+				}
+
+				if (hits > max_hits) {
+					max_hits = hits;
+					best_offset_x = offset_x;
+					best_offset_y = offset_y;
+					best_gradient = gradient;
+					if (hits > hits_threshold) {
+						offset_x = max_offset_x;
+						offset_y = max_offset_y;
+						gradient = 9999;
+					}
+				}
+
+				if ((x <-20) || (x > 20)) {
+					offset_x+=4;
+				}
+				else {
+					if ((x <-10) || (x > 10)) {
+						offset_x+=3;
+					}
+					else {
+						if ((x <-5) || (x > 5))
+							offset_x+=2;
+						else
+							offset_x++;
 					}
 				}
 			}
-
-			if (hits > max_hits) {
-				max_hits = hits;
-				best_offset_x = offset_x;
-				best_offset_y = offset_y;
-				if (hits > hits_threshold) {
-					offset_x = max_offset_x;
-					offset_y = max_offset_y;
+			if ((y <-20) || (y > 20)) {
+				offset_y+=4;
+			}
+			else {
+				if ((y <-10) || (y > 10)) {
+					offset_y+=3;
+				}
+				else {
+					if ((y <-5) || (y > 5))
+						offset_y+=2;
+					else
+						offset_y++;
 				}
 			}
 		}
-	}
+    }
 
 	if (current_no_of_corners > 0) {
 		if (max_hits*100/current_no_of_corners > 20) {
-			if ((temporal != 0) && (best_offset_x < 0)) max_disparity = -max_disparity;
 			for (i = current_no_of_corners-1; i >= 0; i--) {
 				x = current_corners[i].x - best_offset_x;
 				y = current_corners[i].y - best_offset_y;
+				if (best_gradient != 0) {
+					y += ((current_corners[i].x - half_width) * best_gradient / gradient_divisor);
+				}
 				if ((x > 0) && (x < img_width) &&
 					(y > 0) && (y < img_height)) {
 					n = y * img_width + x;
 					matches[i] = prev_img_mono[n];
-					if ((matches[i] == 0) &&
-						(max_disparity > 0)) {
-
-						min_dist = abs(max_disparity);
-						xx = current_corners[i].x - best_offset_x;
-						x = xx - max_disparity;
-						unsigned char closest = 0;
-						while (x != xx + max_disparity) {
-							if ((x > 0) && (x < img_width)) {
-								n = y * img_width + x;
-								if (prev_img_mono[n] != 0) {
-									dist = xx - x;
-									if (dist < 0) dist = -dist;
-									if (dist < min_dist) {
-										min_dist = dist;
-										closest = prev_img_mono[n];
-									}
-								}
-							}
-							if (max_disparity >= 0)
-								x++;
-							else
-								x--;
-						}
-						if (min_dist != abs(max_disparity)) {
-							matches[i] = closest;
-						}
+				}
+			}
+		}
+		if (max_hits_left*100/current_no_of_corners > 20) {
+			for (i = current_no_of_corners-1; i >= 0; i--) {
+				if ((matches[i] == 0) &&
+					(current_corners[i].x < half_width)) {
+					x = current_corners[i].x - best_offset_x_left;
+					y = current_corners[i].y - best_offset_y_left;
+					if (best_gradient_left != 0) {
+						y += ((current_corners[i].x - half_width) * best_gradient_left / gradient_divisor);
+					}
+					if ((x > 0) && (x < img_width) &&
+						(y > 0) && (y < img_height)) {
+						n = y * img_width + x;
+						matches[i] = prev_img_mono[n];
+					}
+				}
+			}
+		}
+		if (max_hits_right*100/current_no_of_corners > 20) {
+			for (i = current_no_of_corners-1; i >= 0; i--) {
+				if ((matches[i] == 0) &&
+					(current_corners[i].x >= half_width)) {
+					x = current_corners[i].x - best_offset_x_right;
+					y = current_corners[i].y - best_offset_y_right;
+					if (best_gradient_right != 0) {
+						y += ((current_corners[i].x - half_width) * best_gradient_right / gradient_divisor);
+					}
+					if ((x > 0) && (x < img_width) &&
+						(y > 0) && (y < img_height)) {
+						n = y * img_width + x;
+						matches[i] = prev_img_mono[n];
 					}
 				}
 			}
 		}
 	}
 
+	temporal_offset_x = best_offset_x;
+	temporal_offset_y = best_offset_y;
+
 }
 
+/* saves stereo matches to file for use by other programs */
+void fast::save_matches(
+std::string filename, /* filename to save as */
+unsigned char* img, /* left image data */
+int img_width,
+bool colour) { /* whether to additionally save colour of each match */
 
-/* saves corners to file for use by other programs */
-void fast::save(std::string filename)
-{
 	FILE *file = fopen(filename.c_str(), "wb");
 	if (file != NULL) {
-		fwrite(nonmax, sizeof(xy), num_nonmax, file);
+
+		int i,ctr,max = 0;
+		for (i = 0; i < num_nonmax; i++) {
+			if (interocular_disparity[i] > 0) max++;
+		}
+
+		if (max > 0) {
+
+			if (!colour) {
+
+				struct MatchData {
+					unsigned short int probability;
+					unsigned short int x;
+					unsigned short int y;
+					unsigned short int disparity;
+				};
+
+				MatchData *m = new MatchData[max];
+				ctr = 0;
+				for (i = 0; i < num_nonmax; i++) {
+					if (interocular_disparity[i] > 0) {
+						m[ctr].probability = (unsigned short int)1000;
+						m[ctr].x = (unsigned short int)nonmax[i].x*FAST_SUBPIXEL;
+						m[ctr].y = (unsigned short int)nonmax[i].y;
+						m[ctr].disparity = (unsigned short int)(interocular_disparity[i]-1);
+						ctr++;
+					}
+				}
+
+				fwrite(m, sizeof(MatchData), max, file);
+				delete[] m;
+			} else {
+				struct MatchDataColour {
+					unsigned short int probability;
+					unsigned short int x;
+					unsigned short int y;
+					unsigned short int disparity;
+					unsigned char r, g, b;
+					unsigned char pack;
+				};
+
+				int n;
+				ctr=0;
+				MatchDataColour *m = new MatchDataColour[max];
+				for (i = 0; i < num_nonmax; i++) {
+					if (interocular_disparity[i] > 0) {
+						m[ctr].probability = (unsigned short int)1000;
+						m[ctr].x = (unsigned short int)nonmax[i].x*FAST_SUBPIXEL;
+						m[ctr].y = (unsigned short int)nonmax[i].y;
+						m[ctr].disparity = (unsigned short int)(interocular_disparity[i]-1);
+						n = ((m[i].y * img_width) + nonmax[i].x) * 3;
+						m[ctr].r = img[n + 2];
+						m[ctr].g = img[n + 1];
+						m[ctr].b = img[n];
+						ctr++;
+					}
+				}
+
+				fwrite(m, sizeof(MatchDataColour), max, file);
+				delete[] m;
+			}
+
+		}
+
+		printf("%d stereo corner matches saved to %s\n", max, filename.c_str());
+
 		fclose(file);
 	}
 }
@@ -6338,41 +6501,56 @@ void fast::save(std::string filename)
 void fast::match_interocular(
 	int img_width,
 	int img_height,
-	int no_of_corners_right,
-	int* corners_right,
-	int max_disparity)
+	int no_of_stereo_matches,
+	unsigned int* stereo_matches)
 {
 	/* create an array to store interocular matches */
-	if (interocular_matches == NULL) {
-		interocular_matches = new unsigned char[FAST_MAX_CORNERS_PREVIOUS];
+	if (interocular_disparity == NULL) {
+		interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
+		previous_interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
 	}
 
-	/* stereo correspondence */
-	data_association(
-	    img_mono,
-	    img_width,
-	    img_height,
-	    num_nonmax,
-	    nonmax,
-	    no_of_corners_right,
-	    (xy*)corners_right,
-	    interocular_matches,
-	    max_disparity, 0);
+	memset((void*)interocular_disparity, '\0', num_nonmax*sizeof(unsigned short));
 
-	/* turn the interocular matches into disparity values */
-	int i,disp,idx;
-	for (i = 0; i < num_nonmax; i++) {
-		idx = (int)interocular_matches[i] - 1;
-		if (idx > -1) {
-            disp = nonmax[i].x - corners_right[idx*2];
-            if (disp > -1) {
-            	interocular_matches[i] = (unsigned char)(1+disp);
-            }
-            else {
-            	interocular_matches[i] = 0;
-            }
-		}
-	}
+    int i, j, x0,y0,x1,y1,dx,dy,idx;
+    int tot_disp, hits;
+    const int radius = 8;
+	for (j = 0; j < num_nonmax; j++) {
+		x0 = nonmax[j].x;
+		y0 = nonmax[j].y;
+		tot_disp = 0;
+		hits = 0;
+        for (i = 0; i < no_of_stereo_matches; i++) {
+            if (stereo_matches[i*5] > 0) {
+        	    x1 = (int)stereo_matches[i*5 + 1]/FAST_SUBPIXEL;
+        	    y1 = (int)stereo_matches[i*5 + 2];
+
+        		dx = x0 - x1;
+        		if ((dx > -radius) && (dx < radius)) {
+            		dy = y0 - y1;
+            		if ((dy > -radius) && (dy < radius)) {
+                        tot_disp += (int)stereo_matches[i*5 + 3];
+                        hits++;
+            		}
+        		}
+        	}
+        }
+        if (hits > 0) {
+
+        	idx = (int)temporal_matches[j] - 1;
+        	if (idx > -1) {
+        		if (previous_interocular_disparity[idx] > 0) {
+        		    interocular_disparity[j] = (unsigned short)(1 + (( (tot_disp*2/hits) + (previous_interocular_disparity[idx]*8))/10) );
+        		}
+        		else {
+        			interocular_disparity[j] = (unsigned short)(1 + (tot_disp/hits));
+        		}
+        	}
+        	else {
+        		interocular_disparity[j] = (unsigned short)(1 + (tot_disp/hits));
+        	}
+        }
+    }
 }
 
 int fast::get_no_of_corners()
@@ -6383,4 +6561,13 @@ int fast::get_no_of_corners()
 int* fast::get_corners()
 {
 	return((int*)nonmax);
+}
+
+int fast::get_no_of_disparities()
+{
+	int i, max = 0;
+	for (i = 0; i < num_nonmax; i++) {
+		if (interocular_disparity[i] > 0) max++;
+	}
+	return(max);
 }
