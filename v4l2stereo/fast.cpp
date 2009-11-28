@@ -6445,7 +6445,7 @@ bool colour) { /* whether to additionally save colour of each match */
 					unsigned short int disparity;
 				};
 
-				MatchData *m = new MatchData[max];
+				MatchData *m = new MatchData[FAST_MAX_CORNERS_PREVIOUS];
 				ctr = 0;
 				for (i = 0; i < num_nonmax; i++) {
 					if (interocular_disparity[i] > 0) {
@@ -6456,8 +6456,12 @@ bool colour) { /* whether to additionally save colour of each match */
 						ctr++;
 					}
 				}
+				if (num_nonmax < FAST_MAX_CORNERS_PREVIOUS) {
+					m[num_nonmax].x = 9999;
+					m[num_nonmax].y = 9999;
+				}
 
-				fwrite(m, sizeof(MatchData), max, file);
+				fwrite(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
 				delete[] m;
 			} else {
 				struct MatchDataColour {
@@ -6485,8 +6489,12 @@ bool colour) { /* whether to additionally save colour of each match */
 						ctr++;
 					}
 				}
+				if (num_nonmax < FAST_MAX_CORNERS_PREVIOUS) {
+					m[num_nonmax].x = 9999;
+					m[num_nonmax].y = 9999;
+				}
 
-				fwrite(m, sizeof(MatchDataColour), max, file);
+				fwrite(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
 				delete[] m;
 			}
 
@@ -6497,6 +6505,99 @@ bool colour) { /* whether to additionally save colour of each match */
 		fclose(file);
 	}
 }
+
+/*!
+ * \brief returns true if the given file exists
+ * \param filename name of the file
+ */
+bool fast::FileExists(
+	std::string filename)
+{
+    std::ifstream inf;
+
+    bool flag = false;
+    inf.open(filename.c_str());
+    if (inf.good()) flag = true;
+    inf.close();
+    return(flag);
+}
+
+/* loads stereo matches from file */
+void fast::load_matches(
+std::string filename, /* filename to load from */
+bool colour) { /* whether to additionally save colour of each match */
+
+	if (FileExists(filename)) {
+
+		FILE *file = fopen(filename.c_str(), "rb");
+		if (file != NULL) {
+
+			int i;
+
+			/* create an array to store interocular matches */
+			if (interocular_disparity == NULL) {
+				interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
+				previous_interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
+			}
+
+			if (!colour) {
+
+				struct MatchData {
+					unsigned short int probability;
+					unsigned short int x;
+					unsigned short int y;
+					unsigned short int disparity;
+				};
+
+				MatchData *m = new MatchData[FAST_MAX_CORNERS_PREVIOUS];
+				fread(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
+				num_nonmax = 0;
+				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
+					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
+						num_nonmax--;
+						break;
+					}
+					nonmax[i].x = (int)m[i].x;
+					nonmax[i].y = (int)m[i].y;
+					interocular_disparity[i] = m[i].disparity;
+				}
+				delete[] m;
+			} else {
+				struct MatchDataColour {
+					unsigned short int probability;
+					unsigned short int x;
+					unsigned short int y;
+					unsigned short int disparity;
+					unsigned char r, g, b;
+					unsigned char pack;
+				};
+
+				MatchDataColour *m = new MatchDataColour[FAST_MAX_CORNERS_PREVIOUS];
+				fread(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
+				num_nonmax = 0;
+				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
+					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
+						num_nonmax--;
+						break;
+					}
+					nonmax[i].x = (int)m[i].x;
+					nonmax[i].y = (int)m[i].y;
+					interocular_disparity[i] = m[i].disparity;
+				}
+
+				delete[] m;
+			}
+
+			printf("%d stereo corner matches loaded from %s\n", previous_no_of_corners, filename.c_str());
+
+			fclose(file);
+		}
+	}
+	else {
+		printf("File %s not found\n", filename);
+	}
+}
+
 
 void fast::match_interocular(
 	int img_width,

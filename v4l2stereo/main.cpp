@@ -97,6 +97,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --fast                 Show FAST corners");
   opt->addUsage( " -f  --fps                  Frames per second");
   opt->addUsage( " -s  --skip                 Skip this number of frames");
+  opt->addUsage( " -i  --input                Loads stereo matches from the given output file");
   opt->addUsage( " -o  --output               Saves stereo matches to the given output file");
   opt->addUsage( "     --log                  Logs stereo matches to the given output file (only when no file exists)");
   opt->addUsage( " -V  --version              Show version number");
@@ -131,6 +132,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "offsetx", 'x' );
   opt->setOption(  "offsety", 'y' );
   opt->setOption(  "disparity", 'd' );
+  opt->setOption(  "input", 'i' );
   opt->setOption(  "output", 'o' );
   opt->setOption(  "log" );
   opt->setOption(  "skip", 's' );
@@ -432,6 +434,11 @@ int main(int argc, char* argv[]) {
   if( opt->getValue( 'o' ) != NULL  || opt->getValue( "output" ) != NULL  ) {
 	  stereo_matches_filename = opt->getValue("output");
 	  skip_frames = 6;
+  }
+
+  std::string stereo_matches_input_filename = "";
+  if( opt->getValue( 'i' ) != NULL  || opt->getValue( "input" ) != NULL  ) {
+	  stereo_matches_input_filename = opt->getValue("input");
   }
 
   std::string log_stereo_matches_filename = "";
@@ -1034,8 +1041,16 @@ int main(int argc, char* argv[]) {
 	//motion->show(l_,ww,hh);
 
 	if (show_FAST) {
+		/* load previous matches from file */
+		if (stereo_matches_input_filename != "") {
+			corners_left->load_matches(stereo_matches_input_filename, true);
+			stereo_matches_input_filename = "";
+		}
+
+		/* locate corner features in the left image */
 		corners_left->update(l_,ww,hh, desired_corner_features,1);
 
+		/* assign disparity values to corner features */
 		corners_left->match_interocular(
 			ww, hh,
 			matches, lcam->svs_matches);
@@ -1043,7 +1058,7 @@ int main(int argc, char* argv[]) {
 		/* save stereo matches to a file, then quit */
 		if ((stereo_matches_filename != "") && (!save_images) &&
 		    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 5))) {
-			corners_left->save_matches(stereo_matches_filename, l_, ww, false);
+			corners_left->save_matches(stereo_matches_filename, l_, ww, true);
 			break;
 		}
 

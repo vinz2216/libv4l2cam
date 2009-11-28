@@ -48,6 +48,7 @@ private:
 	void nonmax_suppression(xy* corners, int* scores, int num_corners);
 	void make_offsets(int* pixel, int row_stride);
 	void match_temporal(unsigned char* img_mono, int img_width, int img_height, int current_no_of_corners, xy* current_corners, int prev_no_of_corners, xy* prev_corners, unsigned char* matches, int max_disparity);
+	bool FileExists(std::string filename);
 
 	int previous_no_of_corners;
 	xy* previous_corners;
@@ -71,6 +72,7 @@ public:
 	void show(unsigned char *outbuf, int img_width, int img_height, int show_tracking);
 	int update(unsigned char* img, int img_width, int img_height, int desired_features, int use_tracking);
 	void save_matches(std::string filename, unsigned char* img, int img_width, bool colour);
+	void load_matches(std::string filename, bool colour);
 	void match_interocular(	int img_width, int img_height, int no_of_stereo_matches, unsigned int* stereo_matches);
 
 	int get_no_of_corners();
