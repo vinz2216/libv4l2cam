@@ -6456,9 +6456,9 @@ bool colour) { /* whether to additionally save colour of each match */
 						ctr++;
 					}
 				}
-				if (num_nonmax < FAST_MAX_CORNERS_PREVIOUS) {
-					m[num_nonmax].x = 9999;
-					m[num_nonmax].y = 9999;
+				if (ctr < FAST_MAX_CORNERS_PREVIOUS) {
+					m[ctr].x = 9999;
+					m[ctr].y = 9999;
 				}
 
 				fwrite(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
@@ -6475,7 +6475,7 @@ bool colour) { /* whether to additionally save colour of each match */
 
 				int n;
 				ctr=0;
-				MatchDataColour *m = new MatchDataColour[max];
+				MatchDataColour *m = new MatchDataColour[FAST_MAX_CORNERS_PREVIOUS];
 				for (i = 0; i < num_nonmax; i++) {
 					if (interocular_disparity[i] > 0) {
 						m[ctr].probability = (unsigned short int)1000;
@@ -6489,9 +6489,9 @@ bool colour) { /* whether to additionally save colour of each match */
 						ctr++;
 					}
 				}
-				if (num_nonmax < FAST_MAX_CORNERS_PREVIOUS) {
-					m[num_nonmax].x = 9999;
-					m[num_nonmax].y = 9999;
+				if (ctr < FAST_MAX_CORNERS_PREVIOUS) {
+					m[ctr].x = 9999;
+					m[ctr].y = 9999;
 				}
 
 				fwrite(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
@@ -6554,7 +6554,6 @@ bool colour) { /* whether to additionally save colour of each match */
 				num_nonmax = 0;
 				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
 					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
-						num_nonmax--;
 						break;
 					}
 					nonmax[i].x = (int)m[i].x;
@@ -6577,7 +6576,6 @@ bool colour) { /* whether to additionally save colour of each match */
 				num_nonmax = 0;
 				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
 					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
-						num_nonmax--;
 						break;
 					}
 					nonmax[i].x = (int)m[i].x;
@@ -6588,7 +6586,7 @@ bool colour) { /* whether to additionally save colour of each match */
 				delete[] m;
 			}
 
-			printf("%d stereo corner matches loaded from %s\n", previous_no_of_corners, filename.c_str());
+			printf("%d stereo corner matches loaded from %s\n", num_nonmax, filename.c_str());
 
 			fclose(file);
 		}

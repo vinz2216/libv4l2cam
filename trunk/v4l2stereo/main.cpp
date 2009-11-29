@@ -1057,7 +1057,7 @@ int main(int argc, char* argv[]) {
 
 		/* save stereo matches to a file, then quit */
 		if ((stereo_matches_filename != "") && (!save_images) &&
-		    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 5))) {
+		    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
 			corners_left->save_matches(stereo_matches_filename, l_, ww, true);
 			break;
 		}
