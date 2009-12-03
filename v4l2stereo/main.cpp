@@ -30,6 +30,14 @@
 #include "fast.h"
 #include "libcam.h"
 
+#include <deque>
+#include <vector>
+#include <iomanip>
+#include <fstream>
+#include <string>
+#include "math.h"
+#include <stdlib.h>
+
 #define VERSION 1.042
 
 using namespace std;
@@ -51,7 +59,7 @@ int main(int argc, char* argv[]) {
   bool show_FAST = false;
   int use_priors = 1;
   int matches;
-  //int FOV_degrees = 50;
+  int FOV_degrees = 50;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -95,6 +103,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --scale0               Calibration scale of the left camera");
   opt->addUsage( "     --scale1               Calibration scale of the right camera");
   opt->addUsage( "     --fast                 Show FAST corners");
+  opt->addUsage( "     --fov                  Field of view in degrees");
   opt->addUsage( " -f  --fps                  Frames per second");
   opt->addUsage( " -s  --skip                 Skip this number of frames");
   opt->addUsage( " -i  --input                Loads stereo matches from the given output file");
@@ -136,6 +145,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "output", 'o' );
   opt->setOption(  "log" );
   opt->setOption(  "skip", 's' );
+  opt->setOption(  "fov" );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
@@ -282,7 +292,7 @@ int main(int argc, char* argv[]) {
 	  show_FAST = false;
   }
 
-  int desired_corner_features = 50;
+  int desired_corner_features = 70;
   if( opt->getValue( "fast" ) != NULL  ) {
 	  show_regions = false;
 	  calibrate_offsets = false;
@@ -294,6 +304,8 @@ int main(int argc, char* argv[]) {
 	  show_lines = false;
 	  show_FAST = true;
 	  desired_corner_features = atoi(opt->getValue("fast"));
+	  if (desired_corner_features > 150) desired_corner_features=150;
+	  if (desired_corner_features < 50) desired_corner_features=50;
   }
 
   int enable_ground_priors = 0;
@@ -301,6 +313,10 @@ int main(int argc, char* argv[]) {
   if( opt->getValue( "ground" ) != NULL  ) {
 	  enable_ground_priors = 1;
 	  ground_y_percent = atoi(opt->getValue("ground"));
+  }
+
+  if( opt->getValue( "fov" ) != NULL  ) {
+  	  FOV_degrees = atoi(opt->getValue("fov"));
   }
 
   std::string dev0 = "/dev/video1";
@@ -583,18 +599,6 @@ int main(int argc, char* argv[]) {
 	            calib_offset_x,
 	            calib_offset_y,
 	            1-cam);
-
-		    /*
-			motion->Update(
-				stereocam->feature_x,
-				stereocam->feature_y,
-				stereocam->features_per_row,
-				stereocam->features_per_col,
-				FOV_degrees,
-				hh/SVS_VERTICAL_SAMPLING,
-				ww/SVS_HORIZONTAL_SAMPLING,
-				ww, hh);
-		    */
 		}
 
 		if (show_lines) {
@@ -1002,41 +1006,6 @@ int main(int argc, char* argv[]) {
 		break;
 	}
 
-	// test
-	/*
-	int step1 = 5;
-	int max_idx=ww-2;
-	for (int y = hh/2; y >= hh/4; y-=step1, max_idx/=2) {
-		int idx = 0;
-		for (int x = 0; x < max_idx; x++, idx++) {
-			int n = ((y*ww) + x)*3;
-
-			for (int cam = 0; cam < 2; cam++) {
-				unsigned char* im = l_;
-				if (cam == 1) im = r_;
-				int diff = ((int)im[n]+(int)im[n+1]) -
-				           ((int)im[n+4]+(int)im[n+5]);
-				//printf("%d %d %d\n", diff, l_[n], l_[n+3]);
-				for (int j = 0; j < step1; j++) {
-					n = (((y-step1-j)*ww) + idx)*3;
-					if (diff > 0) {
-						im[n] = 255;
-						im[n+1] = 255;
-						im[n+2] = 255;
-						//printf("high\n");
-					}
-					else {
-						im[n] = 0;
-						im[n+1] = 0;
-						im[n+2] = 0;
-					}
-				}
-			}
-		}
-		if (max_idx < 2) break;
-	}
-	*/
-
 	//motion->update(l_,ww,hh);
 	//motion->show(l_,ww,hh);
 
@@ -1057,7 +1026,7 @@ int main(int argc, char* argv[]) {
 
 		/* save stereo matches to a file, then quit */
 		if ((stereo_matches_filename != "") && (!save_images) &&
-		    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
+			((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
 			corners_left->save_matches(stereo_matches_filename, l_, ww, true);
 			break;
 		}

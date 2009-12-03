@@ -1,6 +1,5 @@
 /*
- motion model for smoothly moving camera
- Based upon code originally written by Justin Domke
+ motion model
  Copyright (C) 2009 Bob Mottram and Giacomo Spigler
  fuzzgun@gmail.com
 
@@ -21,27 +20,8 @@
 #ifndef MOTIONMODEL_H_
 #define MOTIONMODEL_H_
 
-#define MOTIONMODEL_NO_OF_FEATURES 300
-#define MOTIONMODEL_STEP 10
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
-#include "stereo.h"
-
 class motionmodel {
-private:
-	int matchbuffer(bool* curr, bool *prev, int* motion, int window_size, int max_offset);
 public:
-
-	bool** bf;
-	int** bf_motion;
-	bool* bf_buffer;
-	int average_pan, average_tilt, average_roll;
-
-	void update(unsigned char* img, int img_width, int img_height);
-	void show(unsigned char* img, int img_width, int img_height);
 
 	motionmodel();
 	virtual ~motionmodel();
