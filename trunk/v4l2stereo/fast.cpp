@@ -7,11 +7,18 @@ fast::fast() {
     row_start = new int[FAST_MAX_IMAGE_HEIGHT];
     img_mono = NULL;
     prev_img_mono = NULL;
-    previous_corners = new xy[FAST_MAX_CORNERS_PREVIOUS];
-    temporal_matches = new unsigned char[FAST_MAX_CORNERS_PREVIOUS];
+    previous_corners = new xy*[FAST_PREVIOUS_BUFFER];
+    previous_no_of_corners = new int[FAST_PREVIOUS_BUFFER];
+    temporal_matches = new unsigned char*[FAST_PREVIOUS_BUFFER];
+    previous_interocular_disparity = new unsigned short*[FAST_PREVIOUS_BUFFER];
+    int i;
+    for (i = 0; i < FAST_PREVIOUS_BUFFER; i++) {
+    	previous_corners[i] = new xy[FAST_MAX_CORNERS_PREVIOUS];
+        temporal_matches[i] = new unsigned char[FAST_MAX_CORNERS_PREVIOUS];
+        previous_interocular_disparity[i] = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
+        previous_no_of_corners[i] = 0;
+    }
     interocular_disparity = NULL;
-    previous_interocular_disparity = NULL;
-    previous_no_of_corners = 0;
     threshold = 100;
     num_nonmax = 0;
 }
@@ -21,18 +28,23 @@ fast::~fast() {
     delete[] corners;
     delete[] nonmax;
     delete[] row_start;
-    delete[] previous_corners;
-    delete[] temporal_matches;
     if (interocular_disparity != NULL) {
         delete[] interocular_disparity;
-    }
-    if (previous_interocular_disparity != NULL) {
-    	delete[] previous_interocular_disparity;
     }
     if (img_mono != NULL) {
     	delete[] img_mono;
     	delete[] prev_img_mono;
     }
+    int i;
+    for (i = 0; i < FAST_PREVIOUS_BUFFER; i++) {
+        delete[] previous_corners[i];
+        delete[] temporal_matches[i];
+       	delete[] previous_interocular_disparity[i];
+    }
+    delete[] previous_corners;
+    delete[] temporal_matches;
+   	delete[] previous_interocular_disparity;
+    delete[] previous_no_of_corners;
 }
 
 int fast::corner_score(
@@ -5936,6 +5948,7 @@ void fast::detect(
 
 		}
 
+	//printf("num_corners2 %d\n", num_corners);
 	*ret_num_corners = num_corners;
 }
 
@@ -6078,9 +6091,17 @@ int fast::update(
 	/* remember previous corner positions so that we can track them */
     if (num_nonmax > FAST_MAX_CORNERS_PREVIOUS) num_nonmax = FAST_MAX_CORNERS_PREVIOUS;
 	if (num_nonmax > FAST_MIN_CORNERS) {
-	    memcpy(previous_corners, nonmax, num_nonmax*sizeof(xy));
-	    if (previous_interocular_disparity != NULL) memcpy(previous_interocular_disparity, interocular_disparity, num_nonmax*sizeof(unsigned short));
-	    previous_no_of_corners = num_nonmax;
+		for (i = FAST_PREVIOUS_BUFFER-1; i > 0; i--) {
+			if (previous_no_of_corners[i-1] > 0) {
+				memcpy(previous_corners[i], previous_corners[i-1], previous_no_of_corners[i-1]*sizeof(xy));
+				memcpy(temporal_matches[i], temporal_matches[i-1], previous_no_of_corners[i-1]);
+				memcpy(previous_interocular_disparity[i], previous_interocular_disparity[i-1], previous_no_of_corners[i-1]*sizeof(unsigned short));
+			}
+			previous_no_of_corners[i] = previous_no_of_corners[i-1];
+		}
+		memcpy(previous_corners[0], nonmax, num_nonmax*sizeof(xy));
+		memcpy(previous_interocular_disparity[0], interocular_disparity, num_nonmax*sizeof(unsigned short));
+		previous_no_of_corners[0] = num_nonmax;
 	}
 
 	n = img_width*img_height-1;
@@ -6092,24 +6113,35 @@ int fast::update(
 	detect_nonmax(img_mono, img_width, img_height, img_width, threshold, &ret_num_corners);
 	ret_num_corners = num_nonmax;
 	if (ret_num_corners < desired_features-10) {
-		threshold -= 5;
+		threshold -= 10;
 		if (threshold < 2) threshold=2;
 		detect_nonmax(img_mono, img_width, img_height, img_width, threshold, &ret_num_corners);
 		if (ret_num_corners < desired_features-10) {
-			threshold -= 5;
+			threshold -= 10;
 			if (threshold < 2) threshold=2;
+			detect_nonmax(img_mono, img_width, img_height, img_width, threshold, &ret_num_corners);
+			if (ret_num_corners < desired_features-10) {
+				threshold -= 10;
+				if (threshold < 2) threshold=2;
+			}
 		}
 	}
 	if (ret_num_corners > desired_features+10) {
-		threshold += 5;
-		if (threshold > 200) threshold=200;
+		threshold += 8;
+		if (threshold > 300) threshold=300;
+		detect_nonmax(img_mono, img_width, img_height, img_width, threshold, &ret_num_corners);
+		if (ret_num_corners > desired_features+10) {
+			threshold += 8;
+			if (threshold > 300) threshold=300;
+		}
 	}
 
 	if (num_nonmax > FAST_MAX_CORNERS_PREVIOUS) num_nonmax = FAST_MAX_CORNERS_PREVIOUS;
 
 	/* track corners from one frame to the next */
-    if ((use_tracking != 0) && (num_nonmax > FAST_MIN_CORNERS))
-    	match_temporal(img_mono, img_width, img_height, num_nonmax, nonmax, previous_no_of_corners, previous_corners, temporal_matches, 16);
+    if ((use_tracking != 0) && (num_nonmax > FAST_MIN_CORNERS)) {
+    	match_temporal(img_mono, img_width, img_height, num_nonmax, nonmax, previous_no_of_corners[0], previous_corners[0], temporal_matches[0], 16);
+    }
 
     return (ret_num_corners);
 }
@@ -6121,58 +6153,65 @@ void fast::show(
     int img_height,
     int show_tracking)
 {
-    int f,x,y,x2,y2,n,dx,dy,xx,yy,idx,disp;
+    int f,x,y,x2,y2,n,dx,dy,xx,yy,idx,disp,i;
+    int r,g,b;
 
-    for (f = 0; f < num_nonmax; f++) {
-    	idx = (int)temporal_matches[f] - 1;
-    	if ((show_tracking == 0) ||
-    		(num_nonmax < FAST_MIN_CORNERS) ||
-    		((idx > -1) &&
-    		(idx < previous_no_of_corners))) {
+	for (f = 0; f < num_nonmax; f++) {
+		idx = (int)temporal_matches[0][f] - 1;
+		if ((show_tracking == 0) ||
+			(num_nonmax < FAST_MIN_CORNERS) ||
+			((idx > -1) &&
+			(idx < previous_no_of_corners[0]))) {
+
 			x = nonmax[f].x;
 			y = nonmax[f].y;
 
+			r = 255;
+			g = 0;
+			b = 0;
+
 			/* draw edge */
 			n = (y*img_width+x)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = ((y-1)*img_width+x)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = ((y-2)*img_width+x)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = ((y+1)*img_width+x)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = ((y+2)*img_width+x)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = (y*img_width+x-1)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = (y*img_width+x+1)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = (y*img_width+x-2)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 			n = (y*img_width+x+2)*3;
-			outbuf[n++] = 84;
-			outbuf[n++] = 72;
-			outbuf[n] = 255;
+			outbuf[n++] = b;
+			outbuf[n++] = g;
+			outbuf[n] = r;
 
 			if ((show_tracking != 0) &&
-			    (num_nonmax > FAST_MIN_CORNERS)) {
-				if (interocular_disparity != NULL) {
+				(num_nonmax > FAST_MIN_CORNERS)) {
+
+				if ((interocular_disparity != NULL)) {
 					disp = (int)interocular_disparity[f] - 1;
 					if (disp > -1) {
 						disp = disp / FAST_SUBPIXEL;
@@ -6190,41 +6229,58 @@ void fast::show(
 					}
 				}
 
-				x2 = previous_corners[idx].x;
-				y2 = previous_corners[idx].y;
-				dx = x2 - x;
-				dy = y2 - y;
-				if (abs(dx) > abs(dy)) {
-					xx = x;
-					while (xx != x2) {
-						xx += dx/abs(dx);
-						yy = y + ((xx-x)*dy/dx);
-						if ((yy > 0) && (yy < img_height)) {
-							n = (yy*img_width+xx)*3;
-							outbuf[n++] = 84;
-							outbuf[n++] = 72;
-							outbuf[n] = 255;
-						}
-					}
-				}
-				else {
-					if (dy != 0) {
-						yy = y;
-						while (yy != y2) {
-							yy += dy/abs(dy);
-							xx = x + ((yy-y)*dx/dy);
-							if ((xx > 0) && (xx < img_width)) {
+				r = 255;
+				g = 0;
+				b = 0;
+				i=0;
+				while ((i < FAST_PREVIOUS_BUFFER-1) &&
+					   (idx > -1)) {
+					x2 = previous_corners[i][idx].x;
+					y2 = previous_corners[i][idx].y;
+
+					dx = x2 - x;
+					dy = y2 - y;
+					if (abs(dx) > abs(dy)) {
+						xx = x;
+						while (xx != x2) {
+							xx += dx/abs(dx);
+							yy = y + ((xx-x)*dy/dx);
+							if ((xx > 0) && (xx < img_width) &&
+								(yy > 0) && (yy < img_height)) {
 								n = (yy*img_width+xx)*3;
-								outbuf[n++] = 84;
-								outbuf[n++] = 72;
-								outbuf[n] = 255;
+								outbuf[n++] = b;
+								outbuf[n++] = g;
+								outbuf[n] = r;
 							}
 						}
 					}
+					else {
+						if (dy != 0) {
+							yy = y;
+							while (yy != y2) {
+								yy += dy/abs(dy);
+								xx = x + ((yy-y)*dx/dy);
+								if ((xx > 0) && (xx < img_width) &&
+									(yy > 0) && (yy < img_height)) {
+									n = (yy*img_width+xx)*3;
+									outbuf[n++] = b;
+									outbuf[n++] = g;
+									outbuf[n] = r;
+								}
+							}
+						}
+					}
+
+					idx = (int)temporal_matches[i+1][idx] - 1;
+					x = x2;
+					y = y2;
+					i++;
 				}
+
 			}
-        }
-    }
+		}
+	}
+
 }
 
 
@@ -6249,11 +6305,11 @@ void fast::match_temporal(
 	int best_offset_x=0,best_offset_y=0,best_gradient=0;
 	int best_offset_x_left=0,best_offset_y_left=0,best_gradient_left=0;
 	int best_offset_x_right=0,best_offset_y_right=0,best_gradient_right=0;
-	int max_offset_x = img_width/4;
-	int max_offset_y = img_height/4;
+	int max_offset_x = img_width/5;
+	int max_offset_y = img_height/5;
 	int max_hits=0,max_hits_left=0,max_hits_right=0;
 	int hits_threshold = current_no_of_corners * 95/100;
-	const int radius = 1;
+	const int radius = 2;
 	const int gradient_divisor = 100;
 
 	memset((void*)prev_img_mono, '\0', img_width*img_height);
@@ -6331,7 +6387,7 @@ void fast::match_temporal(
 					}
 				}
 
-				if ((x <-20) || (x > 20)) {
+				if ((x <-30) || (x > 30)) {
 					offset_x+=4;
 				}
 				else {
@@ -6346,7 +6402,7 @@ void fast::match_temporal(
 					}
 				}
 			}
-			if ((y <-20) || (y > 20)) {
+			if ((y <-30) || (y > 30)) {
 				offset_y+=4;
 			}
 			else {
@@ -6537,7 +6593,6 @@ bool colour) { /* whether to additionally save colour of each match */
 			/* create an array to store interocular matches */
 			if (interocular_disparity == NULL) {
 				interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
-				previous_interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
 			}
 
 			if (!colour) {
@@ -6592,7 +6647,7 @@ bool colour) { /* whether to additionally save colour of each match */
 		}
 	}
 	else {
-		printf("File %s not found\n", filename);
+		printf("File %s not found\n", filename.c_str());
 	}
 }
 
@@ -6606,7 +6661,6 @@ void fast::match_interocular(
 	/* create an array to store interocular matches */
 	if (interocular_disparity == NULL) {
 		interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
-		previous_interocular_disparity = new unsigned short[FAST_MAX_CORNERS_PREVIOUS];
 	}
 
 	memset((void*)interocular_disparity, '\0', num_nonmax*sizeof(unsigned short));
@@ -6636,10 +6690,10 @@ void fast::match_interocular(
         }
         if (hits > 0) {
 
-        	idx = (int)temporal_matches[j] - 1;
+        	idx = (int)temporal_matches[0][j] - 1;
         	if (idx > -1) {
-        		if (previous_interocular_disparity[idx] > 0) {
-        		    interocular_disparity[j] = (unsigned short)(1 + (( (tot_disp*2/hits) + (previous_interocular_disparity[idx]*8))/10) );
+        		if (previous_interocular_disparity[0][idx] > 0) {
+        		    interocular_disparity[j] = (unsigned short)(1 + (( (tot_disp*2/hits) + (previous_interocular_disparity[0][idx]*8))/10) );
         		}
         		else {
         			interocular_disparity[j] = (unsigned short)(1 + (tot_disp/hits));
@@ -6652,14 +6706,68 @@ void fast::match_interocular(
     }
 }
 
+void fast::estimate_pan_tilt(
+	int img_width,
+	int img_height,
+    int fov_degrees,
+    int angle_multiplier)
+{
+	int i, disp, idx,dx,dy;
+	int pan=0, tilt=0;
+	int pan_hits=0, tilt_hits=0;
+    for (i = 0; i < num_nonmax; i++) {
+    	idx = (int)temporal_matches[0][i] - 1;
+    	if (idx > -1) {
+			disp = (int)interocular_disparity[i] - 1;
+			if (disp > -1) {
+				disp = disp * fov_degrees / img_width;
+				dx = (nonmax[i].x - previous_corners[0][idx].x) * fov_degrees * angle_multiplier / img_width;
+				dy = (nonmax[i].y - previous_corners[0][idx].y) * fov_degrees * angle_multiplier / img_width;
+				if (disp == 0) disp = 1;
+
+				if (dx != 0) {
+					pan += dx/disp;
+					pan_hits++;
+				}
+				if (dy != 0) {
+					tilt += dy/disp;
+					tilt_hits++;
+				}
+			}
+    	}
+    }
+    if (pan_hits > 0) {
+    	pan /= pan_hits;
+    }
+    if (tilt_hits > 0) {
+    	tilt /= tilt_hits;
+    }
+    printf("pan = %f   tilt = %f\n", (pan / (float)angle_multiplier) * 180 / 3.1415927f, (tilt / (float)angle_multiplier) * 180 / 3.1415927f);
+}
+
 int fast::get_no_of_corners()
 {
     return(num_nonmax);
 }
 
+int fast::get_previous_no_of_corners()
+{
+    return(previous_no_of_corners[0]);
+}
+
 int* fast::get_corners()
 {
 	return((int*)nonmax);
+}
+
+int* fast::get_previous_corners()
+{
+	return((int*)previous_corners[0]);
+}
+
+unsigned char* fast::get_temporal_matches()
+{
+	return(temporal_matches[0]);
 }
 
 int fast::get_no_of_disparities()
