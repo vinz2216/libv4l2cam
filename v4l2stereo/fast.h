@@ -34,7 +34,7 @@
 #define FAST_IMAGE_SCALES 3
 #define FAST_DESCRIPTOR_PIXELS 30
 #define FAST_SUBPIXEL 32
-#define FAST_PREVIOUS_BUFFER 24
+#define FAST_PREVIOUS_BUFFER 8
 #define Compare(X, Y) ((X)>=(Y))
 #define fastpixindex(xx, yy)  ((yy * img_width + xx) * 3)
 
