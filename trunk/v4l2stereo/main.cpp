@@ -4,6 +4,10 @@
     Copyright (C) 2009 Bob Mottram and Giacomo Spigler
     fuzzgun@gmail.com
 
+    Requires packages:
+		libgstreamer-plugins-base0.10-dev
+		libgst-dev
+
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -22,6 +26,10 @@
 #include <cv.h>
 #include <highgui.h>
 #include <stdio.h>
+#include <gst/gst.h>
+#include <gst/app/gstappsrc.h>
+#include <gst/app/gstappbuffer.h>
+#include <sstream>
 
 #include "anyoption.h"
 #include "drawing.h"
@@ -30,18 +38,9 @@
 #include "fast.h"
 #include "libcam.h"
 
-#include <deque>
-#include <vector>
-#include <iomanip>
-#include <fstream>
-#include <string>
-#include "math.h"
-#include <stdlib.h>
-
 #define VERSION 1.042
 
 using namespace std;
-
 
 int main(int argc, char* argv[]) {
   int ww = 320;
@@ -62,6 +61,9 @@ int main(int argc, char* argv[]) {
   int FOV_degrees = 50;
 
   int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
+
+  // Port to start streaming from - second video will be on this + 1
+  int start_port = 5000;
 
   AnyOption *opt = new AnyOption();
   assert(opt != NULL);
@@ -113,6 +115,8 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --save                 Save raw images");
   opt->addUsage( "     --flipright            Flip the right image");
   opt->addUsage( "     --flipleft             Flip the left image");
+  opt->addUsage( "     --stream               Stream output using gstreamer");
+  opt->addUsage( "     --headless             Disable video output (for use with --stream)");
   opt->addUsage( "     --help                 Show help");
   opt->addUsage( "" );
 
@@ -158,6 +162,8 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "histogram" );
   opt->setFlag(  "calibrate" );
   opt->setFlag(  "version", 'V' );
+  opt->setFlag(  "stream"  );
+  opt->setFlag(  "headless"  );
 
   opt->processCommandArgs(argc, argv);
 
@@ -174,6 +180,16 @@ int main(int argc, char* argv[]) {
       printf("Version %f\n", VERSION);
       delete opt;
       return(0);
+  }
+
+  bool stream = false;
+  if( opt->getFlag( "stream" ) ) {
+	  stream = true;
+  }
+
+  bool headless = false;
+  if( opt->getFlag( "headless" ) ) {
+      headless = true;
   }
 
   bool flip_left_image = false;
@@ -491,7 +507,7 @@ int main(int argc, char* argv[]) {
 //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
   if ((!save_images) &&
-	  (!calibrate_offsets) &&
+	  (!calibrate_offsets) && (!headless) &&
 	  (stereo_matches_filename == "")) {
 
       cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
@@ -530,6 +546,75 @@ int main(int argc, char* argv[]) {
   unsigned char* depthmap_buffer = NULL;
 
   linefit *lines = new linefit();
+
+  /*
+   * Send the video over a network for use in embedded applications
+   * using the gstreamer library.
+   */
+  GstElement* l_source = NULL;
+  GstElement* r_source = NULL;
+  GstBuffer* l_app_buffer = NULL;
+  GstBuffer* r_app_buffer = NULL;
+  GstFlowReturn ret;
+
+  // Yuck
+  std::stringstream lp_str;
+  lp_str << start_port;
+  std::stringstream rp_str;
+  rp_str << start_port + 1;
+
+  std::string caps;
+
+  if( stream ) {
+	// Initialise gstreamer and glib
+      	gst_init( NULL, NULL );
+	GError* l_error = 0;
+	GError* r_error = 0;
+	GstElement* l_pipeline = 0;
+	GstElement* r_pipeline = 0;
+
+        caps = "image/jpeg";
+
+	// Can replace this pipeline with anything you like (udpsink, videowriters etc)
+	std::string l_pipetext = "appsrc name=appsource caps="+ caps +
+	    " ! jpegdec ! ffmpegcolorspace ! queue ! jpegenc ! multipartmux ! tcpserversink port=" + lp_str.str();
+	std::string r_pipetext = "appsrc name=appsource caps="+ caps +
+	    " ! jpegdec ! ffmpegcolorspace ! queue ! jpegenc ! multipartmux ! tcpserversink port=" + rp_str.str();
+
+	// Create the left image pipeline
+	l_pipeline = gst_parse_launch( l_pipetext.c_str(), &l_error );
+
+	// If needed, create right image pipeline
+	if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+	    r_pipeline = gst_parse_launch( r_pipetext.c_str(), &r_error );
+	}
+
+	// Seperate errors in case of port clash
+	if( l_error == NULL ) {
+	    l_source = gst_bin_get_by_name( GST_BIN( l_pipeline ), "appsource" );
+	    gst_app_src_set_caps( (GstAppSrc*) l_source, gst_caps_from_string( caps.c_str() ) );
+	    gst_element_set_state( l_pipeline, GST_STATE_PLAYING );
+	    cout << "Streaming started on port " << start_port << endl;
+	    cout << "Watch stream with the command:" << endl;
+	    cout << "gst-launch tcpclientsrc host=[ip] port=" << start_port << " ! multipartdemux ! jpegdec ! autovideosink" << endl;
+	} else {
+	    cout << "A gstreamer error occurred: " << l_error->message << endl;
+	}
+
+	// Cannot rely on pipeline, as there maybe a situation where the pipeline is null
+	if( (!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph) ) {
+	    if( r_error == NULL ) {
+		r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
+		gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
+		gst_element_set_state( r_pipeline, GST_STATE_PLAYING );
+		cout << "Streaming started on port " << start_port + 1 << endl;
+		cout << "Watch stream with the command:" << endl;
+		cout << "gst-launch tcpclientsrc host=[ip] port=" << start_port + 1 << " ! multipartdemux ! jpegdec ! autovideosink" << endl;
+	    } else {
+		cout << "A gstreamer error occurred: " << r_error->message << endl;
+	    }
+	}
+  }
 
   while(1){
 
@@ -975,10 +1060,10 @@ int main(int argc, char* argv[]) {
 			std::string filename = save_filename + "0.jpg";
 			cvSaveImage(filename.c_str(), l);
 			filename = save_filename + "1.jpg";
-			if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage(filename.c_str(), r);
+			if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage(filename.c_str(), r);
 
 			/* save stereo matches */
-			if ((stereo_matches_filename != "") &&
+			if ((stereo_matches_filename != "") && (!show_FAST) &&
 			    ((skip_frames == 0) || (matches > 5))) {
 				lcam->save_matches(stereo_matches_filename, l_, matches, true);
 				printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
@@ -1034,14 +1119,33 @@ int main(int argc, char* argv[]) {
 		corners_left->show(l_,ww,hh,1);
 	}
 
+    /*
+     * The streaming bit - seems a bit hacky, someone else can try
+     * and convert an IPLImage directly to something GStreamer can handle.
+     * My bitbanging abilities just aren't up to the task.
+     */
+    if (stream) {
+	    CvMat* l_buf;
+	    l_buf = cvEncodeImage(".jpg", l);
+
+	    l_app_buffer = gst_app_buffer_new( l_buf->data.ptr, l_buf->step, NULL, l_buf->data.ptr );
+	    g_signal_emit_by_name( l_source, "push-buffer", l_app_buffer, &ret );
+
+	    if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+		    CvMat* r_buf;
+		    r_buf = cvEncodeImage(".jpg", r);
+
+		    r_app_buffer = gst_app_buffer_new( r_buf->data.ptr, r_buf->step, NULL, r_buf->data.ptr );
+		    g_signal_emit_by_name( r_source, "push-buffer", r_app_buffer, &ret );
+	    }
+    }
+
 	/* display the left and right images */
-	if ((!save_images) &&
-		(!calibrate_offsets) &&
-		(stereo_matches_filename == "")) {
-        cvShowImage(left_image_title.c_str(), l);
-        if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) {
-   	        cvShowImage(right_image_title.c_str(), r);
-        }
+	if ((!save_images) && (!calibrate_offsets) && (!headless) && (stereo_matches_filename == "")) {
+	    cvShowImage(left_image_title.c_str(), l);
+	    if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+		    cvShowImage(right_image_title.c_str(), r);
+	    }
 	}
 
     skip_frames--;
@@ -1057,7 +1161,7 @@ int main(int argc, char* argv[]) {
 	  (stereo_matches_filename == "")) {
 
 	  cvDestroyWindow(left_image_title.c_str());
-	  if ((!show_matches) && (!show_depthmap) && (!show_anaglyph)) {
+	  if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
 	      cvDestroyWindow(right_image_title.c_str());
 	  }
   }

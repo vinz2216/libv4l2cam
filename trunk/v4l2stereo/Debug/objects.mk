@@ -4,4 +4,4 @@
 
 USER_OBJS :=
 
-LIBS := -lcv -lhighgui
+LIBS := -lcv -lgstapp-0.10 -lhighgui
