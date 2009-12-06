@@ -1,5 +1,13 @@
 #include "fast.h"
 
+int descriptor_lookup[] = {
+0,20,4,19,9,17,13,14,16,10,19,6,19,1,19,-3,18,-8,15,-12,11,-16,7,-18,2,-19,-2,-19,-7,-18,-11,-16,-15,-12,-18,-8,-19,-3,-19,1,-19,6,-16,10,-13,14,-9,17,-4,19,
+0,40,9,38,19,35,27,29,33,21,38,12,39,2,39,-7,36,-17,30,-25,23,-32,14,-37,5,-39,-5,-39,-14,-37,-23,-32,-30,-25,-36,-17,-39,-7,-39,2,-38,12,-33,21,-27,29,-19,35,-9,38,
+0,60,14,58,28,52,41,43,50,32,57,18,59,3,58,-11,54,-25,46,-38,35,-48,22,-55,7,-59,-7,-59,-22,-55,-35,-48,-46,-38,-54,-25,-58,-11,-59,3,-57,18,-50,32,-41,43,-28,52,-14,58,
+0,80,19,77,38,70,54,58,67,42,76,24,79,5,78,-14,72,-34,61,-50,47,-64,29,-74,10,-79,-10,-79,-29,-74,-47,-64,-61,-50,-72,-34,-78,-14,-79,5,-76,24,-67,42,-54,58,-38,70,-19,77,
+0,100,24,96,48,87,68,72,84,53,95,30,99,6,98,-18,90,-42,77,-63,58,-80,36,-92,12,-99,-12,-99,-36,-92,-58,-80,-77,-63,-90,-42,-98,-18,-99,6,-95,30,-84,53,-68,72,-48,87,-24,96,
+};
+
 fast::fast() {
     scores = new int[FAST_MAX_CORNERS];
     corners = new xy[FAST_MAX_CORNERS];
@@ -21,9 +29,13 @@ fast::fast() {
     interocular_disparity = NULL;
     threshold = 100;
     num_nonmax = 0;
+
+    //descriptor_lookup = new int[radius*width*2];
+    //create_descriptor_lookup(FAST_DESCRIPTOR_RADIUS, FAST_DESCRIPTOR_WIDTH, lookup);
 }
 
 fast::~fast() {
+	//delete[] descriptor_lookup;
     delete[] scores;
     delete[] corners;
     delete[] nonmax;
@@ -6146,6 +6158,87 @@ int fast::update(
     return (ret_num_corners);
 }
 
+/* creates a set of "true scale" binary descriptors for each feature */
+void fast::update_descriptors(
+	unsigned char *img,
+	int img_width,
+	int img_height,
+	unsigned int* descriptor)
+{
+	int f, radius, disp;
+
+	for (f = 0; f < num_nonmax; f++) {
+		disp = (int)interocular_disparity[f] - 1;
+		if (disp > 0) {
+			radius = disp/(FAST_SUBPIXEL*6);
+			if (radius < 10) radius = 10;
+		}
+		else {
+			radius = 10;
+		}
+		compute_descriptor(
+			img, img_width, img_height,
+			nonmax[f].x, nonmax[f].y,
+			radius, f, descriptor);
+	}
+}
+
+/*
+ * creates a binary descriptor for an area with the given radius
+ * The descriptor consists of 4 integers, each containing a 5x5 array of bits
+ */
+void fast::compute_descriptor(
+	unsigned char *img,
+	int img_width,
+	int img_height,
+	int x, int y,
+	int radius,
+	int descriptor_index,
+	unsigned int* descriptor)
+{
+	int mean = 0;
+	int max = img_width * img_height*3-3;
+	int xx,yy,r,w,n2,n=0;
+	for (r = 1; r <= FAST_DESCRIPTOR_RADIUS; r++) {
+		for (w = 0; w < FAST_DESCRIPTOR_WIDTH; w++, n += 2) {
+			xx = x + (descriptor_lookup[n] * radius / 100);
+			yy = y + (descriptor_lookup[n+1] * radius / 100);
+			n2 = (yy*img_width + xx) * 3;
+			if ((n2 > -1) && (n2 < max)) {
+			    mean += img[n2] + img[n2+1] + img[n2+2];
+			}
+		}
+	}
+	mean /= (FAST_DESCRIPTOR_RADIUS*FAST_DESCRIPTOR_WIDTH);
+
+	n=0;
+	int bit = 1;
+	int bitno = 0;
+	int offset = descriptor_index*4;
+	descriptor[offset] = 0;
+	descriptor[offset+1] = 0;
+	descriptor[offset+2] = 0;
+	descriptor[offset+3] = 0;
+	for (r = 1; r <= FAST_DESCRIPTOR_RADIUS; r++) {
+		for (w = 0; w < FAST_DESCRIPTOR_WIDTH; w++, n += 2) {
+			xx = x + (descriptor_lookup[n] * radius / 100);
+			yy = y + (descriptor_lookup[n+1] * radius / 100);
+			n2 = (yy*img_width + xx) * 3;
+			if ((n2 > -1) && (n2 < max)) {
+			    if (img[n2] + img[n2+1] + img[n2+2] > mean) {
+			    	descriptor[offset] |= bit;
+			    }
+			}
+			if (bitno == 31) {
+				bit = 1;
+				bitno = 0;
+				offset++;
+			}
+		}
+	}
+
+}
+
 /* shows FAST corners */
 void fast::show(
     unsigned char *outbuf,
@@ -6562,6 +6655,77 @@ bool colour) { /* whether to additionally save colour of each match */
 	}
 }
 
+/* saves feature descriptors to file for use by other programs */
+int fast::save_descriptors(
+std::string filename, /* filename to save as */
+unsigned char *img,
+int img_width,
+int img_height)
+{
+	int max = 0;
+	int i,ctr;
+
+	for (i = 0; i < num_nonmax; i++) {
+		if (interocular_disparity[i] > 0) max++;
+	}
+
+	if (max > 40) {
+		FILE *file = fopen(filename.c_str(), "wb");
+		if (file != NULL) {
+			struct MatchData {
+				unsigned short int probability;
+				unsigned short int x;
+				unsigned short int y;
+				unsigned short int disparity;
+				unsigned int descriptor0;
+				unsigned int descriptor1;
+				unsigned int descriptor2;
+				unsigned int descriptor3;
+			};
+
+			unsigned int* descriptor = new unsigned int[4];
+			MatchData *m = new MatchData[FAST_MAX_CORNERS_PREVIOUS];
+			ctr = 0;
+			for (i = 0; i < num_nonmax; i++) {
+				if (interocular_disparity[i] > 0) {
+					m[ctr].probability = (unsigned short int)1000;
+					m[ctr].x = (unsigned short int)nonmax[i].x*FAST_SUBPIXEL;
+					m[ctr].y = (unsigned short int)nonmax[i].y;
+					m[ctr].disparity = (unsigned short int)(interocular_disparity[i]-1);
+
+					int radius = (int)interocular_disparity[i] - 1;
+					radius /= FAST_SUBPIXEL*6;
+					if (radius < 10) radius = 10;
+					compute_descriptor(
+						img, img_width, img_height,
+						nonmax[i].x, nonmax[i].y,
+						radius,
+						0, descriptor);
+					m[ctr].descriptor0 = descriptor[0];
+					m[ctr].descriptor1 = descriptor[1];
+					m[ctr].descriptor2 = descriptor[2];
+					m[ctr].descriptor3 = descriptor[3];
+
+					ctr++;
+				}
+			}
+			if (ctr < FAST_MAX_CORNERS_PREVIOUS) {
+				m[ctr].x = 9999;
+				m[ctr].y = 9999;
+			}
+
+			fwrite(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
+			delete[] m;
+			delete[] descriptor;
+
+			printf("%d feature descriptors saved to %s\n", max, filename.c_str());
+			fclose(file);
+		}
+	}
+
+    return(max);
+}
+
 /*!
  * \brief returns true if the given file exists
  * \param filename name of the file
@@ -6576,6 +6740,25 @@ bool fast::FileExists(
     if (inf.good()) flag = true;
     inf.close();
     return(flag);
+}
+
+void fast::create_descriptor_lookup(
+	int radius,
+	int width,
+	int* lookup)
+{
+	int r,w,n=0;
+
+	printf("int descriptor_lookup[] = {\n");
+	for (r = 1; r <= radius; r++) {
+		for (w = 0; w < width; w++, n += 2) {
+			lookup[n] = (int)(r * 100 * sin(w * 3.1415927*2 / width) / radius);
+			lookup[n+1] = (int)(r * 100 * cos(w * 3.1415927*2 / width) / radius);
+			printf("%d,%d,", lookup[n], lookup[n+1]);
+		}
+		printf("\n");
+	}
+	printf("};\n");
 }
 
 /* loads stereo matches from file */
@@ -6605,7 +6788,7 @@ bool colour) { /* whether to additionally save colour of each match */
 				};
 
 				MatchData *m = new MatchData[FAST_MAX_CORNERS_PREVIOUS];
-				fread(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
+				size_t s = fread(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
 				num_nonmax = 0;
 				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
 					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
@@ -6627,7 +6810,7 @@ bool colour) { /* whether to additionally save colour of each match */
 				};
 
 				MatchDataColour *m = new MatchDataColour[FAST_MAX_CORNERS_PREVIOUS];
-				fread(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
+				size_t s = fread(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
 				num_nonmax = 0;
 				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
 					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
