@@ -515,7 +515,7 @@ int use_priors) /* if non-zero then use priors, assuming time between frames is 
 	int idx, max, curr_idx = 0, search_idx, winner_idx = 0;
 	int no_of_possible_matches = 0, matches = 0;
 	int itt, prev_matches;
-	int grad_diff0, gradL0, grad_diff1, gradL1, grad_anti;
+	int grad_diff0, gradL0, grad_diff1=0, gradL1=0, grad_anti;
 	int p, pmax=1, prev_right_x, right_x;
 	int min_left, min_right, disp_left=0, disp_left_x=0;
 	int disp_right=0, disp_right_x=0, dx, dy, x2, dist;

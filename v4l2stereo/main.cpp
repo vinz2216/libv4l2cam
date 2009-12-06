@@ -105,6 +105,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --scale0               Calibration scale of the left camera");
   opt->addUsage( "     --scale1               Calibration scale of the right camera");
   opt->addUsage( "     --fast                 Show FAST corners");
+  opt->addUsage( "     --descriptors          Saves feature descriptor for each FAST corner");
   opt->addUsage( "     --fov                  Field of view in degrees");
   opt->addUsage( " -f  --fps                  Frames per second");
   opt->addUsage( " -s  --skip                 Skip this number of frames");
@@ -132,6 +133,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "coeff11" );
   opt->setOption(  "coeff12" );
   opt->setOption(  "fast" );
+  opt->setOption(  "descriptors" );
   opt->setOption(  "rot0" );
   opt->setOption(  "rot1" );
   opt->setOption(  "save" );
@@ -460,6 +462,11 @@ int main(int argc, char* argv[]) {
   int fps = 30;
   if( opt->getValue( 'f' ) != NULL  || opt->getValue( "fps" ) != NULL  ) {
 	  fps = atoi(opt->getValue("fps"));
+  }
+
+  std::string descriptors_filename = "";
+  if( opt->getValue( "descriptors" ) != NULL  ) {
+	  descriptors_filename = opt->getValue("descriptors");
   }
 
   std::string stereo_matches_filename = "";
@@ -1112,8 +1119,17 @@ int main(int argc, char* argv[]) {
 		/* save stereo matches to a file, then quit */
 		if ((stereo_matches_filename != "") && (!save_images) &&
 			((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
+			/* save the matches */
 			corners_left->save_matches(stereo_matches_filename, l_, ww, true);
 			break;
+		}
+
+		/* save stereo matches to a file, then quit */
+		if ((descriptors_filename != "") && (!save_images) &&
+			((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
+			if (corners_left->save_descriptors(descriptors_filename, l_, ww, hh) > 40) {
+			    break;
+			}
 		}
 
 		corners_left->show(l_,ww,hh,1);
