@@ -12,7 +12,8 @@ CPP_SRCS += \
 ../main.cpp \
 ../motionmodel.cpp \
 ../polynomial.cpp \
-../stereo.cpp 
+../stereo.cpp \
+../stereodense.cpp 
 
 OBJS += \
 ./anyoption.o \
@@ -23,7 +24,8 @@ OBJS += \
 ./main.o \
 ./motionmodel.o \
 ./polynomial.o \
-./stereo.o 
+./stereo.o \
+./stereodense.o 
 
 CPP_DEPS += \
 ./anyoption.d \
@@ -34,7 +36,8 @@ CPP_DEPS += \
 ./main.d \
 ./motionmodel.d \
 ./polynomial.d \
-./stereo.d 
+./stereo.d \
+./stereodense.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
