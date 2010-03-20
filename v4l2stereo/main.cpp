@@ -34,11 +34,11 @@
 #include "anyoption.h"
 #include "drawing.h"
 #include "stereo.h"
-//#include "motionmodel.h"
+#include "stereodense.h"
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.042
+#define VERSION 1.043
 
 using namespace std;
 
@@ -54,6 +54,7 @@ int main(int argc, char* argv[]) {
   bool show_anaglyph = false;
   bool show_histogram = false;
   bool show_lines = false;
+  bool show_disparity_map = false;
   bool rectify_images = false;
   bool show_FAST = false;
   int use_priors = 1;
@@ -74,51 +75,55 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " " );
   opt->addUsage( "Usage: " );
   opt->addUsage( "" );
-  opt->addUsage( " -0  --dev0                 Video device number of the left camera");
-  opt->addUsage( " -1  --dev1                 Video device number of the right camera");
-  opt->addUsage( " -w  --width                Image width in pixels");
-  opt->addUsage( " -h  --height               Image height in pixels");
-  opt->addUsage( " -x  --offsetx              Calibration x offset in pixels");
-  opt->addUsage( " -y  --offsety              Calibration y offset in pixels");
-  opt->addUsage( " -d  --disparity            Max disparity as a percent of image width");
-  opt->addUsage( "     --ground               y coordinate of the ground plane as percent of image height");
-  opt->addUsage( "     --features             Show stereo features");
-  opt->addUsage( "     --matches              Show stereo matches");
-  opt->addUsage( "     --regions              Show regions");
-  opt->addUsage( "     --depth                Show depth map");
-  opt->addUsage( "     --lines                Show lines");
-  opt->addUsage( "     --anaglyph             Show anaglyph");
-  opt->addUsage( "     --histogram            Show disparity histogram");
-  opt->addUsage( "     --calibrate            Calibrate offsets");
-  opt->addUsage( "     --cd0x                 Centre of distortion x coord for the left camera");
-  opt->addUsage( "     --cd0y                 Centre of distortion y coord for the left camera");
-  opt->addUsage( "     --cd1x                 Centre of distortion x coord for the right camera");
-  opt->addUsage( "     --cd1y                 Centre of distortion y coord for the right camera");
-  opt->addUsage( "     --coeff00              Distortion coefficient 0 for the left camera");
-  opt->addUsage( "     --coeff01              Distortion coefficient 1 for the left camera");
-  opt->addUsage( "     --coeff02              Distortion coefficient 2 for the left camera");
-  opt->addUsage( "     --coeff10              Distortion coefficient 0 for the right camera");
-  opt->addUsage( "     --coeff11              Distortion coefficient 1 for the right camera");
-  opt->addUsage( "     --coeff12              Distortion coefficient 2 for the right camera");
-  opt->addUsage( "     --rot0                 Calibration rotation of the left camera in radians");
-  opt->addUsage( "     --rot1                 Calibration rotation of the right camera in radians");
-  opt->addUsage( "     --scale0               Calibration scale of the left camera");
-  opt->addUsage( "     --scale1               Calibration scale of the right camera");
-  opt->addUsage( "     --fast                 Show FAST corners");
-  opt->addUsage( "     --descriptors          Saves feature descriptor for each FAST corner");
-  opt->addUsage( "     --fov                  Field of view in degrees");
-  opt->addUsage( " -f  --fps                  Frames per second");
-  opt->addUsage( " -s  --skip                 Skip this number of frames");
-  opt->addUsage( " -i  --input                Loads stereo matches from the given output file");
-  opt->addUsage( " -o  --output               Saves stereo matches to the given output file");
-  opt->addUsage( "     --log                  Logs stereo matches to the given output file (only when no file exists)");
-  opt->addUsage( " -V  --version              Show version number");
-  opt->addUsage( "     --save                 Save raw images");
-  opt->addUsage( "     --flipright            Flip the right image");
-  opt->addUsage( "     --flipleft             Flip the left image");
-  opt->addUsage( "     --stream               Stream output using gstreamer");
-  opt->addUsage( "     --headless             Disable video output (for use with --stream)");
-  opt->addUsage( "     --help                 Show help");
+  opt->addUsage( " -0  --dev0                     Video device number of the left camera");
+  opt->addUsage( " -1  --dev1                     Video device number of the right camera");
+  opt->addUsage( " -w  --width                    Image width in pixels");
+  opt->addUsage( " -h  --height                   Image height in pixels");
+  opt->addUsage( " -x  --offsetx                  Calibration x offset in pixels");
+  opt->addUsage( " -y  --offsety                  Calibration y offset in pixels");
+  opt->addUsage( " -d  --disparity                Max disparity as a percent of image width");
+  opt->addUsage( "     --ground                   y coordinate of the ground plane as percent of image height");
+  opt->addUsage( "     --features                 Show stereo features");
+  opt->addUsage( "     --disparitymap             Show dense disparity map");
+  opt->addUsage( "     --disparitystep            Disparity step size in pixels for dense stereo");
+  opt->addUsage( "     --smoothing                Smoothing radius in pixels for dense stereo");
+  opt->addUsage( "     --patchsize                Correlation patch radius in pixels for dense stereo");
+  opt->addUsage( "     --matches                  Show stereo matches");
+  opt->addUsage( "     --regions                  Show regions");
+  opt->addUsage( "     --depth                    Show depth map");
+  opt->addUsage( "     --lines                    Show lines");
+  opt->addUsage( "     --anaglyph                 Show anaglyph");
+  opt->addUsage( "     --histogram                Show disparity histogram");
+  opt->addUsage( "     --calibrate                Calibrate offsets");
+  opt->addUsage( "     --cd0x                     Centre of distortion x coord for the left camera");
+  opt->addUsage( "     --cd0y                     Centre of distortion y coord for the left camera");
+  opt->addUsage( "     --cd1x                     Centre of distortion x coord for the right camera");
+  opt->addUsage( "     --cd1y                     Centre of distortion y coord for the right camera");
+  opt->addUsage( "     --coeff00                  Distortion coefficient 0 for the left camera");
+  opt->addUsage( "     --coeff01                  Distortion coefficient 1 for the left camera");
+  opt->addUsage( "     --coeff02                  Distortion coefficient 2 for the left camera");
+  opt->addUsage( "     --coeff10                  Distortion coefficient 0 for the right camera");
+  opt->addUsage( "     --coeff11                  Distortion coefficient 1 for the right camera");
+  opt->addUsage( "     --coeff12                  Distortion coefficient 2 for the right camera");
+  opt->addUsage( "     --rot0                     Calibration rotation of the left camera in radians");
+  opt->addUsage( "     --rot1                     Calibration rotation of the right camera in radians");
+  opt->addUsage( "     --scale0                   Calibration scale of the left camera");
+  opt->addUsage( "     --scale1                   Calibration scale of the right camera");
+  opt->addUsage( "     --fast                     Show FAST corners");
+  opt->addUsage( "     --descriptors              Saves feature descriptor for each FAST corner");
+  opt->addUsage( "     --fov                      Field of view in degrees");
+  opt->addUsage( " -f  --fps                      Frames per second");
+  opt->addUsage( " -s  --skip                     Skip this number of frames");
+  opt->addUsage( " -i  --input                    Loads stereo matches from the given output file");
+  opt->addUsage( " -o  --output                   Saves stereo matches to the given output file");
+  opt->addUsage( "     --log                      Logs stereo matches to the given output file (only when no file exists)");
+  opt->addUsage( " -V  --version                  Show version number");
+  opt->addUsage( "     --save                     Save raw images");
+  opt->addUsage( "     --flipright                Flip the right image");
+  opt->addUsage( "     --flipleft                 Flip the left image");
+  opt->addUsage( "     --stream                   Stream output using gstreamer");
+  opt->addUsage( "     --headless                 Disable video output (for use with --stream)");
+  opt->addUsage( "     --help                     Show help");
   opt->addUsage( "" );
 
   opt->setOption(  "ground" );
@@ -152,6 +157,9 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "log" );
   opt->setOption(  "skip", 's' );
   opt->setOption(  "fov" );
+  opt->setOption(  "disparitystep" );
+  opt->setOption(  "smoothing" );
+  opt->setOption(  "patchsize" );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
@@ -166,6 +174,7 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "version", 'V' );
   opt->setFlag(  "stream"  );
   opt->setFlag(  "headless"  );
+  opt->setFlag(  "disparitymap"  );
 
   opt->processCommandArgs(argc, argv);
 
@@ -220,6 +229,18 @@ int main(int argc, char* argv[]) {
       return(0);
   }
 
+  if( opt->getFlag( "disparitymap" ) ) {
+	  show_regions = false;
+	  show_features = false;
+	  show_matches = false;
+	  show_depthmap = false;
+	  show_anaglyph = false;
+	  show_histogram = false;
+	  show_lines = false;
+	  show_FAST = false;
+	  show_disparity_map = true;
+  }
+
   if( opt->getFlag( "features" ) ) {
 	  show_regions = false;
 	  show_features = true;
@@ -229,6 +250,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   if( opt->getFlag( "histogram" ) ) {
@@ -240,6 +262,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = true;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   if( opt->getFlag( "matches" ) ) {
@@ -251,6 +274,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   if( opt->getFlag( "regions" ) ) {
@@ -262,6 +286,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   if( opt->getFlag( "depth" ) ) {
@@ -273,6 +298,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   if( opt->getFlag( "lines" ) ) {
@@ -284,6 +310,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = true;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   if( opt->getFlag( "anaglyph" ) ) {
@@ -295,6 +322,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   bool calibrate_offsets = false;
@@ -308,6 +336,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = false;
+	  show_disparity_map = false;
   }
 
   int desired_corner_features = 70;
@@ -321,6 +350,7 @@ int main(int argc, char* argv[]) {
 	  show_histogram = false;
 	  show_lines = false;
 	  show_FAST = true;
+	  show_disparity_map = false;
 	  desired_corner_features = atoi(opt->getValue("fast"));
 	  if (desired_corner_features > 150) desired_corner_features=150;
 	  if (desired_corner_features < 50) desired_corner_features=50;
@@ -489,6 +519,24 @@ int main(int argc, char* argv[]) {
 	  skip_frames = atoi(opt->getValue("skip"));
   }
 
+  // disparity step size in pixels for dense stereo
+  int disparity_step = 8;
+  if( opt->getValue( "disparitystep" ) != NULL  ) {
+	  disparity_step = atoi(opt->getValue("disparitystep"));
+  }
+
+  // radius used for patch matching in dense stereo
+  int disparity_map_correlation_radius = 8;
+  if( opt->getValue( "patchsize" ) != NULL  ) {
+	  disparity_map_correlation_radius = atoi(opt->getValue("patchsize"));
+  }
+
+  // radius for disparity space smoothing in dense stereo
+  int disparity_map_smoothing_radius = 4;
+  if( opt->getValue( "smoothing" ) != NULL  ) {
+	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
+  }
+
   delete opt;
 
   Camera c(dev0.c_str(), ww, hh, fps);
@@ -510,6 +558,7 @@ int main(int argc, char* argv[]) {
   if (show_depthmap) left_image_title = "Depth map";
   if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
   if (show_anaglyph) left_image_title = "Anaglyph";
+  if (show_disparity_map) left_image_title = "Disparity map";
 
 //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
@@ -518,7 +567,11 @@ int main(int argc, char* argv[]) {
 	  (stereo_matches_filename == "")) {
 
       cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-      if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+      if ((!show_matches) &&
+    	  (!show_FAST) &&
+    	  (!show_depthmap) &&
+    	  (!show_anaglyph) &&
+    	  (!show_disparity_map)) {
           cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
       }
   }
@@ -592,7 +645,11 @@ int main(int argc, char* argv[]) {
 	l_pipeline = gst_parse_launch( l_pipetext.c_str(), &l_error );
 
 	// If needed, create right image pipeline
-	if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+	if ((!show_matches) &&
+		(!show_FAST) &&
+		(!show_depthmap) &&
+		(!show_anaglyph) &&
+		(!show_disparity_map)) {
 	    r_pipeline = gst_parse_launch( r_pipetext.c_str(), &r_error );
 	}
 
@@ -609,7 +666,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Cannot rely on pipeline, as there maybe a situation where the pipeline is null
-	if( (!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph) ) {
+	if( (!show_matches) &&
+		(!show_FAST) &&
+		(!show_depthmap) &&
+		(!show_anaglyph) &&
+		(!show_disparity_map)) {
 	    if( r_error == NULL ) {
 		r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
 		gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
@@ -622,6 +683,10 @@ int main(int argc, char* argv[]) {
 	    }
 	}
   }
+
+  // dense disparity
+  int* disparity_space = NULL;
+  int* disparity_map = NULL;
 
   while(1){
 
@@ -1009,6 +1074,31 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	if (show_disparity_map) {
+		if (disparity_space == NULL) {
+		    disparity_space = new int[ww * (hh/SVS_VERTICAL_SAMPLING)];
+		    disparity_map = new int[ww * (hh/SVS_VERTICAL_SAMPLING) * 2];
+		}
+
+        stereodense::update_disparity_map(
+                l_,r_,ww,hh,
+                calibration_offset_x, calibration_offset_y,
+                SVS_VERTICAL_SAMPLING,
+                max_disparity_percent,
+                disparity_map_correlation_radius,
+                disparity_map_smoothing_radius,
+                disparity_step,
+                disparity_space,
+                disparity_map);
+
+        stereodense::show(
+                l_,ww,hh,
+                SVS_VERTICAL_SAMPLING,
+                disparity_map_smoothing_radius,
+                max_disparity_percent,
+                disparity_map);
+	}
+
 	/* show depth map */
 	if (show_depthmap) {
 		if (depthmap_buffer == NULL) {
@@ -1067,7 +1157,12 @@ int main(int argc, char* argv[]) {
 			std::string filename = save_filename + "0.jpg";
 			cvSaveImage(filename.c_str(), l);
 			filename = save_filename + "1.jpg";
-			if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) cvSaveImage(filename.c_str(), r);
+			if ((!show_matches) &&
+				(!show_FAST) &&
+				(!show_depthmap) &&
+				(!show_anaglyph) &&
+				(!show_disparity_map))
+				cvSaveImage(filename.c_str(), r);
 
 			/* save stereo matches */
 			if ((stereo_matches_filename != "") && (!show_FAST) &&
@@ -1147,7 +1242,11 @@ int main(int argc, char* argv[]) {
 	    l_app_buffer = gst_app_buffer_new( l_buf->data.ptr, l_buf->step, NULL, l_buf->data.ptr );
 	    g_signal_emit_by_name( l_source, "push-buffer", l_app_buffer, &ret );
 
-	    if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+	    if ((!show_matches) &&
+	    	(!show_FAST) &&
+	    	(!show_depthmap) &&
+	    	(!show_anaglyph) &&
+	    	(!show_disparity_map)) {
 		    CvMat* r_buf;
 		    r_buf = cvEncodeImage(".jpg", r);
 
@@ -1159,7 +1258,11 @@ int main(int argc, char* argv[]) {
 	/* display the left and right images */
 	if ((!save_images) && (!calibrate_offsets) && (!headless) && (stereo_matches_filename == "")) {
 	    cvShowImage(left_image_title.c_str(), l);
-	    if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+	    if ((!show_matches) &&
+	    	(!show_FAST) &&
+	    	(!show_depthmap) &&
+	    	(!show_anaglyph) &&
+	    	(!show_disparity_map)) {
 		    cvShowImage(right_image_title.c_str(), r);
 	    }
 	}
@@ -1177,7 +1280,11 @@ int main(int argc, char* argv[]) {
 	  (stereo_matches_filename == "")) {
 
 	  cvDestroyWindow(left_image_title.c_str());
-	  if ((!show_matches) && (!show_FAST) && (!show_depthmap) && (!show_anaglyph)) {
+	  if ((!show_matches) &&
+		  (!show_FAST) &&
+		  (!show_depthmap) &&
+		  (!show_anaglyph) &&
+		  (!show_disparity_map)) {
 	      cvDestroyWindow(right_image_title.c_str());
 	  }
   }
@@ -1186,11 +1293,12 @@ int main(int argc, char* argv[]) {
 
   delete lcam;
   delete rcam;
-  //delete motion;
   delete corners_left;
   delete lines;
   if (rectification_buffer != NULL) delete[] rectification_buffer;
   if (depthmap_buffer != NULL) delete[] depthmap_buffer;
+  if (disparity_space != NULL) delete[] disparity_space;
+  if (disparity_map != NULL) delete[] disparity_map;
 
   return 0;
 }
