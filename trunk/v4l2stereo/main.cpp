@@ -526,7 +526,7 @@ int main(int argc, char* argv[]) {
   }
 
   // radius used for patch matching in dense stereo
-  int disparity_map_correlation_radius = 8;
+  int disparity_map_correlation_radius = 1;
   if( opt->getValue( "patchsize" ) != NULL  ) {
 	  disparity_map_correlation_radius = atoi(opt->getValue("patchsize"));
   }
@@ -685,8 +685,8 @@ int main(int argc, char* argv[]) {
   }
 
   // dense disparity
-  int* disparity_space = NULL;
-  int* disparity_map = NULL;
+  unsigned int* disparity_space = NULL;
+  unsigned int* disparity_map = NULL;
 
   while(1){
 
@@ -1076,8 +1076,11 @@ int main(int argc, char* argv[]) {
 
 	if (show_disparity_map) {
 		if (disparity_space == NULL) {
-		    disparity_space = new int[ww * (hh/SVS_VERTICAL_SAMPLING)];
-		    disparity_map = new int[ww * (hh/SVS_VERTICAL_SAMPLING) * 2];
+			int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+			int disparity_space_length = (max_disparity_pixels / disparity_step) * SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius);
+			int disparity_map_length = SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius) * 2;
+		    disparity_space = new unsigned int[disparity_space_length];
+		    disparity_map = new unsigned int[disparity_map_length];
 		}
 
         stereodense::update_disparity_map(
@@ -1088,6 +1091,7 @@ int main(int argc, char* argv[]) {
                 disparity_map_correlation_radius,
                 disparity_map_smoothing_radius,
                 disparity_step,
+                true,
                 disparity_space,
                 disparity_map);
 
