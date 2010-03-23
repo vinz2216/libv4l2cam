@@ -20,6 +20,8 @@
 #ifndef STEREODENSE_H_
 #define STEREODENSE_H_
 
+#define STEREO_DENSE_SMOOTH_VERTICAL 1
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,14 +32,41 @@
 using namespace std;
 
 class stereodense {
-public:
+protected:
 
-	static void get_sums(
-		unsigned char* img,
+	static int SAD(
+		unsigned char* img_left,
+		unsigned char* img_right,
 		int img_width,
 		int img_height,
-		int y,
-		int* sums);
+		int x_left,
+		int y_left,
+		int x_right,
+		int y_right,
+		int radius);
+
+	static void cross_check(
+		unsigned char* img_left,
+		unsigned char* img_right,
+		int img_width,
+		int disparity_space_width,
+		int disparity_space_height,
+		int offset_x,
+		int offset_y,
+		int vertical_sampling,
+		int smoothing_radius,
+		int similarity_threshold,
+		unsigned int* disparity_map);
+
+public:
+
+	static void disparity_map_from_disparity_space(
+		unsigned int* disparity_space,
+		int disparity_space_width,
+		int disparity_space_height,
+		int disparity_step,
+		int no_of_disparities,
+		unsigned int* disparity_map);
 
 	static void update_disparity_map(
 		unsigned char* img_left,
@@ -51,8 +80,9 @@ public:
 		int correlation_radius,
 		int smoothing_radius,
 		int disparity_step,
-		int *disparity_space,
-		int *disparity_map);
+		bool use_cross_checking,
+		unsigned int *disparity_space,
+		unsigned int *disparity_map);
 
 	static void show(
 		unsigned char* img,
@@ -61,7 +91,7 @@ public:
 		int vertical_sampling,
 		int smoothing_radius,
 		int max_disparity_percent,
-		int *disparity_map);
+		unsigned int *disparity_map);
 };
 
 #endif /* STEREODENSE_H_ */
