@@ -1,5 +1,10 @@
 /*
     Dense stereo correspondence
+    For a description of this algorithm see:
+        An Introduction to 3D Computer Vision Techniques and Algorithms,
+        Buguslaw Cyganek & J. Paul Siebert,
+        ISBN 978-0-470-01704-3
+        Section 6.6.4
     Copyright (C) 2010 Bob Mottram
     fuzzgun@gmail.com
 
@@ -45,27 +50,37 @@ protected:
 		int y_right,
 		int radius);
 
-	static void cross_check(
+	static bool cross_check_pixel(
+		int x,
+		int y,
+		int disparity,
+		int similarity_threshold,
 		unsigned char* img_left,
 		unsigned char* img_right,
 		int img_width,
-		int disparity_space_width,
-		int disparity_space_height,
+		int img_height,
 		int offset_x,
 		int offset_y,
-		int vertical_sampling,
 		int smoothing_radius,
-		int similarity_threshold,
-		unsigned int* disparity_map);
+		int vertical_sampling);
 
 public:
 
 	static void disparity_map_from_disparity_space(
+		unsigned char* img_left,
+		unsigned char* img_right,
+		int img_width,
+		int img_height,
+		int offset_x,
+		int offset_y,
+		int smoothing_radius,
+		int vertical_sampling,
 		unsigned int* disparity_space,
 		int disparity_space_width,
 		int disparity_space_height,
 		int disparity_step,
 		int no_of_disparities,
+		int similarity_threshold,
 		unsigned int* disparity_map);
 
 	static void update_disparity_map(
@@ -80,7 +95,6 @@ public:
 		int correlation_radius,
 		int smoothing_radius,
 		int disparity_step,
-		bool use_cross_checking,
 		unsigned int *disparity_space,
 		unsigned int *disparity_map);
 

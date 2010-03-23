@@ -532,7 +532,7 @@ int main(int argc, char* argv[]) {
   }
 
   // radius for disparity space smoothing in dense stereo
-  int disparity_map_smoothing_radius = 4;
+  int disparity_map_smoothing_radius = 5;
   if( opt->getValue( "smoothing" ) != NULL  ) {
 	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
   }
@@ -1091,7 +1091,6 @@ int main(int argc, char* argv[]) {
                 disparity_map_correlation_radius,
                 disparity_map_smoothing_radius,
                 disparity_step,
-                true,
                 disparity_space,
                 disparity_map);
 
