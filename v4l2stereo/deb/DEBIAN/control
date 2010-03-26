@@ -1,5 +1,5 @@
 Package: v4l2stereo
-Version: 1.043
+Version: 1.044
 Section: utils
 Maintainer: Bob Mottram <fuzzgun@gmail.com>
 Architecture: all
