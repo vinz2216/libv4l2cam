@@ -25,10 +25,10 @@
 <option id="gnu.cpp.compiler.exe.debug.option.optimization.level.932589452" name="Optimization Level" superClass="gnu.cpp.compiler.exe.debug.option.optimization.level" value="gnu.cpp.compiler.optimization.level.most" valueType="enumerated"/>
 <option id="gnu.cpp.compiler.exe.debug.option.debugging.level.1062876677" name="Debug Level" superClass="gnu.cpp.compiler.exe.debug.option.debugging.level" value="gnu.cpp.compiler.debugging.level.max" valueType="enumerated"/>
 <option id="gnu.cpp.compiler.option.include.paths.1013260630" name="Include paths (-I)" superClass="gnu.cpp.compiler.option.include.paths" valueType="includePath">
-<listOptionValue builtIn="false" value="/usr/local/include/opencv"/>
+<listOptionValue builtIn="false" value="/usr/include/opencv"/>
 <listOptionValue builtIn="false" value="/usr/include/gstreamer-0.10"/>
 </option>
-<option id="gnu.cpp.compiler.option.other.other.1837723327" name="Other flags" superClass="gnu.cpp.compiler.option.other.other" value="-c -fmessage-length=0 -lcam -lcv -lcxcore -lcvaux -lhighgui `pkg-config --cflags --libs gstreamer-0.10` -L/usr/local/lib -lcv -lcxcore -lcvaux -lhighgui `pkg-config --cflags --libs glib-2.0` `pkg-config --cflags --libs gstreamer-plugins-base-0.10` -lgstapp-0.10" valueType="string"/>
+<option id="gnu.cpp.compiler.option.other.other.1837723327" name="Other flags" superClass="gnu.cpp.compiler.option.other.other" value="-c -fmessage-length=0 -lcam -lcv -lcxcore -lcvaux -lhighgui `pkg-config --cflags --libs gstreamer-0.10` -L/usr/lib -lcv -lcxcore -lcvaux -lhighgui `pkg-config --cflags --libs glib-2.0` `pkg-config --cflags --libs gstreamer-plugins-base-0.10` -lgstapp-0.10" valueType="string"/>
 <option id="gnu.cpp.compiler.option.other.verbose.1778233062" name="Verbose (-v)" superClass="gnu.cpp.compiler.option.other.verbose" value="false" valueType="boolean"/>
 <inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1629330580" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 </tool>
@@ -41,10 +41,10 @@
 <tool id="cdt.managedbuild.tool.gnu.c.linker.exe.debug.503735420" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.exe.debug"/>
 <tool id="cdt.managedbuild.tool.gnu.cpp.linker.exe.debug.1221598488" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.exe.debug">
 <option id="gnu.cpp.link.option.paths.1144887144" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" valueType="libPaths">
-<listOptionValue builtIn="false" value="/usr/local/lib"/>
+<listOptionValue builtIn="false" value="/usr/lib"/>
 <listOptionValue builtIn="false" value="/usr/lib/gstreamer-0.10"/>
 </option>
-<option id="gnu.cpp.link.option.flags.264691064" name="Linker flags" superClass="gnu.cpp.link.option.flags" value="/usr/local/lib/libcxcore.so /usr/local/lib/libcvaux.so /usr/local/lib/libcv.so /usr/local/lib/libhighgui.so&#10;" valueType="string"/>
+<option id="gnu.cpp.link.option.flags.264691064" name="Linker flags" superClass="gnu.cpp.link.option.flags" value="/usr/lib/libcxcore.so /usr/lib/libcvaux.so /usr/lib/libcv.so /usr/lib/libhighgui.so" valueType="string"/>
 <option id="gnu.cpp.link.option.libs.623307255" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" valueType="libs">
 <listOptionValue builtIn="false" value="cv"/>
 <listOptionValue builtIn="false" value="gstapp-0.10"/>
