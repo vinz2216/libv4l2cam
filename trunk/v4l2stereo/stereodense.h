@@ -109,6 +109,7 @@ public:
 		int correlation_radius,
 		int smoothing_radius,
 		int disparity_step,
+		int disparity_threshold_percent,
 		unsigned int *disparity_space,
 		unsigned int *disparity_map);
 

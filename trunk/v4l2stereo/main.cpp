@@ -40,7 +40,7 @@
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.043
+#define VERSION 1.044
 
 using namespace std;
 
@@ -88,6 +88,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --features                 Show stereo features");
   opt->addUsage( "     --disparitymap             Show dense disparity map");
   opt->addUsage( "     --disparitystep            Disparity step size in pixels for dense stereo");
+  opt->addUsage( "     --disparitythreshold       Threshold applied to the disparity map as a percentage of max disparity");
   opt->addUsage( "     --smoothing                Smoothing radius in pixels for dense stereo");
   opt->addUsage( "     --patchsize                Correlation patch radius in pixels for dense stereo");
   opt->addUsage( "     --matches                  Show stereo matches");
@@ -162,6 +163,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "disparitystep" );
   opt->setOption(  "smoothing" );
   opt->setOption(  "patchsize" );
+  opt->setOption(  "disparitythreshold" );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
@@ -537,6 +539,12 @@ int main(int argc, char* argv[]) {
   int disparity_map_smoothing_radius = 5;
   if( opt->getValue( "smoothing" ) != NULL  ) {
 	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
+  }
+
+  // disparity map threshold as a percentage
+  int disparity_threshold_percent = 0;
+  if( opt->getValue( "disparitythreshold" ) != NULL  ) {
+	  disparity_threshold_percent = atoi(opt->getValue("disparitythreshold"));
   }
 
   delete opt;
@@ -1093,6 +1101,7 @@ int main(int argc, char* argv[]) {
                 disparity_map_correlation_radius,
                 disparity_map_smoothing_radius,
                 disparity_step,
+                disparity_threshold_percent,
                 disparity_space,
                 disparity_map);
 

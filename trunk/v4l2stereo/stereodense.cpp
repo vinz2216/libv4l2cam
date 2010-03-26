@@ -327,6 +327,7 @@ void stereodense::disparity_map_from_disparity_space(
  * \param correlation_radius radius in pixels used for patch matching
  * \param smoothing_radius radius in pixels used for smoothing of the disparity space
  * \param disparity_step step size for sampling different disparities
+ * \param disparity_threshold_percent a threshold applied to the disparity map
  * \param disparity_space array used for the disparity space
  * \param disparity_map returned disparity map
  */
@@ -342,6 +343,7 @@ void stereodense::update_disparity_map(
 	int correlation_radius,
 	int smoothing_radius,
 	int disparity_step,
+	int disparity_threshold_percent,
 	unsigned int *disparity_space,
 	unsigned int *disparity_map)
 {
@@ -450,6 +452,16 @@ void stereodense::update_disparity_map(
 		max_disparity/disparity_step,
 		similarity_threshold,
 		disparity_map);
+
+	// optionally apply a threshold to the disparity map
+	if (disparity_threshold_percent > 0) {
+		int disparity_threshold_pixels = disparity_threshold_percent * max_disparity / 100;
+	    for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
+		    if (disparity_map[i+1] < disparity_threshold_pixels) {
+		    	disparity_map[i+1] = 0;
+		    }
+	    }
+	}
 }
 
 /*!
