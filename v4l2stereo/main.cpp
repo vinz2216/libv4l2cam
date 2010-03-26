@@ -8,6 +8,8 @@
 		libgstreamer-plugins-base0.10-dev
 		libgst-dev
 
+    sudo apt-get install libcv4 libhighgui4 libcvaux4 libcv-dev libcvaux-dev libhighgui-dev libgstreamer-plugins-base0.10-dev libgst-dev
+
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or

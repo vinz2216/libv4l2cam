@@ -103,10 +103,10 @@ int stereodense::SAD(
 		for (int dy = -radius; dy <= radius; dy++) {
 			int n_left = (y_left*img_width + x_left - radius)*3;
 			int n_right = (y_right*img_width + x_right - radius)*3;
-			for (int dx = -radius; dx <= radius; dx++) {
-			    sad += abs((img_left[n_left++] - mean_b_left) - (img_right[n_right++] - mean_b_right)) +
-			           abs((img_left[n_left++] - mean_g_left) - (img_right[n_right++] - mean_g_right)) +
-			           abs((img_left[n_left++] - mean_r_left) - (img_right[n_right++] - mean_r_right));
+			for (int dx = -radius; dx <= radius; dx++, n_left += 3, n_right += 3) {
+			    sad += abs((img_left[n_left] - mean_b_left) - (img_right[n_right] - mean_b_right)) +
+			           abs((img_left[n_left+1] - mean_g_left) - (img_right[n_right+1] - mean_g_right)) +
+			           abs((img_left[n_left+2] - mean_r_left) - (img_right[n_right+2] - mean_r_right));
 			}
 		}
 	}
