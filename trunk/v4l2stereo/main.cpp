@@ -1077,7 +1077,7 @@ int main(int argc, char* argv[]) {
 	if (show_disparity_map) {
 		if (disparity_space == NULL) {
 			int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
-			int disparity_space_length = (max_disparity_pixels / disparity_step) * SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius);
+			int disparity_space_length = (max_disparity_pixels / disparity_step) * SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius) * 2;
 			int disparity_map_length = SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius) * 2;
 		    disparity_space = new unsigned int[disparity_space_length];
 		    disparity_map = new unsigned int[disparity_map_length];

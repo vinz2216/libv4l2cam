@@ -39,6 +39,14 @@ using namespace std;
 class stereodense {
 protected:
 
+	static void mean_row_reflectance(
+		unsigned char* img,
+		int img_width,
+		int y,
+		int &mean_r,
+		int &mean_g,
+		int &mean_b);
+
 	static int SAD(
 		unsigned char* img_left,
 		unsigned char* img_right,
@@ -48,7 +56,13 @@ protected:
 		int y_left,
 		int x_right,
 		int y_right,
-		int radius);
+		int radius,
+		int mean_r_left,
+		int mean_g_left,
+		int mean_b_left,
+		int mean_r_right,
+		int mean_g_right,
+		int mean_b_right);
 
 	static bool cross_check_pixel(
 		int x,
