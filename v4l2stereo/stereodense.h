@@ -77,7 +77,13 @@ protected:
 		int offset_x,
 		int offset_y,
 		int smoothing_radius,
-		int vertical_sampling);
+		int vertical_sampling,
+		int mean_r_left,
+		int mean_g_left,
+		int mean_b_left,
+		int mean_r_right,
+		int mean_g_right,
+		int mean_b_right);
 
 public:
 
