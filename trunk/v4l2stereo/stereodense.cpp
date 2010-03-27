@@ -101,8 +101,8 @@ int stereodense::SAD(
 
 		sad = 0;
 		for (int dy = -radius; dy <= radius; dy++) {
-			int n_left = (y_left*img_width + x_left - radius)*3;
-			int n_right = (y_right*img_width + x_right - radius)*3;
+			int n_left = ((y_left + dy)*img_width + x_left - radius)*3;
+			int n_right = ((y_right + dy)*img_width + x_right - radius)*3;
 			for (int dx = -radius; dx <= radius; dx++, n_left += 3, n_right += 3) {
 			    sad += abs((img_left[n_left] - mean_b_left) - (img_right[n_right] - mean_b_right)) +
 			           abs((img_left[n_left+1] - mean_g_left) - (img_right[n_right+1] - mean_g_right)) +
@@ -127,6 +127,12 @@ int stereodense::SAD(
  * \param offset_y calibration y offset
  * \param smoothing_radius smoothing radius for the disparity space
  * \param vertical_sampling vertical sampling rate
+ * \param mean_r_left mean red value for the left image row
+ * \param mean_g_left mean green value for the left image row
+ * \param mean_b_left mean blue value for the left image row
+ * \param mean_r_right mean red value for the right image row
+ * \param mean_g_right mean green value for the right image row
+ * \param mean_b_right mean blue value for the right image row
  */
 bool stereodense::cross_check_pixel(
 	int x,
@@ -140,7 +146,13 @@ bool stereodense::cross_check_pixel(
 	int offset_x,
 	int offset_y,
 	int smoothing_radius,
-	int vertical_sampling)
+	int vertical_sampling,
+	int mean_r_left,
+	int mean_g_left,
+	int mean_b_left,
+	int mean_r_right,
+	int mean_g_right,
+	int mean_b_right)
 {
 	bool check_ok = false;
 
@@ -154,17 +166,17 @@ bool stereodense::cross_check_pixel(
 
 		int n_left = (y_left*img_width + x_left)*3;
 		int n_right = (y_right*img_width + x_right)*3;
-		if (abs(img_left[n_left] - img_right[n_right]) +
-			abs(img_left[n_left+1] - img_right[n_right+1]) +
-			abs(img_left[n_left+2] - img_right[n_right+2]) <
+		if (abs((img_left[n_left]-mean_b_left) - (img_right[n_right]-mean_b_right)) +
+			abs((img_left[n_left+1]-mean_g_left) - (img_right[n_right+1]-mean_g_right)) +
+			abs((img_left[n_left+2]-mean_r_left) - (img_right[n_right+2]-mean_r_right)) <
 			similarity_threshold) {
-			if (abs(img_left[n_left+3] - img_right[n_right+3]) +
-				abs(img_left[n_left+4] - img_right[n_right+4]) +
-				abs(img_left[n_left+5] - img_right[n_right+5]) <
+			if (abs((img_left[n_left+3]-mean_b_left) - (img_right[n_right+3]-mean_b_right)) +
+				abs((img_left[n_left+4]-mean_g_left) - (img_right[n_right+4]-mean_g_right)) +
+				abs((img_left[n_left+5]-mean_r_left) - (img_right[n_right+5]-mean_r_right)) <
 				similarity_threshold) {
-				if (abs(img_left[n_left+6] - img_right[n_right+6]) +
-					abs(img_left[n_left+7] - img_right[n_right+7]) +
-					abs(img_left[n_left+8] - img_right[n_right+8]) <
+				if (abs((img_left[n_left+6]-mean_b_left) - (img_right[n_right+6]-mean_b_right)) +
+					abs((img_left[n_left+7]-mean_g_left) - (img_right[n_right+7]-mean_g_right)) +
+					abs((img_left[n_left+8]-mean_r_left) - (img_right[n_right+8]-mean_r_right)) <
 					similarity_threshold) {
 					check_ok = true;
 				}
@@ -220,12 +232,34 @@ void stereodense::disparity_map_from_disparity_space(
 	for (int disparity_index = 0; disparity_index < no_of_disparities; disparity_index++) {
 		int disparity_space_offset = disparity_index*disparity_space_pixels*2;
 
+		int mean_r_left=0, mean_g_left=0, mean_b_left=0;
+		int mean_r_right=0, mean_g_right=0, mean_b_right=0;
+
 		// for every pixel at this disparity
 		for (int y = 1; y < disparity_space_height-1; y++) {
+
+			int yy = y * img_height / disparity_space_height;
+			// find the average reflectance along the row
+			// this is used to correct for any colour differences
+			// between the two cameras
+			mean_row_reflectance(
+				img_left,
+				img_width,
+				yy,
+				mean_r_left, mean_g_left, mean_b_left);
+
+			mean_row_reflectance(
+				img_right,
+				img_width,
+				yy - offset_y,
+				mean_r_right, mean_g_right, mean_b_right);
+
+			int y2 = y/2;
 			int n_map = (y*disparity_space_width + 1)*2;
 			int n_space_inner = disparity_space_offset + (y*disparity_space_width) + 1;
 			for (int x = 1; x < disparity_space_width-1; x++, n_map += 2, n_space_inner++) {
-				int n_space_outer = disparity_space_pixels + disparity_space_offset + ((y/2)*disparity_space_width2) + (x/2);
+
+				int n_space_outer = disparity_space_pixels + disparity_space_offset + (y2*disparity_space_width2) + (x/2);
 
 				// small correlation window
 				unsigned int local_correlation_inner =
@@ -259,25 +293,13 @@ void stereodense::disparity_map_from_disparity_space(
 				if ((local_correlation > 0) && ((disparity_map[n_map] == 0) ||
 					(disparity_map[n_map] < local_correlation))) {
 
-					int disparity = (disparity_index*disparity_step);
+					for (int tries = 0; tries <= 4; tries++) {
 
-					if (cross_check_pixel(
-						x,
-						y,
-						disparity,
-						similarity_threshold,
-						img_left,
-						img_right,
-						img_width,
-						img_height,
-						offset_x,
-						offset_y,
-						smoothing_radius,
-						vertical_sampling)) {
+						int disparity = (disparity_index*disparity_step) + (tries*2);
 
 						if (cross_check_pixel(
 							x,
-							y+1,
+							y,
 							disparity,
 							similarity_threshold,
 							img_left,
@@ -287,11 +309,13 @@ void stereodense::disparity_map_from_disparity_space(
 							offset_x,
 							offset_y,
 							smoothing_radius,
-							vertical_sampling)) {
+							vertical_sampling,
+							mean_r_left, mean_g_left, mean_b_left,
+							mean_r_right, mean_g_right, mean_b_right)) {
 
 							if (cross_check_pixel(
 								x,
-								y-1,
+								y+1,
 								disparity,
 								similarity_threshold,
 								img_left,
@@ -301,14 +325,35 @@ void stereodense::disparity_map_from_disparity_space(
 								offset_x,
 								offset_y,
 								smoothing_radius,
-								vertical_sampling)) {
+								vertical_sampling,
+								mean_r_left, mean_g_left, mean_b_left,
+								mean_r_right, mean_g_right, mean_b_right)) {
 
-								disparity_map[n_map] = local_correlation;
-								disparity_map[n_map + 1] = disparity;
+								if (cross_check_pixel(
+									x,
+									y-1,
+									disparity,
+									similarity_threshold,
+									img_left,
+									img_right,
+									img_width,
+									img_height,
+									offset_x,
+									offset_y,
+									smoothing_radius,
+									vertical_sampling,
+									mean_r_left, mean_g_left, mean_b_left,
+									mean_r_right, mean_g_right, mean_b_right)) {
+
+									disparity_map[n_map] = local_correlation;
+									disparity_map[n_map + 1] = disparity;
+									break;
+								}
 							}
 						}
 					}
 				}
+
 			}
 		}
 	}
@@ -412,7 +457,10 @@ void stereodense::update_disparity_map(
 			int yy = y2 / STEREO_DENSE_SMOOTH_VERTICAL;
 			if ((yy > 1) && (yy < height2-2)) {
 
+				int yy2 = yy/2;
 				int x_right = -offset_x - disparity;
+
+				// for all pixels along the row
 				for (int x_left = 0; x_left < img_width - offset_x; x_left++, x_right++) {
 
 					if ((x_left - correlation_radius > -1) &&
@@ -420,6 +468,7 @@ void stereodense::update_disparity_map(
 						(x_right - correlation_radius > -1) &&
 						(x_right + correlation_radius < img_width)) {
 
+						// difference between patches in the left and right images
 						int sad =
 							SAD(img_left,img_right,img_width,img_height,
 								x_left, y,
@@ -434,7 +483,7 @@ void stereodense::update_disparity_map(
 								unsigned int v = max_patch_value - (unsigned int)sad;
 							    disparity_space[n_inner] += v;
 
-								int n_outer = ((yy/2)*width3 + (xx_inner/2)) + disparity_space_offset + disparity_space_pixels;
+								int n_outer = (yy2*width3 + (xx_inner/2)) + disparity_space_offset + disparity_space_pixels;
 							    disparity_space[n_outer] += v;
 							}
 						}
