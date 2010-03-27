@@ -27,6 +27,7 @@
 
 #define STEREO_DENSE_SMOOTH_VERTICAL 1
 
+#include <omp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

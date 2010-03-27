@@ -389,7 +389,7 @@ int main(int argc, char* argv[]) {
   	  hh = atoi(opt->getValue("height"));
   }
 
-  int calibration_offset_x = -16;
+  int calibration_offset_x = 0;//-16;
   if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
   	  calibration_offset_x = atoi(opt->getValue("offsetx"));
   }

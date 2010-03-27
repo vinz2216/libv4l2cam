@@ -215,9 +215,10 @@ void stereodense::disparity_map_from_disparity_space(
 	// clear the disparity map
 	memset((void*)disparity_map,'\0',disparity_space_pixels*2*sizeof(unsigned int));
 
-	// for each disparity
-	int disparity_space_offset = 0;
-	for (int disparity_index = 0; disparity_index < no_of_disparities; disparity_index++, disparity_space_offset += (disparity_space_pixels*2)) {
+	// process each disparity in parallel
+    #pragma omp parallel for
+	for (int disparity_index = 0; disparity_index < no_of_disparities; disparity_index++) {
+		int disparity_space_offset = disparity_index*disparity_space_pixels*2;
 
 		// for every pixel at this disparity
 		for (int y = 1; y < disparity_space_height-1; y++) {
@@ -374,12 +375,20 @@ void stereodense::update_disparity_map(
 	// clear disparity space
 	memset((void*)disparity_space,'\0',max_disparity*disparity_space_pixels*2*sizeof(unsigned int));
 
-	int mean_r_left=0, mean_g_left=0, mean_b_left=0;
-	int mean_r_right=0, mean_g_right=0, mean_b_right=0;
+    int no_of_disparities = max_disparity / disparity_step;
 
-	// test a number of possible disparities
-	int disparity_space_offset = 0;
-	for (int disparity = 0; disparity < max_disparity; disparity += disparity_step, disparity_space_offset += (disparity_space_pixels*2)) {
+	// test a number of possible disparities in parallel
+    #pragma omp parallel for
+	for (int disparity_index = 0; disparity_index < no_of_disparities; disparity_index++) {
+
+		// disparity in pixels
+	    int disparity = disparity_index * disparity_step;
+
+	    // offset within the disparity space array
+		int disparity_space_offset = disparity_index*disparity_space_pixels*2;
+
+		int mean_r_left=0, mean_g_left=0, mean_b_left=0;
+		int mean_r_right=0, mean_g_right=0, mean_b_right=0;
 
 		// insert correlation values into the disparity space
 		int y2 = 0;
@@ -455,7 +464,7 @@ void stereodense::update_disparity_map(
 
 	// optionally apply a threshold to the disparity map
 	if (disparity_threshold_percent > 0) {
-		int disparity_threshold_pixels = disparity_threshold_percent * max_disparity / 100;
+		unsigned int disparity_threshold_pixels = (unsigned int)(disparity_threshold_percent * max_disparity / 100);
 	    for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
 		    if (disparity_map[i+1] < disparity_threshold_pixels) {
 		    	disparity_map[i+1] = 0;
