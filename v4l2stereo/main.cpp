@@ -40,7 +40,7 @@
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.044
+#define VERSION 1.045
 
 using namespace std;
 
@@ -1102,6 +1102,7 @@ int main(int argc, char* argv[]) {
                 disparity_map_smoothing_radius,
                 disparity_step,
                 disparity_threshold_percent,
+                true,
                 disparity_space,
                 disparity_map);
 

@@ -39,6 +39,11 @@ using namespace std;
 
 class stereodense {
 protected:
+	static void despeckle_disparity_map(
+		int disparity_map_width,
+		int disparity_map_height,
+		unsigned int* disparity_map,
+		int max_disparity_pixels);
 
 	static void mean_row_reflectance(
 		unsigned char* img,
@@ -117,6 +122,7 @@ public:
 		int smoothing_radius,
 		int disparity_step,
 		int disparity_threshold_percent,
+		bool despeckle,
 		unsigned int *disparity_space,
 		unsigned int *disparity_map);
 
