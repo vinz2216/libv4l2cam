@@ -25,6 +25,56 @@
 #include "stereodense.h"
 
 /*!
+ * \brief removes speckling from the disparity map
+ * \param disparity_map_width width of the disparity map
+ * \param disparity_map_height height of the disparity map
+ * \param disparity_map disparity map data
+ * \param max_disparity_pixels maximum disparity in pixels
+ */
+void stereodense::despeckle_disparity_map(
+	int disparity_map_width,
+	int disparity_map_height,
+	unsigned int* disparity_map,
+	int max_disparity_pixels)
+{
+	unsigned int threshold = (unsigned int)(max_disparity_pixels*70/100);
+	unsigned int min_diff = (unsigned int)(max_disparity_pixels*5/100);
+	const int hits_threshold = 5;
+    #pragma omp parallel for
+	for (int y = 1; y < disparity_map_height-1; y++) {
+		for (int x = 1; x < disparity_map_width-1; x++) {
+			int n_map = (y*disparity_map_width + x)*2;
+            if (disparity_map[n_map+1] > threshold) {
+            	int hits = 0;
+            	unsigned int centre_disparity = disparity_map[n_map+1];
+            	for (int yy = y-1; yy <= y+1; yy++) {
+            		int n_map2 = (yy*disparity_map_width + x - 1)*2;
+            		for (int xx = x-1; xx <= x+1; xx++, n_map2 += 2) {
+            			unsigned int diff = centre_disparity - disparity_map[n_map2+1];
+            			if (diff > min_diff) {
+            				hits++;
+            				if (hits > hits_threshold) {
+            					yy = y+2;
+            					break;
+            				}
+            			}
+            		}
+            	}
+            	if (hits > hits_threshold) {
+            		disparity_map[n_map] = 0;
+            	}
+            }
+		}
+	}
+
+	for (int i = disparity_map_width*disparity_map_height*2-2; i >= 0; i -= 2) {
+		if (disparity_map[i] == 0) {
+			disparity_map[i + 1] = 0;
+		}
+	}
+}
+
+/*!
  * \brief returns the mean red/green/blue values for the given image row
  * \param img colour image data
  * \param img_width width of the image
@@ -374,6 +424,7 @@ void stereodense::disparity_map_from_disparity_space(
  * \param smoothing_radius radius in pixels used for smoothing of the disparity space
  * \param disparity_step step size for sampling different disparities
  * \param disparity_threshold_percent a threshold applied to the disparity map
+ * \param despeckle optionally apply despeckling to clean up the disparity map
  * \param disparity_space array used for the disparity space
  * \param disparity_map returned disparity map
  */
@@ -390,6 +441,7 @@ void stereodense::update_disparity_map(
 	int smoothing_radius,
 	int disparity_step,
 	int disparity_threshold_percent,
+	bool despeckle,
 	unsigned int *disparity_space,
 	unsigned int *disparity_map)
 {
@@ -511,6 +563,15 @@ void stereodense::update_disparity_map(
 		similarity_threshold,
 		disparity_map);
 
+	// clean up the disparity map
+	if (despeckle) {
+	    despeckle_disparity_map(
+		    disparity_space_width,
+		    disparity_space_height,
+		    disparity_map,
+		    max_disparity);
+	}
+
 	// optionally apply a threshold to the disparity map
 	if (disparity_threshold_percent > 0) {
 		unsigned int disparity_threshold_pixels = (unsigned int)(disparity_threshold_percent * max_disparity / 100);
@@ -556,4 +617,3 @@ void stereodense::show(
 		}
 	}
 }
-
