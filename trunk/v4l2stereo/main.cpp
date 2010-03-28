@@ -550,7 +550,7 @@ int main(int argc, char* argv[]) {
   }
 
   // cross checking threshold
-  int cross_checking_threshold = 35;
+  int cross_checking_threshold = 40;
   if( opt->getValue( "crosscheck" ) != NULL  ) {
 	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
   }
