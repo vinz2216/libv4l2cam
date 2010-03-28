@@ -411,7 +411,7 @@ void stereodense::disparity_map_from_disparity_space(
 }
 
 /*!
- * \brief calculates a disparity map given two images
+ * \brief updates the disparity space which contains matching correlation values for each possible disparity
  * \param img_left colour data for the left image2
  * \param img_right colour data for the right image
  * \param img_width width of the image
@@ -423,12 +423,11 @@ void stereodense::disparity_map_from_disparity_space(
  * \param correlation_radius radius in pixels used for patch matching
  * \param smoothing_radius radius in pixels used for smoothing of the disparity space
  * \param disparity_step step size for sampling different disparities
- * \param disparity_threshold_percent a threshold applied to the disparity map
- * \param despeckle optionally apply despeckling to clean up the disparity map
+ * \param disparity_space_width width of the disparity space
+ * \param disparity_space_height height of the disparity space
  * \param disparity_space array used for the disparity space
- * \param disparity_map returned disparity map
  */
-void stereodense::update_disparity_map(
+void stereodense::update_disparity_space(
 	unsigned char* img_left,
 	unsigned char* img_right,
 	int img_width,
@@ -440,14 +439,10 @@ void stereodense::update_disparity_map(
 	int correlation_radius,
 	int smoothing_radius,
 	int disparity_step,
-	int disparity_threshold_percent,
-	bool despeckle,
-	unsigned int *disparity_space,
-	unsigned int *disparity_map)
+	int disparity_space_width,
+	int disparity_space_height,
+	unsigned int *disparity_space)
 {
-	// pixel similarity threshold when cross checking
-	const int similarity_threshold = 30;
-
 	int patch_pixels = correlation_radius*2+1;
 	patch_pixels *= patch_pixels;
 	unsigned int max_patch_value = (unsigned int)(3*255*patch_pixels);
@@ -465,14 +460,11 @@ void stereodense::update_disparity_map(
 	else
 		ty = -offset_y;
 
-	int disparity_space_width = width2;
-	int disparity_space_height = img_height2/STEREO_DENSE_SMOOTH_VERTICAL;
 	int disparity_space_pixels = disparity_space_width*disparity_space_height;
+    int no_of_disparities = max_disparity / disparity_step;
 
 	// clear disparity space
-	memset((void*)disparity_space,'\0',max_disparity*disparity_space_pixels*2*sizeof(unsigned int));
-
-    int no_of_disparities = max_disparity / disparity_step;
+	memset((void*)disparity_space,'\0',no_of_disparities*disparity_space_pixels*2*sizeof(unsigned int));
 
 	// test a number of possible disparities in parallel
     #pragma omp parallel for
@@ -544,6 +536,65 @@ void stereodense::update_disparity_map(
 			}
 		}
 	}
+}
+
+/*!
+ * \brief calculates a disparity map given two images
+ * \param img_left colour data for the left image2
+ * \param img_right colour data for the right image
+ * \param img_width width of the image
+ * \param img_height height of the image
+ * \param offset_x calibration offset x
+ * \param offset_y calibration offset y
+ * \param vertical_sampling vertical sampling rate - we don't need every row
+ * \param max_disparity_percent maximum disparity as a percentage of image width
+ * \param correlation_radius radius in pixels used for patch matching
+ * \param smoothing_radius radius in pixels used for smoothing of the disparity space
+ * \param disparity_step step size for sampling different disparities
+ * \param disparity_threshold_percent a threshold applied to the disparity map
+ * \param despeckle optionally apply despeckling to clean up the disparity map
+ * \param disparity_space array used for the disparity space
+ * \param disparity_map returned disparity map
+ */
+void stereodense::update_disparity_map(
+	unsigned char* img_left,
+	unsigned char* img_right,
+	int img_width,
+	int img_height,
+	int offset_x,
+	int offset_y,
+	int vertical_sampling,
+	int max_disparity_percent,
+	int correlation_radius,
+	int smoothing_radius,
+	int disparity_step,
+	int disparity_threshold_percent,
+	bool despeckle,
+	unsigned int *disparity_space,
+	unsigned int *disparity_map)
+{
+	// pixel similarity threshold when cross checking
+	const int similarity_threshold = 30;
+	int disparity_space_width = img_width/smoothing_radius;
+	int disparity_space_height = (img_height / vertical_sampling)/STEREO_DENSE_SMOOTH_VERTICAL;
+	int max_disparity_pixels = max_disparity_percent * img_width / 100;
+
+	// create the disparity space
+	update_disparity_space(
+		img_left,
+		img_right,
+		img_width,
+		img_height,
+		offset_x,
+		offset_y,
+		vertical_sampling,
+		max_disparity_percent,
+		correlation_radius,
+		smoothing_radius,
+		disparity_step,
+		disparity_space_width,
+		disparity_space_height,
+		disparity_space);
 
 	// create the disparity map
 	disparity_map_from_disparity_space(
@@ -559,7 +610,7 @@ void stereodense::update_disparity_map(
 		disparity_space_width,
 		disparity_space_height,
 		disparity_step,
-		max_disparity/disparity_step,
+		max_disparity_pixels/disparity_step,
 		similarity_threshold,
 		disparity_map);
 
@@ -569,12 +620,12 @@ void stereodense::update_disparity_map(
 		    disparity_space_width,
 		    disparity_space_height,
 		    disparity_map,
-		    max_disparity);
+		    max_disparity_pixels);
 	}
 
 	// optionally apply a threshold to the disparity map
 	if (disparity_threshold_percent > 0) {
-		unsigned int disparity_threshold_pixels = (unsigned int)(disparity_threshold_percent * max_disparity / 100);
+		unsigned int disparity_threshold_pixels = (unsigned int)(disparity_threshold_percent * max_disparity_pixels / 100);
 	    for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
 		    if (disparity_map[i+1] < disparity_threshold_pixels) {
 		    	disparity_map[i+1] = 0;

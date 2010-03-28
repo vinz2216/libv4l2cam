@@ -90,6 +90,22 @@ protected:
 		int mean_g_right,
 		int mean_b_right);
 
+	static void update_disparity_space(
+		unsigned char* img_left,
+		unsigned char* img_right,
+		int img_width,
+		int img_height,
+		int offset_x,
+		int offset_y,
+		int vertical_sampling,
+		int max_disparity_percent,
+		int correlation_radius,
+		int smoothing_radius,
+		int disparity_step,
+		int disparity_space_width,
+		int disparity_space_height,
+		unsigned int *disparity_space);
+
 public:
 
 	static void disparity_map_from_disparity_space(
