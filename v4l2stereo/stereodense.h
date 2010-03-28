@@ -53,7 +53,17 @@ protected:
 		int y,
 		int &mean_r,
 		int &mean_g,
-		int &mean_b);
+		int &mean_b,
+	    int &mean_r_deviation,
+	    int &mean_g_deviation,
+	    int &mean_b_deviation);
+
+	static void colour_correction(
+		unsigned char* img_left,
+		unsigned char* img_right,
+		int img_width,
+		int img_height,
+		int offset_y);
 
 	static int SAD(
 		unsigned char* img_left,
@@ -64,13 +74,7 @@ protected:
 		int y_left,
 		int x_right,
 		int y_right,
-		int radius,
-		int mean_r_left,
-		int mean_g_left,
-		int mean_b_left,
-		int mean_r_right,
-		int mean_g_right,
-		int mean_b_right);
+		int radius);
 
 	static bool cross_check_pixel(
 		int x,
@@ -84,13 +88,7 @@ protected:
 		int offset_x,
 		int offset_y,
 		int smoothing_radius,
-		int vertical_sampling,
-		int mean_r_left,
-		int mean_g_left,
-		int mean_b_left,
-		int mean_r_right,
-		int mean_g_right,
-		int mean_b_right);
+		int vertical_sampling);
 
 	static void update_disparity_space(
 		unsigned char* img_left,
