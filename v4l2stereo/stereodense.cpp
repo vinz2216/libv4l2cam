@@ -280,26 +280,33 @@ bool stereodense::cross_check_pixel(
 	int y_right = (y*STEREO_DENSE_SMOOTH_VERTICAL*vertical_sampling) - offset_y;
 	int x_left = x*smoothing_radius;
 	int x_right = x_left - disparity - offset_x;
-	if ((x_right > -1) && (x_right < img_width) &&
+	int stride = img_width*3*2;
+	if ((x_right > 2) && (x_right < img_width-2) &&
 		(y_left < img_height-2) && (y_right < img_height-2)) {
 
 		int n_left = (y_left*img_width + x_left)*3;
 		int n_right = (y_right*img_width + x_right)*3;
-		if (abs(img_left[n_left] - img_right[n_right]) +
-			abs(img_left[n_left+1] - img_right[n_right+1]) +
-			abs(img_left[n_left+2] - img_right[n_right+2]) <
-			similarity_threshold) {
-			if (abs(img_left[n_left+3] - img_right[n_right+3]) +
-				abs(img_left[n_left+4] - img_right[n_right+4]) +
-				abs(img_left[n_left+5] - img_right[n_right+5]) <
+		for (int samples = 0; samples < 3; samples++) {
+			check_ok = false;
+			if (abs(img_left[n_left] - img_right[n_right]) +
+				abs(img_left[n_left+1] - img_right[n_right+1]) +
+				abs(img_left[n_left+2] - img_right[n_right+2]) <
 				similarity_threshold) {
-				if (abs(img_left[n_left+6] - img_right[n_right+6]) +
-					abs(img_left[n_left+7] - img_right[n_right+7]) +
-					abs(img_left[n_left+8] - img_right[n_right+8]) <
+				if (abs(img_left[n_left-stride] - img_right[n_right-stride]) +
+					abs(img_left[n_left+1-stride] - img_right[n_right+1-stride]) +
+					abs(img_left[n_left+2-stride] - img_right[n_right+2-stride]) <
 					similarity_threshold) {
-					check_ok = true;
+					if (abs(img_left[n_left+stride] - img_right[n_right+stride]) +
+						abs(img_left[n_left+1+stride] - img_right[n_right+1+stride]) +
+						abs(img_left[n_left+2+stride] - img_right[n_right+2+stride]) <
+						similarity_threshold) {
+						check_ok = true;
+					}
 				}
 			}
+			if (!check_ok) break;
+			n_left += 3;
+			n_right += 3;
 		}
 	}
     return(check_ok);
@@ -347,11 +354,11 @@ void stereodense::disparity_map_from_disparity_space(
 	memset((void*)disparity_map,'\0',disparity_space_pixels*2*sizeof(unsigned int));
 
 	// process each disparity in parallel
-    #pragma omp parallel for
 	for (int disparity_index = 0; disparity_index < no_of_disparities; disparity_index++) {
 		int disparity_space_offset = disparity_index*disparity_space_pixels*2;
 
 		// for every pixel at this disparity
+        #pragma omp parallel for
 		for (int y = 1; y < disparity_space_height-1; y++) {
 			int y2 = y/2;
 			int n_map = (y*disparity_space_width + 1)*2;
