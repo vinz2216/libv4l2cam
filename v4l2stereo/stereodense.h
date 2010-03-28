@@ -25,7 +25,8 @@
 #ifndef STEREODENSE_H_
 #define STEREODENSE_H_
 
-#define STEREO_DENSE_SMOOTH_VERTICAL 1
+#define STEREO_DENSE_SMOOTH_VERTICAL  1
+#define STEREO_DENSE_SUB_PIXEL        100
 
 #include <omp.h>
 #include <stdio.h>
@@ -39,6 +40,7 @@ using namespace std;
 
 class stereodense {
 protected:
+
 	static void despeckle_disparity_map(
 		int disparity_map_width,
 		int disparity_map_height,
@@ -139,6 +141,7 @@ public:
 		int disparity_step,
 		int disparity_threshold_percent,
 		bool despeckle,
+		int cross_checking_threshold,
 		unsigned int *disparity_space,
 		unsigned int *disparity_map);
 

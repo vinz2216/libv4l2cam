@@ -343,9 +343,9 @@ void stereodense::disparity_map_from_disparity_space(
 				if ((local_correlation > 0) && ((disparity_map[n_map] == 0) ||
 					(disparity_map[n_map] < local_correlation))) {
 
-					for (int tries = 0; tries <= 4; tries++) {
+					for (int tries = 0; tries < 8; tries++) {
 
-						int disparity = (disparity_index*disparity_step) + (tries*2);
+						int disparity = (disparity_index*disparity_step) + tries;
 
 						if (cross_check_pixel(
 							x,
@@ -570,11 +570,10 @@ void stereodense::update_disparity_map(
 	int disparity_step,
 	int disparity_threshold_percent,
 	bool despeckle,
+	int cross_checking_threshold,
 	unsigned int *disparity_space,
 	unsigned int *disparity_map)
 {
-	// pixel similarity threshold when cross checking
-	const int similarity_threshold = 30;
 	int disparity_space_width = img_width/smoothing_radius;
 	int disparity_space_height = (img_height / vertical_sampling)/STEREO_DENSE_SMOOTH_VERTICAL;
 	int max_disparity_pixels = max_disparity_percent * img_width / 100;
@@ -611,7 +610,7 @@ void stereodense::update_disparity_map(
 		disparity_space_height,
 		disparity_step,
 		max_disparity_pixels/disparity_step,
-		similarity_threshold,
+		cross_checking_threshold,
 		disparity_map);
 
 	// clean up the disparity map
@@ -631,6 +630,11 @@ void stereodense::update_disparity_map(
 		    	disparity_map[i+1] = 0;
 		    }
 	    }
+	}
+
+	// multiply disparity values so that sub-pixel interpolation is possible
+	for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
+		disparity_map[i + 1] *= STEREO_DENSE_SUB_PIXEL;
 	}
 }
 
@@ -653,7 +657,7 @@ void stereodense::show(
 	int max_disparity_percent,
 	unsigned int *disparity_map)
 {
-	int max_disparity = img_width * max_disparity_percent / 100;
+	int max_disparity_pixels = img_width * max_disparity_percent * STEREO_DENSE_SUB_PIXEL / 100;
 	int width2 = img_width/smoothing_radius;
 
 	for (int y = 0; y < img_height; y++) {
@@ -661,7 +665,7 @@ void stereodense::show(
 		for (int x = 0; x < img_width; x++) {
 			int n = ((y*img_width) + x)*3;
 			int n2b = (n2 + (x/smoothing_radius))*2;
-            unsigned char disparity = (unsigned char)((int)disparity_map[n2b + 1] * 255  / max_disparity);
+            unsigned char disparity = (unsigned char)((int)disparity_map[n2b + 1] * 255  / max_disparity_pixels);
             img[n] = disparity;
             img[n+1] = disparity;
             img[n+2] = disparity;

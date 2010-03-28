@@ -91,6 +91,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --disparitythreshold       Threshold applied to the disparity map as a percentage of max disparity");
   opt->addUsage( "     --smoothing                Smoothing radius in pixels for dense stereo");
   opt->addUsage( "     --patchsize                Correlation patch radius in pixels for dense stereo");
+  opt->addUsage( "     --crosscheck               Threshold used for dense stereo pixel cross checking");
   opt->addUsage( "     --matches                  Show stereo matches");
   opt->addUsage( "     --regions                  Show regions");
   opt->addUsage( "     --depth                    Show depth map");
@@ -164,6 +165,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "smoothing" );
   opt->setOption(  "patchsize" );
   opt->setOption(  "disparitythreshold" );
+  opt->setOption(  "crosscheck" );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
@@ -545,6 +547,12 @@ int main(int argc, char* argv[]) {
   int disparity_threshold_percent = 0;
   if( opt->getValue( "disparitythreshold" ) != NULL  ) {
 	  disparity_threshold_percent = atoi(opt->getValue("disparitythreshold"));
+  }
+
+  // cross checking threshold
+  int cross_checking_threshold = 35;
+  if( opt->getValue( "crosscheck" ) != NULL  ) {
+	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
   }
 
   delete opt;
@@ -1085,6 +1093,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (show_disparity_map) {
+
 		if (disparity_space == NULL) {
 			int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
 			int disparity_space_length = (max_disparity_pixels / disparity_step) * SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius) * 2;
@@ -1103,6 +1112,7 @@ int main(int argc, char* argv[]) {
                 disparity_step,
                 disparity_threshold_percent,
                 true,
+                cross_checking_threshold,
                 disparity_space,
                 disparity_map);
 
