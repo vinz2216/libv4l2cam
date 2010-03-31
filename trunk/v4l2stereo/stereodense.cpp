@@ -25,21 +25,77 @@
 #include "stereodense.h"
 
 /*!
+ * \brief expands a subregion of the given image with pixel interpolation.  It is assumed that the subregion has the same aspect as the original.
+ * \param img colour image data
+ * \param img_width width of the image
+ * \param img_height height of the image
+ * \param tx subregion top left x coordinate
+ * \param ty subregion top left y coordinate
+ * \param bx subregion bottom right x coordinate
+ * \param by subregion bottom right y coordinate
+ * \param expanded returned expanded image
+ */
+void stereodense::expand(
+	unsigned char *img,
+	int img_width,
+	int img_height,
+	int tx,
+	int ty,
+	int bx,
+	int by,
+	unsigned char *expanded)
+{
+	const int mult = 128;
+	const int mult2 = mult*2;
+	int w = (bx - tx) * mult;
+	int h = (by - ty) * mult;
+	int stride = img_width*3;
+    #pragma omp parallel for
+	for (int y = 0; y < img_height; y++) {
+		int n_expanded = y*img_width*3;
+		int yy = h*y/img_height;
+		int fraction_y = yy % mult;
+		yy = ty + (yy/mult);
+		for (int x = 0; x < img_width; x++, n_expanded += 3) {
+			int xx = w*x/img_width;
+			int fraction_x = xx % mult;
+			xx = tx + (xx/mult);
+            int n = (yy*img_width + xx)*3;
+
+            expanded[n_expanded] =
+            		((img[n] * fraction_x) + (img[n+3] * (mult-fraction_x)) +
+            		(img[n] * fraction_y) + (img[n+stride] * (mult-fraction_y))) /
+            		mult2;
+            expanded[n_expanded+1] =
+            		((img[n+1] * fraction_x) + (img[n+1+3] * (mult-fraction_x)) +
+            		(img[n+1] * fraction_y) + (img[n+1+stride] * (mult-fraction_y))) /
+            		mult2;
+            expanded[n_expanded+2] =
+            		((img[n+2] * fraction_x) + (img[n+2+3] * (mult-fraction_x)) +
+            		(img[n+2] * fraction_y) + (img[n+2+stride] * (mult-fraction_y))) /
+            		mult2;
+		}
+	}
+}
+
+/*!
  * \brief removes speckling from the disparity map
  * \param disparity_map_width width of the disparity map
  * \param disparity_map_height height of the disparity map
  * \param disparity_map disparity map data
  * \param max_disparity_pixels maximum disparity in pixels
  */
-void stereodense::despeckle_disparity_map(
+bool stereodense::despeckle_disparity_map(
 	int disparity_map_width,
 	int disparity_map_height,
 	unsigned int* disparity_map,
 	int max_disparity_pixels)
 {
-	unsigned int threshold = (unsigned int)(max_disparity_pixels*70/100);
+	bool pixels_removed = false;
+
+	unsigned int threshold = (unsigned int)(max_disparity_pixels*30/100);
 	unsigned int min_diff = (unsigned int)(max_disparity_pixels*5/100);
-	const int hits_threshold = 5;
+	const int hits_threshold = 6;
     #pragma omp parallel for
 	for (int y = 1; y < disparity_map_height-1; y++) {
 		for (int x = 1; x < disparity_map_width-1; x++) {
@@ -62,6 +118,7 @@ void stereodense::despeckle_disparity_map(
             	}
             	if (hits > hits_threshold) {
             		disparity_map[n_map] = 0;
+            		pixels_removed = true;
             	}
             }
 		}
@@ -72,6 +129,7 @@ void stereodense::despeckle_disparity_map(
 			disparity_map[i + 1] = 0;
 		}
 	}
+	return(pixels_removed);
 }
 
 /*!
@@ -553,8 +611,9 @@ void stereodense::update_disparity_space(
 						if (sad > -1) {
 							int xx_inner = x_left / smoothing_radius;
 							if ((xx_inner > 1) && (xx_inner < width2-2)) {
-								int n_inner = (yy*width2 + xx_inner) + disparity_space_offset;
 								unsigned int v = max_patch_value - (unsigned int)sad;
+
+								int n_inner = (yy*width2 + xx_inner) + disparity_space_offset;
 							    disparity_space[n_inner] += v;
 
 								int n_outer = (yy2*width3 + (xx_inner/2)) + disparity_space_offset + disparity_space_pixels;
@@ -608,13 +667,13 @@ void stereodense::update_disparity_map(
 	int disparity_space_height = (img_height / vertical_sampling)/STEREO_DENSE_SMOOTH_VERTICAL;
 	int max_disparity_pixels = max_disparity_percent * img_width / 100;
 
-	// correct the colours of the right image so that they're similar to the left
-	colour_correction(
-		img_left,
-		img_right,
-		img_width,
-		img_height,
-		offset_y);
+    // correct the colours of the right image so that they're similar to the left
+    colour_correction(
+	    img_left,
+	    img_right,
+	    img_width,
+	    img_height,
+	    offset_y);
 
 	// create the disparity space
 	update_disparity_space(
@@ -653,11 +712,15 @@ void stereodense::update_disparity_map(
 
 	// clean up the disparity map
 	if (despeckle) {
-	    despeckle_disparity_map(
+		int pass = 0;
+	    while (despeckle_disparity_map(
 		    disparity_space_width,
 		    disparity_space_height,
 		    disparity_map,
-		    max_disparity_pixels);
+		    max_disparity_pixels)) {
+	    	pass++;
+	    	if (pass > 5) break;
+	    }
 	}
 
 	// optionally apply a threshold to the disparity map
@@ -674,6 +737,7 @@ void stereodense::update_disparity_map(
 	for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
 		disparity_map[i + 1] *= STEREO_DENSE_SUB_PIXEL;
 	}
+
 }
 
 /*!
@@ -710,3 +774,4 @@ void stereodense::show(
 		}
 	}
 }
+
