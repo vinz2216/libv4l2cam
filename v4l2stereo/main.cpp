@@ -92,6 +92,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --smoothing                Smoothing radius in pixels for dense stereo");
   opt->addUsage( "     --patchsize                Correlation patch radius in pixels for dense stereo");
   opt->addUsage( "     --crosscheck               Threshold used for dense stereo pixel cross checking");
+  opt->addUsage( "     --zoom                     Zoom level given as a percentage");
   opt->addUsage( "     --matches                  Show stereo matches");
   opt->addUsage( "     --regions                  Show regions");
   opt->addUsage( "     --depth                    Show depth map");
@@ -166,6 +167,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "patchsize" );
   opt->setOption(  "disparitythreshold" );
   opt->setOption(  "crosscheck" );
+  opt->setOption(  "zoom" );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
@@ -555,6 +557,22 @@ int main(int argc, char* argv[]) {
 	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
   }
 
+  // zoom percentage
+  int zoom = 0;
+  if( opt->getValue( "zoom" ) != NULL  ) {
+	  zoom = atoi(opt->getValue("zoom"));
+	  if (zoom < 0) zoom = 0;
+	  if (zoom > 100) zoom = 100;
+  }
+  int zoom_tx = zoom * ((ww/2)*80/100) / 100;
+  int zoom_ty = zoom * ((hh/2)*80/100) / 100;
+  int zoom_bx = ww - zoom_tx;
+  int zoom_by = hh - zoom_ty;
+
+  // adjust offsets to compensate for the zoom
+  calibration_offset_x = calibration_offset_x * ww / (zoom_bx - zoom_tx);
+  calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
+
   delete opt;
 
   Camera c(dev0.c_str(), ww, hh, fps);
@@ -740,6 +758,17 @@ int main(int argc, char* argv[]) {
         rcam->rectify(r_, rectification_buffer);
         memcpy(r_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
     }
+
+	if (zoom > 0) {
+
+		unsigned char l2_[ww*hh*3];
+		unsigned char r2_[ww*hh*3];
+		memcpy((void*)l2_,l_,ww*hh*3);
+		memcpy((void*)r2_,r_,ww*hh*3);
+
+		stereodense::expand(l2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,l_);
+		stereodense::expand(r2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,r_);
+	}
 
     int calib_offset_x = calibration_offset_x;
     int calib_offset_y = calibration_offset_y;
@@ -1122,6 +1151,7 @@ int main(int argc, char* argv[]) {
                 disparity_map_smoothing_radius,
                 max_disparity_percent,
                 disparity_map);
+
 	}
 
 	/* show depth map */

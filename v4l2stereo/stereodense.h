@@ -40,8 +40,7 @@ using namespace std;
 
 class stereodense {
 protected:
-
-	static void despeckle_disparity_map(
+	static bool despeckle_disparity_map(
 		int disparity_map_width,
 		int disparity_map_height,
 		unsigned int* disparity_map,
@@ -107,6 +106,15 @@ protected:
 		unsigned int *disparity_space);
 
 public:
+	static void expand(
+		unsigned char *img,
+		int img_width,
+		int img_height,
+		int tx,
+		int ty,
+		int bx,
+		int by,
+		unsigned char *expanded);
 
 	static void disparity_map_from_disparity_space(
 		unsigned char* img_left,
