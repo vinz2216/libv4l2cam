@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -x  --offsetx                  Calibration x offset in pixels");
   opt->addUsage( " -y  --offsety                  Calibration y offset in pixels");
   opt->addUsage( " -d  --disparity                Max disparity as a percent of image width");
+  opt->addUsage( "     --equal                    Perform histogram equalisation");
   opt->addUsage( "     --ground                   y coordinate of the ground plane as percent of image height");
   opt->addUsage( "     --features                 Show stereo features");
   opt->addUsage( "     --disparitymap             Show dense disparity map");
@@ -183,6 +184,7 @@ int main(int argc, char* argv[]) {
   opt->setFlag(  "stream"  );
   opt->setFlag(  "headless"  );
   opt->setFlag(  "disparitymap"  );
+  opt->setFlag(  "equal"  );
 
   opt->processCommandArgs(argc, argv);
 
@@ -221,6 +223,12 @@ int main(int argc, char* argv[]) {
   if( opt->getFlag( "flipright" ) )
   {
 	  flip_right_image = true;
+  }
+
+  bool histogram_equalisation = false;
+  if( opt->getFlag( "equal" ) )
+  {
+	  histogram_equalisation = true;
   }
 
   bool save_images = false;
@@ -540,7 +548,7 @@ int main(int argc, char* argv[]) {
   }
 
   // radius for disparity space smoothing in dense stereo
-  int disparity_map_smoothing_radius = 5;
+  int disparity_map_smoothing_radius = 4;
   if( opt->getValue( "smoothing" ) != NULL  ) {
 	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
   }
@@ -552,7 +560,7 @@ int main(int argc, char* argv[]) {
   }
 
   // cross checking threshold
-  int cross_checking_threshold = 40;
+  int cross_checking_threshold = 60;
   if( opt->getValue( "crosscheck" ) != NULL  ) {
 	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
   }
@@ -724,6 +732,9 @@ int main(int argc, char* argv[]) {
   unsigned int* disparity_space = NULL;
   unsigned int* disparity_map = NULL;
 
+  IplImage* hist_image0 = NULL;
+  IplImage* hist_image1 = NULL;
+
   while(1){
 
     while(c.Get()==0 || c2.Get()==0) usleep(100);
@@ -768,6 +779,28 @@ int main(int argc, char* argv[]) {
 
 		stereodense::expand(l2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,l_);
 		stereodense::expand(r2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,r_);
+	}
+
+	if (histogram_equalisation) {
+
+		if (hist_image0 == NULL) {
+			hist_image0 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
+			hist_image1 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
+		}
+
+        #pragma omp parallel for
+		for (int i = 0; i < 2; i++) {
+			unsigned char *img = l_;
+			IplImage* hist_image = hist_image0;
+			if (i > 0) {
+				img = r_;
+				hist_image = hist_image1;
+			}
+			svs::histogram_equalise(
+				hist_image,
+				img, ww, hh);
+		}
+
 	}
 
     int calib_offset_x = calibration_offset_x;
@@ -1152,6 +1185,7 @@ int main(int argc, char* argv[]) {
                 max_disparity_percent,
                 disparity_map);
 
+        cvSmooth( l, l, CV_GAUSSIAN, 9, 9 );
 	}
 
 	/* show depth map */
@@ -1345,6 +1379,8 @@ int main(int argc, char* argv[]) {
   }
   cvReleaseImage(&l);
   cvReleaseImage(&r);
+  if (hist_image0 != NULL) cvReleaseImage(&hist_image0);
+  if (hist_image1 != NULL) cvReleaseImage(&hist_image1);
 
   delete lcam;
   delete rcam;
