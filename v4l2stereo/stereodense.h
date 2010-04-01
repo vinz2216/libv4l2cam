@@ -27,6 +27,7 @@
 
 #define STEREO_DENSE_SMOOTH_VERTICAL  1
 #define STEREO_DENSE_SUB_PIXEL        100
+#define STEREO_DENSE_OUTER_DIVISOR    2
 
 #include <omp.h>
 #include <stdio.h>
@@ -40,11 +41,6 @@ using namespace std;
 
 class stereodense {
 protected:
-	static bool despeckle_disparity_map(
-		int disparity_map_width,
-		int disparity_map_height,
-		unsigned int* disparity_map,
-		int max_disparity_pixels);
 
 	static void mean_row_reflectance(
 		unsigned char* img,
@@ -63,6 +59,12 @@ protected:
 		int img_width,
 		int img_height,
 		int offset_y);
+
+	static bool despeckle_disparity_map(
+		int disparity_map_width,
+		int disparity_map_height,
+		unsigned int* disparity_map,
+		int max_disparity_pixels);
 
 	static int SAD(
 		unsigned char* img_left,
@@ -106,6 +108,7 @@ protected:
 		unsigned int *disparity_space);
 
 public:
+
 	static void expand(
 		unsigned char *img,
 		int img_width,
