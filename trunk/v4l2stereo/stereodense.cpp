@@ -67,9 +67,9 @@ void stereodense::mean_row_reflectance(
 
 	n = y*img_width*3;
 	for (int x = 0; x < img_width; x++, n += 3) {
-        mean_r_deviation += abs(img[n + 2] - mean_r);
-        mean_g_deviation += abs(img[n + 1] - mean_g);
-        mean_b_deviation += abs(img[n] - mean_b);
+        mean_r_deviation += ABS(img[n + 2] - mean_r);
+        mean_g_deviation += ABS(img[n + 1] - mean_g);
+        mean_b_deviation += ABS(img[n] - mean_b);
 	}
 	mean_r_deviation /= img_width;
 	mean_g_deviation /= img_width;
@@ -218,14 +218,13 @@ bool stereodense::despeckle_disparity_map(
 {
 	bool pixels_removed = false;
 
-	unsigned int threshold = (unsigned int)(max_disparity_pixels*30/100);
 	unsigned int min_diff = (unsigned int)(max_disparity_pixels*5/100);
 	const int hits_threshold = 6;
     #pragma omp parallel for
 	for (int y = 1; y < disparity_map_height-1; y++) {
 		for (int x = 1; x < disparity_map_width-1; x++) {
 			int n_map = (y*disparity_map_width + x)*2;
-            if (disparity_map[n_map+1] > threshold) {
+            if (disparity_map[n_map+1] > 0) {
             	int hits = 0;
             	unsigned int centre_disparity = disparity_map[n_map+1];
             	for (int yy = y-1; yy <= y+1; yy++) {
@@ -281,24 +280,88 @@ int stereodense::SAD(
 	int y_right,
 	int radius)
 {
-	int sad = -1;
+	int sad = 0;
+	int left_horiz0=0,left_horiz1=0;
+	int right_horiz0=0,right_horiz1=0;
+	int left_vert0=0,left_vert1=0;
+	int right_vert0=0,right_vert1=0;
+	int left_green=0,left_red=0, left_blue=0;
+	int right_green=0,right_red=0,right_blue=0;
 
-	if ((x_left-radius > -1) && (x_right-radius > -1) &&
-		(x_left+radius < img_width-1) && (x_right+radius < img_width-1) &&
-		(y_left-radius > -1) && (y_right-radius > -1) &&
-		(y_left+radius < img_height-1) && (y_right+radius < img_height-1)) {
+	for (int dy = -radius; dy <= radius; dy++) {
+		int n_left = ((y_left + dy)*img_width + x_left - radius)*3;
+		int n_right = ((y_right + dy)*img_width + x_right - radius)*3;
+		for (int dx = -radius; dx <= radius; dx++, n_left += 3, n_right += 3) {
+			sad += ABS(img_left[n_left] - img_right[n_right]) +
+			       ABS(img_left[n_left+1] - img_right[n_right+1]) +
+			       ABS(img_left[n_left+2] - img_right[n_right+2]);
 
-		sad = 0;
-		for (int dy = -radius; dy <= radius; dy++) {
-			int n_left = ((y_left + dy)*img_width + x_left - radius)*3;
-			int n_right = ((y_right + dy)*img_width + x_right - radius)*3;
-			for (int dx = -radius; dx <= radius; dx++, n_left += 3, n_right += 3) {
-			    sad += abs(img_left[n_left] - img_right[n_right]) +
-			           abs(img_left[n_left+1] - img_right[n_right+1]) +
-			           abs(img_left[n_left+2] - img_right[n_right+2]);
+			// sum pixels for NSEW directions
+			int left_value = img_left[n_left+2];
+			int right_value = img_right[n_right+2];
+			left_red += left_value;
+			right_red += right_value;
+			left_green += img_left[n_left+1];
+			right_green += img_right[n_right+1];
+			left_blue += img_left[n_left];
+			right_blue += img_right[n_right];
+
+			if (dx < 0) {
+				left_horiz0 += left_value;
+				right_horiz0 += right_value;
 			}
+			else {
+				left_horiz1 += left_value;
+				right_horiz1 += right_value;
+			}
+
+			if (dy < 0) {
+				left_vert0 += left_value;
+				right_vert0 += right_value;
+			}
+			else {
+				left_vert1 += left_value;
+				right_vert1 += right_value;
+			}
+
 		}
 	}
+
+	// if the gradient directions don't match set the return value to -1
+    int left_horiz = left_horiz1 - left_horiz0;
+    int right_horiz = right_horiz1 - right_horiz0;
+    if (((left_horiz < 0) && (right_horiz > 0)) ||
+    	((left_horiz > 0) && (right_horiz < 0))) {
+    	sad = BAD_MATCH;
+    }
+    else {
+    	// vertical gradient
+        int left_vert = left_vert1 - left_vert0;
+        int right_vert = right_vert1 - right_vert0;
+        if (((left_vert < 0) && (right_vert > 0)) ||
+        	((left_vert > 0) && (right_vert < 0))) {
+        	sad = BAD_MATCH;
+        }
+        else {
+        	// red-green opponency
+        	int left_RG = left_red - left_green;
+        	int right_RG = right_red - right_green;
+            if (((left_RG < 0) && (right_RG > 0)) ||
+            	((left_RG > 0) && (right_RG < 0))) {
+            	sad = BAD_MATCH;
+            }
+            else {
+            	// blue-yellow opponency
+            	int left_BY = (left_blue*2) - left_green - left_red;
+            	int right_BY = (right_blue*2) - right_green - right_red;
+                if (((left_BY < 0) && (right_BY > 0)) ||
+                	((left_BY > 0) && (right_BY < 0))) {
+                	sad = BAD_MATCH;
+                }
+            }
+        }
+    }
+
 	return(sad);
 }
 
@@ -335,37 +398,37 @@ bool stereodense::cross_check_pixel(
 
 	// cross check pixel intensity values
 	int y_left = y*STEREO_DENSE_SMOOTH_VERTICAL*vertical_sampling;
-	int y_right = (y*STEREO_DENSE_SMOOTH_VERTICAL*vertical_sampling) - offset_y;
+	int y_right = y_left - offset_y;
 	int x_left = x*smoothing_radius;
 	int x_right = x_left - disparity - offset_x;
-	int stride = img_width*3*2;
-	if ((x_right > 2) && (x_right < img_width-2) &&
-		(y_left < img_height-2) && (y_right < img_height-2)) {
+	int stride = img_width*3;
 
-		int n_left = (y_left*img_width + x_left)*3;
-		int n_right = (y_right*img_width + x_right)*3;
-		for (int samples = 0; samples < 3; samples++) {
-			check_ok = false;
-			if (abs(img_left[n_left] - img_right[n_right]) +
-				abs(img_left[n_left+1] - img_right[n_right+1]) +
-				abs(img_left[n_left+2] - img_right[n_right+2]) <
-				similarity_threshold) {
-				if (abs(img_left[n_left-stride] - img_right[n_right-stride]) +
-					abs(img_left[n_left+1-stride] - img_right[n_right+1-stride]) +
-					abs(img_left[n_left+2-stride] - img_right[n_right+2-stride]) <
-					similarity_threshold) {
-					if (abs(img_left[n_left+stride] - img_right[n_right+stride]) +
-						abs(img_left[n_left+1+stride] - img_right[n_right+1+stride]) +
-						abs(img_left[n_left+2+stride] - img_right[n_right+2+stride]) <
-						similarity_threshold) {
+	int n_left = (y_left*img_width + x_left)*3;
+	int n_right = (y_right*img_width + x_right)*3;
+	for (int samples = 0; samples < 2; samples++) {
+		check_ok = false;
+		// initial sanity check
+		if (ABS(img_left[n_left+2] - img_right[n_right+2]) < similarity_threshold) {
+			if (ABS(img_left[n_left] - img_right[n_right]) +
+				ABS(img_left[n_left+1] - img_right[n_right+1]) +
+				ABS(img_left[n_left+2] - img_right[n_right+2])
+				< similarity_threshold) {
+				if (ABS(img_left[n_left-stride] - img_right[n_right-stride]) +
+					ABS(img_left[n_left+1-stride] - img_right[n_right+1-stride]) +
+					ABS(img_left[n_left+2-stride] - img_right[n_right+2-stride])
+					< similarity_threshold) {
+					if (ABS(img_left[n_left+stride] - img_right[n_right+stride]) +
+						ABS(img_left[n_left+1+stride] - img_right[n_right+1+stride]) +
+						ABS(img_left[n_left+2+stride] - img_right[n_right+2+stride])
+						< similarity_threshold) {
 						check_ok = true;
 					}
 				}
 			}
-			if (!check_ok) break;
-			n_left += 3;
-			n_right += 3;
 		}
+		if (!check_ok) break;
+		n_left += 3;
+		n_right += 3;
 	}
     return(check_ok);
 }
@@ -451,9 +514,9 @@ void stereodense::disparity_map_from_disparity_space(
 
 				// combined correlation value
 				// more emphasis on the centre, less on the surround
-				unsigned int local_correlation = (local_correlation_inner*STEREO_DENSE_OUTER_DIVISOR*STEREO_DENSE_OUTER_DIVISOR) + local_correlation_outer;
+				unsigned int local_correlation = (local_correlation_inner*STEREO_DENSE_OUTER_DIVISOR) + local_correlation_outer;
 
-				// update the disparity map
+				// is this the best correlation value so far?
 				if ((local_correlation > 0) && ((disparity_map[n_map] == 0) ||
 					(disparity_map[n_map] < local_correlation))) {
 
@@ -461,6 +524,7 @@ void stereodense::disparity_map_from_disparity_space(
 
 						int disparity = (disparity_index*disparity_step) + tries;
 
+						// if the pixels look similar then this may be a valid match
 						if (cross_check_pixel(
 							x,
 							y,
@@ -475,39 +539,10 @@ void stereodense::disparity_map_from_disparity_space(
 							smoothing_radius,
 							vertical_sampling)) {
 
-							if (cross_check_pixel(
-								x,
-								y+1,
-								disparity,
-								similarity_threshold,
-								img_left,
-								img_right,
-								img_width,
-								img_height,
-								offset_x,
-								offset_y,
-								smoothing_radius,
-								vertical_sampling)) {
-
-								if (cross_check_pixel(
-									x,
-									y-1,
-									disparity,
-									similarity_threshold,
-									img_left,
-									img_right,
-									img_width,
-									img_height,
-									offset_x,
-									offset_y,
-									smoothing_radius,
-									vertical_sampling)) {
-
-									disparity_map[n_map] = local_correlation;
-									disparity_map[n_map + 1] = disparity;
-									break;
-								}
-							}
+						    // update the disparity map
+						    disparity_map[n_map] = local_correlation;
+						    disparity_map[n_map + 1] = disparity;
+						    break;
 						}
 					}
 				}
@@ -585,40 +620,48 @@ void stereodense::update_disparity_space(
 		int disparity_space_offset = disparity_index*disparity_space_pixels*2;
 
 		// insert correlation values into the disparity space
-		int y2 = 0;
-		for (int y = ty; y < by; y += vertical_sampling, y2++) {
+        #pragma omp parallel for
+		for (int y2 = 0; y2 < by/vertical_sampling; y2++) {
+		    int y = y2*vertical_sampling;
 
 			int yy = y2 / STEREO_DENSE_SMOOTH_VERTICAL;
-			if ((yy > 1) && (yy < height2-2)) {
+			if ((y >= ty) && (yy > 1) && (yy < height2-2)) {
 
 				int yy2 = yy/STEREO_DENSE_OUTER_DIVISOR;
-				int x_right = -offset_x - disparity;
+				int x_right = -offset_x - disparity + correlation_radius;
+
+				int offsetx0 = x_right - correlation_radius;
+				if (offsetx0 < 0) {
+					offsetx0 = correlation_radius - offsetx0;
+				}
+				else {
+					offsetx0 = correlation_radius;
+				}
+
+				int offsetx1 = img_width - offset_x - correlation_radius;
+				if (offsetx1 >= img_width-correlation_radius) {
+					offsetx1 = img_width-correlation_radius-1;
+				}
 
 				// for all pixels along the row
-				for (int x_left = 0; x_left < img_width - offset_x; x_left++, x_right++) {
+				for (int x_left = offsetx0; x_left < offsetx1; x_left++, x_right++) {
 
-					if ((x_left - correlation_radius > -1) &&
-						(x_left + correlation_radius < img_width) &&
-						(x_right - correlation_radius > -1) &&
-						(x_right + correlation_radius < img_width)) {
+					int xx_inner = x_left / smoothing_radius;
+					if ((xx_inner > 1) && (xx_inner < width2-2)) {
 
-						// difference between patches in the left and right images
-						int sad =
-							SAD(img_left,img_right,img_width,img_height,
-								x_left, y,
-								x_right, y - offset_y, correlation_radius);
+						int sad = SAD(
+							img_left,img_right,img_width,img_height,
+							x_left, y,
+							x_right, y - offset_y, correlation_radius);
 
-						if (sad > -1) {
-							int xx_inner = x_left / smoothing_radius;
-							if ((xx_inner > 1) && (xx_inner < width2-2)) {
-								unsigned int v = max_patch_value - (unsigned int)sad;
+						if (sad != BAD_MATCH) {
+							unsigned int v = max_patch_value - (unsigned int)sad;
 
-								int n_inner = (yy*width2 + xx_inner) + disparity_space_offset;
-							    disparity_space[n_inner] += v;
+							int n_inner = (yy*width2 + xx_inner) + disparity_space_offset;
+							disparity_space[n_inner] += v;
 
-								int n_outer = (yy2*width3 + (x_left / (smoothing_radius*STEREO_DENSE_OUTER_DIVISOR))) + disparity_space_offset + disparity_space_pixels;
-							    disparity_space[n_outer] += v;
-							}
+							int n_outer = (yy2*width3 + (x_left / (smoothing_radius*STEREO_DENSE_OUTER_DIVISOR))) + disparity_space_offset + disparity_space_pixels;
+							disparity_space[n_outer] += v;
 						}
 					}
 				}

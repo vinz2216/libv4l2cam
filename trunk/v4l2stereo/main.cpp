@@ -84,6 +84,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( " -x  --offsetx                  Calibration x offset in pixels");
   opt->addUsage( " -y  --offsety                  Calibration y offset in pixels");
   opt->addUsage( " -d  --disparity                Max disparity as a percent of image width");
+  opt->addUsage( "     --baseline                 Baseline distance in millimetres");
   opt->addUsage( "     --equal                    Perform histogram equalisation");
   opt->addUsage( "     --ground                   y coordinate of the ground plane as percent of image height");
   opt->addUsage( "     --features                 Show stereo features");
@@ -169,6 +170,7 @@ int main(int argc, char* argv[]) {
   opt->setOption(  "disparitythreshold" );
   opt->setOption(  "crosscheck" );
   opt->setOption(  "zoom" );
+  opt->setOption(  "baseline" );
   opt->setFlag(  "help" );
   opt->setFlag(  "flipleft" );
   opt->setFlag(  "flipright" );
@@ -548,7 +550,7 @@ int main(int argc, char* argv[]) {
   }
 
   // radius for disparity space smoothing in dense stereo
-  int disparity_map_smoothing_radius = 4;
+  int disparity_map_smoothing_radius = 2;
   if( opt->getValue( "smoothing" ) != NULL  ) {
 	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
   }
@@ -560,9 +562,15 @@ int main(int argc, char* argv[]) {
   }
 
   // cross checking threshold
-  int cross_checking_threshold = 60;
+  int cross_checking_threshold = 50;
   if( opt->getValue( "crosscheck" ) != NULL  ) {
 	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
+  }
+
+  // baseline distance
+  int baseline_mm = 60;
+  if( opt->getValue( "baseline" ) != NULL  ) {
+	  baseline_mm = atoi(opt->getValue("baseline"));
   }
 
   // zoom percentage
@@ -1185,7 +1193,7 @@ int main(int argc, char* argv[]) {
                 max_disparity_percent,
                 disparity_map);
 
-        cvSmooth( l, l, CV_GAUSSIAN, 9, 9 );
+        //cvSmooth( l, l, CV_GAUSSIAN, 9, 9 );
 	}
 
 	/* show depth map */
