@@ -25,9 +25,14 @@
 #ifndef STEREODENSE_H_
 #define STEREODENSE_H_
 
-#define STEREO_DENSE_SMOOTH_VERTICAL  1
+#define STEREO_DENSE_SMOOTH_VERTICAL  2
 #define STEREO_DENSE_SUB_PIXEL        100
-#define STEREO_DENSE_OUTER_DIVISOR    2
+#define STEREO_DENSE_OUTER_DIVISOR    4
+#define BAD_MATCH                     -1
+
+#ifndef ABS
+#define ABS(a) ((a)<0?-(a):(a))
+#endif
 
 #include <omp.h>
 #include <stdio.h>
