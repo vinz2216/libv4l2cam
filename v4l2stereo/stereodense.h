@@ -47,6 +47,12 @@ using namespace std;
 class stereodense {
 protected:
 
+	static void post_threshold_filter(
+		unsigned int *disparity_map,
+		int disparity_map_width,
+		int disparity_map_height,
+		int feature_size);
+
 	static void mean_row_reflectance(
 		unsigned char* img,
 		int img_width,

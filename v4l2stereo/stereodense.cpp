@@ -25,6 +25,100 @@
 #include "stereodense.h"
 
 /*!
+ * \brief an additional filtering step performed after disparity thresholding
+ * \param disparity_map disparity map
+ * \param disparity_map_width width of the disparity map
+ * \param disparity_map_height height of the disparity map
+ * \param feature_size maximum size of features to be removed
+ */
+void stereodense::post_threshold_filter(
+	unsigned int *disparity_map,
+	int disparity_map_width,
+	int disparity_map_height,
+	int feature_size)
+{
+	const int border = 3;
+
+	// remove vertical features
+	for (int x = 1; x < disparity_map_width-1; x++) {
+		int empty = 0;
+		int size = 0;
+		int state = 0;
+		int start_y = 0;
+		int end_y = 0;
+		for (int y = 0; y < disparity_map_height; y++) {
+			int n = (y*disparity_map_width + x)*2;
+			if ((disparity_map[n+1] > 0) ||
+				(disparity_map[n+3] > 0) ||
+				(disparity_map[n-1] > 0)) {
+				size++;
+				if (empty > border) state = 1;
+				empty = 0;
+			}
+			else {
+				if ((size > 0) && (size <= feature_size) && (state == 1)) {
+					start_y = y - size - 1;
+					end_y = y - 1;
+					state = 2;
+				}
+				empty++;
+				if (empty > border) {
+					if (state == 2) {
+						for (int yy = start_y; yy <= end_y; yy++) {
+							int n2 = (yy*disparity_map_width + x)*2;
+							disparity_map[n2] = 0;
+							disparity_map[n2+1] = 0;
+						}
+					}
+					state = 0;
+				}
+				size=0;
+			}
+		}
+	}
+
+	// remove horizontal features
+	int stride = disparity_map_width*2;
+	for (int y = 1; y < disparity_map_height-1; y++) {
+		int empty = 0;
+		int size = 0;
+		int state = 0;
+		int start_x = 0;
+		int end_x = 0;
+		for (int x = 0; x < disparity_map_width; x++) {
+			int n = (y*disparity_map_width + x)*2;
+			if ((disparity_map[n+1] > 0) ||
+				(disparity_map[n+1+stride] > 0) ||
+				(disparity_map[n+1-stride] > 0)) {
+				size++;
+				if (empty > border) state = 1;
+				empty = 0;
+			}
+			else {
+				if ((size > 0) && (size <= feature_size) && (state == 1)) {
+					start_x = x - size - 1;
+					end_x = x - 1;
+					state = 2;
+				}
+				empty++;
+				if (empty > border) {
+					if (state == 2) {
+						int n2 = (y*disparity_map_width + start_x)*2;
+						for (int xx = start_x; xx <= end_x; xx++, n2 += 2) {
+							disparity_map[n2] = 0;
+							disparity_map[n2+1] = 0;
+						}
+					}
+					state = 0;
+				}
+				size=0;
+			}
+		}
+	}
+
+}
+
+/*!
  * \brief returns the mean red/green/blue values for the given image row
  * \param img colour image data
  * \param img_width width of the image
@@ -773,6 +867,9 @@ void stereodense::update_disparity_map(
 		    max_disparity_pixels)) {
 	    	pass++;
 	    	if (pass > 5) break;
+	    }
+	    if (disparity_threshold_percent > 0) {
+	    	post_threshold_filter(disparity_map, disparity_space_width, disparity_space_height, 6);
 	    }
 	}
 
