@@ -40,7 +40,7 @@
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.045
+#define VERSION 1.046
 
 using namespace std;
 
@@ -416,6 +416,8 @@ int main(int argc, char* argv[]) {
   int max_disparity_percent = 40;
   if( opt->getValue( 'd' ) != NULL  || opt->getValue( "disparity" ) != NULL  ) {
 	  max_disparity_percent = atoi(opt->getValue("disparity"));
+	  if (max_disparity_percent < 2) max_disparity_percent = 2;
+	  if (max_disparity_percent > 90) max_disparity_percent = 90;
   }
 
   float centre_of_distortion_x0 = ww/2;
@@ -541,36 +543,47 @@ int main(int argc, char* argv[]) {
   int disparity_step = 8;
   if( opt->getValue( "disparitystep" ) != NULL  ) {
 	  disparity_step = atoi(opt->getValue("disparitystep"));
+	  if (disparity_step < 1) disparity_step = 1;
+	  if (disparity_step > 20) disparity_step = 20;
   }
 
   // radius used for patch matching in dense stereo
   int disparity_map_correlation_radius = 1;
   if( opt->getValue( "patchsize" ) != NULL  ) {
 	  disparity_map_correlation_radius = atoi(opt->getValue("patchsize"));
+	  if (disparity_map_correlation_radius < 1) disparity_map_correlation_radius = 1;
+	  if (disparity_map_correlation_radius > 10) disparity_map_correlation_radius = 10;
   }
 
   // radius for disparity space smoothing in dense stereo
   int disparity_map_smoothing_radius = 2;
   if( opt->getValue( "smoothing" ) != NULL  ) {
 	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
+	  if (disparity_map_smoothing_radius < 1) disparity_map_smoothing_radius = 1;
+	  if (disparity_map_smoothing_radius > 10) disparity_map_smoothing_radius = 10;
   }
 
   // disparity map threshold as a percentage
   int disparity_threshold_percent = 0;
   if( opt->getValue( "disparitythreshold" ) != NULL  ) {
 	  disparity_threshold_percent = atoi(opt->getValue("disparitythreshold"));
+	  if (disparity_threshold_percent < 0) disparity_threshold_percent = 0;
+	  if (disparity_threshold_percent > 100) disparity_threshold_percent = 100;
   }
 
   // cross checking threshold
   int cross_checking_threshold = 50;
   if( opt->getValue( "crosscheck" ) != NULL  ) {
 	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
+	  if (cross_checking_threshold < 2) cross_checking_threshold = 2;
+	  if (cross_checking_threshold > 100) cross_checking_threshold = 100;
   }
 
   // baseline distance
   int baseline_mm = 60;
   if( opt->getValue( "baseline" ) != NULL  ) {
 	  baseline_mm = atoi(opt->getValue("baseline"));
+	  if (baseline_mm < 10) baseline_mm = 10;
   }
 
   // zoom percentage
