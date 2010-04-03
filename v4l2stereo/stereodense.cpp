@@ -753,6 +753,16 @@ void stereodense::update_disparity_map(
 		cross_checking_threshold,
 		disparity_map);
 
+	// optionally apply a threshold to the disparity map
+	if (disparity_threshold_percent > 0) {
+		unsigned int disparity_threshold_pixels = (unsigned int)(disparity_threshold_percent * max_disparity_pixels / 100);
+	    for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
+		    if (disparity_map[i+1] < disparity_threshold_pixels) {
+		    	disparity_map[i+1] = 0;
+		    }
+	    }
+	}
+
 	// clean up the disparity map
 	if (despeckle) {
 		int pass = 0;
@@ -763,16 +773,6 @@ void stereodense::update_disparity_map(
 		    max_disparity_pixels)) {
 	    	pass++;
 	    	if (pass > 5) break;
-	    }
-	}
-
-	// optionally apply a threshold to the disparity map
-	if (disparity_threshold_percent > 0) {
-		unsigned int disparity_threshold_pixels = (unsigned int)(disparity_threshold_percent * max_disparity_pixels / 100);
-	    for (int i = disparity_space_width*disparity_space_height*2-2; i >= 0; i -= 2) {
-		    if (disparity_map[i+1] < disparity_threshold_pixels) {
-		    	disparity_map[i+1] = 0;
-		    }
 	    }
 	}
 
