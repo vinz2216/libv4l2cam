@@ -1,17 +1,18 @@
 <package>
   <description brief="stereocam">
 
-     stereocam
+     ROS package for use with stereo webcams such as the Minoru
 
   </description>
   <author>Bob Mottram</author>
   <license>GPL</license>
   <review status="unreviewed" notes=""/>
-  <url>http://ros.org/wiki/stereocam</url>
+  <url>http://code.google.com/p/sentience/wiki/MinoruWebcam</url>
   <depend package="roscpp"/>
   <depend package="std_msgs"/>
   <depend package="sensor_msgs"/>
   <depend package="opencv2"/>
+  <depend package="cv_bridge"/>
 
 </package>
 
