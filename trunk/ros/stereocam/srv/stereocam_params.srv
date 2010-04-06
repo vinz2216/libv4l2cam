@@ -1,0 +1,7 @@
+string left_device
+string right_device
+int32 width
+int32 height
+int32 fps
+---
+int32 ack 
