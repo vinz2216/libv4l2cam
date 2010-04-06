@@ -1,0 +1,34 @@
+Making the package
+------------------
+
+Add the following line to the end of ~/.bashrc
+
+    source ~/develop/libv4l2cam/ros/setup.sh
+
+pointing to the directory where this ROS package is located
+
+Reload
+
+    . ~/.bashrc
+
+You may need to edit stereocam_broadcast.cpp within the src directory in order to change the device numbers for the cameras and the resolution to be used.
+
+Then make the package as follows:
+
+    rosmake --rosdep-install stereocam
+
+
+Running the ROS publisher (broadcasting service)
+------------------------------------------------
+
+Start ROS:
+
+    roscore
+
+Then in a separate shell begin broadcasting:
+
+    rosrun stereocam stereocam_broadcast
+
+And in another shell you can subscribe to the broadcast:
+
+    rosrun stereocam stereocam_subscribe
