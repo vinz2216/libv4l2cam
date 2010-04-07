@@ -28,6 +28,7 @@
 #include <highgui.h>
 #include <stdio.h>
 
+#include "stereocam/camera_active.h"
 #include "stereocam/stereocam_params.h"
 #include "libcam.h"
 #include "libcam.cpp"
@@ -42,6 +43,8 @@ Camera *c = NULL;
 Camera *c2 = NULL;
 sensor_msgs::Image left;
 sensor_msgs::Image right;
+bool cam_active = false;
+bool cam_active_request = false;
 
 /*!
  * \brief stop the stereo camera
@@ -57,6 +60,7 @@ void stop_cameras(
         delete right_camera;
         left_camera = NULL;
         right_camera = NULL;
+        cam_active = false;
     }
 }
 
@@ -99,7 +103,30 @@ void start_cameras(
     right_img.step = width * 3;
     right_img.encoding = "bgr8";
     right_img.set_data_size(width*height*3);
+
+    cam_active = true;
 }
+
+/*!
+ * \brief received a request to start or stop the stereo camera
+ * \param req requested parameters
+ * \param res returned parameters
+ */
+bool camera_active(
+  stereocam::camera_active::Request &req,
+  stereocam::camera_active::Response &res)
+{
+    if ((int)req.camera_active > 0) {
+        ROS_INFO("Camera On");
+        cam_active_request = true;
+    }
+    else {
+        ROS_INFO("Camera Off");
+        cam_active_request = false;
+    }
+    res.ack = 1;
+    return(true);
+} 
 
 /*!
  * \brief service requests camera parameters to be changed
@@ -127,49 +154,54 @@ int main(int argc, char** argv)
   ros::Rate loop_rate(20);
   int count = 0;
 
-  start_cameras(c,c2,left,right,dev0,dev1,ww,hh,fps);
-
   IplImage *l=cvCreateImage(cvSize(ww, hh), 8, 3);
   IplImage *r=cvCreateImage(cvSize(ww, hh), 8, 3);
 
   unsigned char *l_=(unsigned char *)l->imageData;
   unsigned char *r_=(unsigned char *)r->imageData;
 
-  left.width  = ww;
-  left.height = hh;
-  left.step = ww * 3;
-  left.encoding = "bgr8";
-  left.set_data_size(ww*hh*3);
-
-  right.width  = ww;
-  right.height = hh;
-  right.step = ww * 3;
-  right.encoding = "bgr8";
-  right.set_data_size(ww*hh*3);
+  // start service which can be used to start and stop the stereo camera
+  ros::ServiceServer service_active = n.advertiseService("camera_active", camera_active);
 
   // start service which can be used to change camera parameters
   ros::ServiceServer service_params = n.advertiseService("stereocam_params", request_params);
 
+  ROS_INFO("Stereo camera node running");
+  ROS_INFO("Waiting for subscribers...");
+
   while (ros::ok())
   {
-    // Read image data
-    while(c->Get()==0 || c2->Get()==0) usleep(100);
+    // request to turn camera on or off
+    if (cam_active_request != cam_active) {
+        if (cam_active_request == false) {
+            stop_cameras(c,c2);
+        }
+        else {
+            start_cameras(c,c2,left,right,dev0,dev1,ww,hh,fps);
+        }
+    }
 
-    // Convert to IplImage
-    c->toIplImage(l);
-    c2->toIplImage(r);
+    if (cam_active) {
 
-    // Convert to sensor_msgs::Image
-    memcpy ((void*)(&left.data[0]), (void*)l_, ww*hh*3);
-    memcpy ((void*)(&right.data[0]), (void*)r_, ww*hh*3);
+        // Read image data
+        while(c->Get()==0 || c2->Get()==0) usleep(100);
 
-    // Publish
-    left_pub.publish(left);
-    right_pub.publish(right);
+        // Convert to IplImage
+        c->toIplImage(l);
+        c2->toIplImage(r);
+
+        // Convert to sensor_msgs::Image
+        memcpy ((void*)(&left.data[0]), (void*)l_, ww*hh*3);
+        memcpy ((void*)(&right.data[0]), (void*)r_, ww*hh*3);
+
+        // Publish
+        left_pub.publish(left);
+        right_pub.publish(right);
+
+        ROS_INFO("Stereo images published");
+    }
+
     ros::spinOnce();
-
-    ROS_INFO("Stereo images published");
-
     loop_rate.sleep();
     ++count;
   }

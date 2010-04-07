@@ -21,6 +21,7 @@
 #include <cv.h>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include "stereocam/camera_active.h"
 #include "stereocam/stereocam_params.h"
 #include "cv_bridge/CvBridge.h"
 #include <image_transport/image_transport.h>
@@ -28,7 +29,8 @@
 IplImage* left = NULL;
 IplImage* right = NULL;
 sensor_msgs::CvBridge bridge_;
-ros::ServiceClient client;
+ros::ServiceClient client_camera_params;
+ros::ServiceClient client_camera_active;
 
 void process_images(
     IplImage* left_image,
@@ -65,6 +67,40 @@ void rightImageCallback(const sensor_msgs::ImageConstPtr& ptr)
   }
 }
 
+void camera_on()
+{
+  stereocam::camera_active srv;
+  srv.request.camera_active = 1;
+  if (client_camera_active.call(srv)) {
+      if ((int)srv.response.ack == 1) {
+          ROS_INFO("Camera On");
+      }
+      else {
+          ROS_ERROR("Failed to activate camera");
+      }
+  }
+  else {
+      ROS_ERROR("Failed to activate camera");
+  }
+}
+
+void camera_off()
+{
+  stereocam::camera_active srv;
+  srv.request.camera_active = 0;
+  if (client_camera_active.call(srv)) {
+      if ((int)srv.response.ack == 1) {
+          ROS_INFO("Camera Off");
+      }
+      else {
+          ROS_ERROR("Failed to deactivate camera");
+      }
+  }
+  else {
+      ROS_ERROR("Failed to deactivate camera");
+  }
+}
+
 void set_stereo_camera_params(
     std::string left_device,
     std::string right_device,
@@ -78,7 +114,7 @@ void set_stereo_camera_params(
   srv.request.width = width;
   srv.request.height = height;
   srv.request.fps = fps;
-  if (client.call(srv)) {
+  if (client_camera_params.call(srv)) {
       ROS_INFO("Changed stereo camera parameters: %d", (int)srv.response.ack);
   }
   else {
@@ -93,8 +129,11 @@ int main(int argc, char** argv)
   image_transport::ImageTransport it(n);
   image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_raw", 1, leftImageCallback);
   image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_raw", 1, rightImageCallback);
-  client = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
+  client_camera_active = n.serviceClient<stereocam::camera_active>("camera_active");
+  client_camera_params = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
+
   set_stereo_camera_params("/dev/video1","/dev/video0",320,240,30);
+  camera_on();
 
   ros::spin();
 }
