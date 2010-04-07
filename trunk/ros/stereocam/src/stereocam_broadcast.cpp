@@ -20,6 +20,7 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <sensor_msgs/Image.h>
+#include <image_transport/image_transport.h>
 #include <sstream>
 
 #include <iostream>
@@ -119,8 +120,10 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "stereocam_broadcast");
   ros::NodeHandle n;
-  ros::Publisher left_pub = n.advertise<sensor_msgs::Image>("stereo/left/image_raw", fps);
-  ros::Publisher right_pub = n.advertise<sensor_msgs::Image>("stereo/right/image_raw", fps);
+
+  image_transport::ImageTransport it(n);
+  image_transport::Publisher left_pub = it.advertise("stereo/left/image_raw", 1);
+  image_transport::Publisher right_pub = it.advertise("stereo/right/image_raw", 1);
   ros::Rate loop_rate(20);
   int count = 0;
 
@@ -144,7 +147,7 @@ int main(int argc, char** argv)
   right.encoding = "bgr8";
   right.set_data_size(ww*hh*3);
 
-  // start service which can be sued to change camera parameters
+  // start service which can be used to change camera parameters
   ros::ServiceServer service_params = n.advertiseService("stereocam_params", request_params);
 
   while (ros::ok())
@@ -163,9 +166,10 @@ int main(int argc, char** argv)
     // Publish
     left_pub.publish(left);
     right_pub.publish(right);
+    ros::spinOnce();
 
     ROS_INFO("Stereo images published");
-    ros::spinOnce();
+
     loop_rate.sleep();
     ++count;
   }

@@ -11,7 +11,7 @@ Reload
 
     . ~/.bashrc
 
-You may need to edit stereocam_broadcast.cpp within the src directory in order to change the device numbers for the cameras and the resolution to be used.
+You may need to edit stereocam_broadcast.cpp within the src directory in order to change the device numbers for the cameras and the resolution to be used.  Camera parameters are also set within stereocam_subscribe.cpp.
 
 Then make the package as follows:
 
@@ -32,3 +32,15 @@ Then in a separate shell begin broadcasting:
 And in another shell you can subscribe to the broadcast:
 
     rosrun stereocam stereocam_subscribe
+
+To check that the images are being published:
+
+    rostopic list
+
+should show /stereo/left/image_raw and /stereo/right/image_raw, and also compressed versions of these.
+
+To enable compressed image transport, for efficient transport of images over networks:
+
+    rosparam set /compressed_listener/image_transport compressed
+
+then restart the broadcast and subscriber.

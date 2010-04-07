@@ -23,6 +23,7 @@
 #include <sensor_msgs/Image.h>
 #include "stereocam/stereocam_params.h"
 #include "cv_bridge/CvBridge.h"
+#include <image_transport/image_transport.h>
 
 IplImage* left = NULL;
 IplImage* right = NULL;
@@ -81,7 +82,7 @@ void set_stereo_camera_params(
       ROS_INFO("Changed stereo camera parameters: %d", (int)srv.response.ack);
   }
   else {
-      ROS_ERROR("Failed to call service add_two_ints");
+      ROS_ERROR("Failed to call service stereocam_params");
   }
 }
 
@@ -89,8 +90,9 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "stereocam_subscribe");
   ros::NodeHandle n;
-  ros::Subscriber left_sub = n.subscribe("stereo/left/image_raw", 30, leftImageCallback);
-  ros::Subscriber right_sub = n.subscribe("stereo/right/image_raw", 30, rightImageCallback);
+  image_transport::ImageTransport it(n);
+  image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_raw", 1, leftImageCallback);
+  image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_raw", 1, rightImageCallback);
   client = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
   set_stereo_camera_params("/dev/video1","/dev/video0",320,240,30);
 
