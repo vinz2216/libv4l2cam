@@ -33,6 +33,10 @@
 #include "libcam.h"
 #include "libcam.cpp"
 
+// if you wish the cameras to begin broadcasting immediately
+// instead of waiting for subscribers then set this flag
+bool broadcast_immediately = false;
+
 std::string dev0 = "";
 std::string dev1 = "";
 
@@ -151,8 +155,31 @@ int main(int argc, char** argv)
   // start service which can be used to change camera parameters
   ros::ServiceServer service_params = n.advertiseService("stereocam_params", request_params);
 
-  ROS_INFO("Stereo camera node running");
-  ROS_INFO("Waiting for subscribers...");
+  if (!broadcast_immediately) {
+      // wait for subscribers
+      ROS_INFO("Stereo camera node running");
+      ROS_INFO("Waiting for subscribers...");
+  }
+  else {
+      // set some default values
+      dev0 = "/dev/video1";
+      dev1 = "/dev/video0";
+
+      left.width  = 320;
+      left.height = 240;
+      left.step = left.width * 3;
+      left.encoding = "bgr8";
+      left.set_data_size(left.width*left.height*3);
+
+      right.width  = left.width;
+      right.height = left.height;
+      right.step = right.width * 3;
+      right.encoding = "bgr8";
+      right.set_data_size(right.width*right.height*3);
+
+      fps = 30;
+      cam_active_request = true;
+  }
 
   while (ros::ok())
   {
