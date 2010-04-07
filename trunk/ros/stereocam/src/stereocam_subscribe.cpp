@@ -76,7 +76,12 @@ void camera_on()
           ROS_INFO("Camera On");
       }
       else {
-          ROS_ERROR("Failed to activate camera");
+          if ((int)srv.response.ack == -1) {
+              ROS_WARN("Camera parameters must be specified using set_stereo_camera_params before starting the camera");
+          }
+          else {
+              ROS_ERROR("Failed to activate camera");
+          }
       }
   }
   else {
@@ -115,7 +120,12 @@ void set_stereo_camera_params(
   srv.request.height = height;
   srv.request.fps = fps;
   if (client_camera_params.call(srv)) {
-      ROS_INFO("Changed stereo camera parameters: %d", (int)srv.response.ack);
+      if ((int)srv.response.ack == -1) {
+          ROS_WARN("Can't change image properties whilst the cameras are running");
+      }
+      else {
+          ROS_INFO("Changed stereo camera parameters: %d", (int)srv.response.ack);
+      }
   }
   else {
       ROS_ERROR("Failed to call service stereocam_params");

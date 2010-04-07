@@ -33,13 +33,11 @@
 #include "libcam.h"
 #include "libcam.cpp"
 
-std::string dev0 = "/dev/video1";
-std::string dev1 = "/dev/video0";
+std::string dev0 = "";
+std::string dev1 = "";
 
 int fps = 30;
-int ww = 320;
-int hh = 240;
-Camera *c = NULL;
+Camera *c1 = NULL;
 Camera *c2 = NULL;
 sensor_msgs::Image left;
 sensor_msgs::Image right;
@@ -65,49 +63,6 @@ void stop_cameras(
 }
 
 /*!
- * \brief start the stereo camera
- * \param left_camera left camera object
- * \param right_camera right camera object
- * \param left_img left image object
- * \param right_img right image object
- * \param left_device left camera device, eg. "/dev/video1"
- * \param right_device right camera device, eg. "/dev/video0"
- * \param width desired image width
- * \param height desired image height
- * \param fps desired frames per second
- */
-void start_cameras(
-  Camera *&left_camera,
-  Camera *&right_camera,
-  sensor_msgs::Image &left_img,
-  sensor_msgs::Image &right_img,
-  std::string left_device,
-  std::string right_device,
-  int width,
-  int height,
-  int fps)
-{
-    stop_cameras(left_camera, right_camera);
-
-    left_camera = new Camera(left_device.c_str(), width, height, fps);
-    right_camera = new Camera(right_device.c_str(), width, height, fps);
-
-    left_img.width  = width;
-    left_img.height = height;
-    left_img.step = width * 3;
-    left_img.encoding = "bgr8";
-    left_img.set_data_size(width*height*3);
-
-    right_img.width  = width;
-    right_img.height = height;
-    right_img.step = width * 3;
-    right_img.encoding = "bgr8";
-    right_img.set_data_size(width*height*3);
-
-    cam_active = true;
-}
-
-/*!
  * \brief received a request to start or stop the stereo camera
  * \param req requested parameters
  * \param res returned parameters
@@ -117,14 +72,22 @@ bool camera_active(
   stereocam::camera_active::Response &res)
 {
     if ((int)req.camera_active > 0) {
-        ROS_INFO("Camera On");
-        cam_active_request = true;
+        if (dev0 != "") {
+            ROS_INFO("Camera On");
+            cam_active_request = true;
+            res.ack = 1;
+        }
+        else {
+            ROS_WARN("Camera parameters have not been specified");
+            res.ack = -1;
+        }
     }
     else {
         ROS_INFO("Camera Off");
         cam_active_request = false;
+        res.ack = 1;
     }
-    res.ack = 1;
+    
     return(true);
 } 
 
@@ -137,9 +100,32 @@ bool request_params(
   stereocam::stereocam_params::Request &req,
   stereocam::stereocam_params::Response &res)
 {
-    ROS_INFO("Resolution: %dx%d", (int)req.width, (int)req.height);
-    start_cameras(c,c2,left,right,req.left_device,req.right_device,req.width,req.height,req.fps);
-    res.ack = 1;
+    if (!cam_active) {
+        ROS_INFO("Resolution: %dx%d", (int)req.width, (int)req.height);
+
+        dev0 = req.left_device;
+        dev1 = req.right_device;
+
+        left.width  = (int)req.width;
+        left.height = (int)req.height;
+        left.step = (int)req.width * 3;
+        left.encoding = "bgr8";
+        left.set_data_size((int)req.width*(int)req.height*3);
+
+        right.width  = (int)req.width;
+        right.height = (int)req.height;
+        right.step = (int)req.width * 3;
+        right.encoding = "bgr8";
+        right.set_data_size((int)req.width*(int)req.height*3);
+
+        fps = (int)req.fps;
+
+        res.ack = 1;
+    }
+    else {
+        ROS_WARN("Can't change image properties whilst the cameras are running");
+        res.ack = -1;
+    }
     return(true);
 } 
 
@@ -154,11 +140,10 @@ int main(int argc, char** argv)
   ros::Rate loop_rate(20);
   int count = 0;
 
-  IplImage *l=cvCreateImage(cvSize(ww, hh), 8, 3);
-  IplImage *r=cvCreateImage(cvSize(ww, hh), 8, 3);
-
-  unsigned char *l_=(unsigned char *)l->imageData;
-  unsigned char *r_=(unsigned char *)r->imageData;
+  IplImage *l=NULL;
+  IplImage *r=NULL;
+  unsigned char *l_=NULL;
+  unsigned char *r_=NULL;
 
   // start service which can be used to start and stop the stereo camera
   ros::ServiceServer service_active = n.advertiseService("camera_active", camera_active);
@@ -174,25 +159,41 @@ int main(int argc, char** argv)
     // request to turn camera on or off
     if (cam_active_request != cam_active) {
         if (cam_active_request == false) {
-            stop_cameras(c,c2);
+            stop_cameras(c1,c2);
         }
         else {
-            start_cameras(c,c2,left,right,dev0,dev1,ww,hh,fps);
+            stop_cameras(c1, c2);
+
+            // create appropriately sized images
+            if (l_ != NULL) {
+                cvReleaseImage(&l);
+                cvReleaseImage(&r);
+            }
+            l=cvCreateImage(cvSize(left.width, left.height), 8, 3);
+            r=cvCreateImage(cvSize(right.width, right.height), 8, 3);
+
+            l_=(unsigned char *)l->imageData;
+            r_=(unsigned char *)r->imageData;
+
+            // start the cameras
+            c1 = new Camera(dev0.c_str(), left.width, left.height, fps);
+            c2 = new Camera(dev1.c_str(), right.width, right.height, fps);
+            cam_active = true;
         }
     }
 
     if (cam_active) {
 
         // Read image data
-        while(c->Get()==0 || c2->Get()==0) usleep(100);
+        while(c1->Get()==0 || c2->Get()==0) usleep(100);
 
         // Convert to IplImage
-        c->toIplImage(l);
+        c1->toIplImage(l);
         c2->toIplImage(r);
 
         // Convert to sensor_msgs::Image
-        memcpy ((void*)(&left.data[0]), (void*)l_, ww*hh*3);
-        memcpy ((void*)(&right.data[0]), (void*)r_, ww*hh*3);
+        memcpy ((void*)(&left.data[0]), (void*)l_, left.width*left.height*3);
+        memcpy ((void*)(&right.data[0]), (void*)r_, right.width*right.height*3);
 
         // Publish
         left_pub.publish(left);
@@ -206,8 +207,10 @@ int main(int argc, char** argv)
     ++count;
   }
 
-  cvReleaseImage(&l);
-  cvReleaseImage(&r);
-  stop_cameras(c,c2);
+  if (l_ != NULL) {
+      cvReleaseImage(&l);
+      cvReleaseImage(&r);
+  }
+  stop_cameras(c1,c2);
 }
 
