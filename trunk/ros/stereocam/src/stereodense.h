@@ -26,7 +26,7 @@
 #define STEREODENSE_H_
 
 #define STEREO_DENSE_SMOOTH_VERTICAL  2
-#define STEREO_DENSE_SUB_PIXEL        100
+#define STEREO_DENSE_SUB_PIXEL        16
 #define STEREO_DENSE_OUTER_DIVISOR    4
 #define BAD_MATCH                     -1
 

@@ -3,5 +3,7 @@ string right_device
 int32 width
 int32 height
 int32 fps
+float32 baseline_mm
+float32 focal_length_pixels
 ---
-int32 ack 
+int32 ack
