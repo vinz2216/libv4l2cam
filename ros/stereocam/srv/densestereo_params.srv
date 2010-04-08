@@ -1,0 +1,12 @@
+int32 offset_x
+int32 offset_y
+int32 vertical_sampling
+int32 max_disparity_percent
+int32 correlation_radius
+int32 smoothing_radius
+int32 disparity_step
+int32 disparity_threshold_percent
+bool despeckle
+int32 cross_checking_threshold
+---
+int32 ack

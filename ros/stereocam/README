@@ -44,3 +44,5 @@ To enable compressed image transport, for efficient transport of images over net
     rosparam set /compressed_listener/image_transport compressed
 
 then restart the broadcast and subscriber.
+
+A disparity map of the type sensor_msgs::Image (one byte per pixel) is also published.  This was used instead of stereo_msgs::DisparityImage because it provides the ability to transport disparity maps efficiently over networks using image_transport.  The disparity value is remapped into a 0-255 range.
