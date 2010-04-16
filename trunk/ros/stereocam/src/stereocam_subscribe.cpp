@@ -25,6 +25,7 @@
 #include <sstream>
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/PointCloud.h>
 #include "stereocam/camera_active.h"
 #include "stereocam/stereocam_params.h"
 #include "stereocam/densestereo_params.h"
@@ -101,6 +102,16 @@ void rightImageCallback(const sensor_msgs::ImageConstPtr& ptr)
   {
       ROS_ERROR("Error converting right image to IplImage");
   }
+}
+
+/*!
+ * \brief callback when a point cloud is received
+ */
+void PointCloudImageCallback(const sensor_msgs::PointCloudConstPtr& ptr)
+{
+  ROS_INFO("Received point cloud");
+
+  sensor_msgs::PointCloud point_cloud = *ptr;
 }
 
 /*!
@@ -245,6 +256,7 @@ int main(int argc, char** argv)
   image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_raw", 1, leftImageCallback);
   image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_raw", 1, rightImageCallback);
   image_transport::Subscriber disparity_sub = it.subscribe("stereo/image_disparity", 1, disparityImageCallback);
+  ros::Subscriber point_cloud_sub = n.subscribe("stereo/point_cloud", 1, PointCloudImageCallback);
   client_camera_active = n.serviceClient<stereocam::camera_active>("camera_active");
   client_camera_params = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
   client_densestereo_params = n.serviceClient<stereocam::densestereo_params>("densestereo_params");

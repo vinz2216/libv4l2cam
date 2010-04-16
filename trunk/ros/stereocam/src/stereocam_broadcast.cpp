@@ -20,6 +20,7 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/PointCloud.h>
 #include <image_transport/image_transport.h>
 #include <sstream>
 
@@ -187,15 +188,15 @@ bool request_dense_stereo_params(
 } 
 
 /*!
- * \brief convert the disparity map to stereo_msgs::DisparityImage
+ * \brief convert the disparity map to stereo_msgs::Image
  * \param disparity_map disparity map data
- * \param disp_image DisparityImage to be updated
+ * \param disp_image Image to be updated
  * \param vertical_sampling vertical sampling rate
  * \param smoothing_radius radius used to smooth the disparity space
  * \param max_disparity_percent maximum disparity as a percent of image width
  * \param sub_pixel_multiplier multiplier used to convert floating point disparity to an integer value
  */
-void disparity_map_to_DisparityImage(
+void disparity_map_to_Image(
     unsigned int* disparity_map,
     sensor_msgs::Image &disp_image,
     int vertical_sampling,
@@ -223,6 +224,222 @@ void disparity_map_to_DisparityImage(
     }
 }
 
+/*!
+ * \brief does the line intersect with the given line?
+ * \param x0 first line top x
+ * \param y0 first line top y
+ * \param x1 first line bottom x
+ * \param y1 first line bottom y
+ * \param x2 second line top x
+ * \param y2 second line top y
+ * \param x3 second line bottom x
+ * \param y3 second line bottom y
+ * \param xi intersection x coordinate
+ * \param yi intersection y coordinate
+ * \return true if the lines intersect
+ */
+bool intersection(
+    float x0,
+    float y0,
+    float x1,
+    float y1,
+    float x2,
+    float y2,
+    float x3,
+    float y3,
+    float& xi,
+    float& yi)
+{
+    float a1, b1, c1,         //constants of linear equations
+          a2, b2, c2,
+          det_inv,            //the inverse of the determinant of the coefficient
+          m1, m2, dm;         //the gradients of each line
+    bool insideLine = false;  //is the intersection along the lines given, or outside them
+    float tx, ty, bx, by;
+
+    //compute gradients, note the cludge for infinity, however, this will
+    //be close enough
+    if ((x1 - x0) != 0)
+        m1 = (y1 - y0) / (x1 - x0);
+    else
+        m1 = (float)1e+10;   //close, but no cigar
+
+    if ((x3 - x2) != 0)
+        m2 = (y3 - y2) / (x3 - x2);
+    else
+        m2 = (float)1e+10;   //close, but no cigar
+
+    dm = fabs(m1 - m2);
+    if (dm > 0.000001f)
+    {
+        //compute constants
+        a1 = m1;
+        a2 = m2;
+
+        b1 = -1;
+        b2 = -1;
+
+        c1 = (y0 - m1 * x0);
+        c2 = (y2 - m2 * x2);
+
+        //compute the inverse of the determinate
+        det_inv = 1 / (a1 * b2 - a2 * b1);
+
+        //use Kramers rule to compute xi and yi
+        xi = ((b1 * c2 - b2 * c1) * det_inv);
+        yi = ((a2 * c1 - a1 * c2) * det_inv);
+
+        //is the intersection inside the line or outside it?
+        if (x0 < x1) { tx = x0; bx = x1; } else { tx = x1; bx = x0; }
+        if (y0 < y1) { ty = y0; by = y1; } else { ty = y1; by = y0; }
+        if ((xi >= tx) && (xi <= bx) && (yi >= ty) && (yi <= by))
+        {
+            if (x2 < x3) { tx = x2; bx = x3; } else { tx = x3; bx = x2; }
+            if (y2 < y3) { ty = y2; by = y3; } else { ty = y3; by = y2; }
+            if ((xi >= tx) && (xi <= bx) && (yi >= ty) && (yi <= by))
+            {
+                insideLine = true;
+            }
+        }
+    }
+    else
+    {
+        //parallel (or parallelish) lines, return some indicative value
+        xi = 9999;
+    }
+
+    return (insideLine);
+}
+
+/*!
+ * \brief turns the disparity map into a point cloud.  Multiple points are generated per disparity in order to try to represent the uncertainty
+ * \param disparity_map disparity map
+ * \param img_left left colour image
+ * \param img_width width of the image
+ * \param img_height height of the image
+ * \param vertical_sampling vertical sampling rate
+ * \param smoothing_radius radius used to smooth the disparity space
+ * \param max_disparity_percent maximum disparity as a percent of image width
+ * \param sub_pixel_multiplier multiplier used to convert floating point disparity to an integer value
+ * \param baseline_mm stereo camera baseline
+ * \param focal_length_pixels focal length in pixels
+ * \param uncertainty_pixels position uncertainty for each observed disparity
+ * \param point_cloud returned point cloud
+ */
+void disparity_map_to_PointCloud(
+    unsigned int* disparity_map,
+    unsigned char* img_left,
+    int img_width,
+    int img_height,    
+    int vertical_sampling,
+    int smoothing_radius,
+    int max_disparity_percent,
+    int sub_pixel_multiplier,
+    float baseline_mm,
+    float focal_length_pixels,
+    float uncertainty_pixels,
+    sensor_msgs::PointCloud &point_cloud)
+{
+    // each disparity is represented by this number of points in the cloud
+    const int points_per_disparity = 4*4;
+
+    // dimensions of the disparity map
+    int disparity_map_width = img_width / smoothing_radius;
+    int disparity_map_height = (img_height / vertical_sampling) / STEREO_DENSE_SMOOTH_VERTICAL;
+
+    // find the number of non-zero disparity entries
+    int no_of_points = 0;
+    for (int i = disparity_map_width * disparity_map_height - 1; i >= 0; i--) {
+        int n = i*2 + 1;
+        if (disparity_map[n] > 0) {
+            no_of_points += points_per_disparity;
+        }
+    }
+
+    point_cloud.points.resize (no_of_points); 
+    point_cloud.channels.resize (3);
+    point_cloud.channels[0].name = "r";
+    point_cloud.channels[0].values.resize(no_of_points);
+    point_cloud.channels[1].name = "g";
+    point_cloud.channels[1].values.resize(no_of_points);
+    point_cloud.channels[2].name = "b";
+    point_cloud.channels[2].values.resize(no_of_points);
+
+    int baseline_x = baseline_mm / 2.0;
+    float cx = img_width / 2.0f;
+    float cy = img_height / 2.0f;
+    float uncertainty = uncertainty_pixels * 2.0f / 4.0f;
+    float uncertainty2 = uncertainty_pixels * 2.0f / 64.0f;
+    no_of_points = 0;
+    srand(0);
+    for (int y = 0; y < disparity_map_height; y++)
+    {
+
+        int n = y*disparity_map_width*2 + 1;
+        int img_y = y * (img_height-1) / disparity_map_height;
+        float dz = cy - (img_y / (float)img_height);
+
+        for (int x = 0; x < disparity_map_width; x++, n += 2)
+        {
+            int disparity = disparity_map[n];
+            if (disparity > 0) {
+                float disp = disparity / (float)sub_pixel_multiplier;
+                int img_x = x * (img_width-1) / disparity_map_width;
+                int n2 = (img_y*img_width + img_x)*3;
+
+                int r = img_left[n2+2];
+                int g = img_left[n2+1];
+                int b = img_left[n2];
+
+                // horizontal uncertainty
+                for (int i = 0; i < 4; i++) {
+
+                    float left_x = img_x - uncertainty_pixels + (i * uncertainty) - cx;
+                    float x0 = -baseline_x;
+                    float y0 = 0;
+                    float x1 = left_x + x0;
+                    float y1 = focal_length_pixels;
+
+                    // vertical uncertainty
+                    for (int j = 0; j < 4; j++) {
+
+                        float right_x = img_x - disp - uncertainty_pixels + (j * uncertainty) - cx;
+                        float x2 = baseline_x;
+                        float y2 = 0;
+                        float x3 = right_x + x2;
+                        float y3 = focal_length_pixels;
+
+                        float point_x = 0, point_y = 0;
+                        intersection(x0,y0,x1,y1, x2,y2,x3,y3, point_x,point_y);
+                        if (point_x != 9999) {
+
+                            float fraction = point_y / focal_length_pixels;
+                            // randomly adjust the z pixel position, to avoid generating too many points
+                            float point_z = (dz - uncertainty_pixels + (((rand() % 128)-64)*uncertainty2)) * fraction;
+
+                            // set the point position
+                            point_cloud.points[no_of_points].x = point_x;
+                            point_cloud.points[no_of_points].y = point_y;
+                            point_cloud.points[no_of_points].z = point_z;
+
+                            // set the colour
+                            point_cloud.channels[0].values[no_of_points] = r;
+                            point_cloud.channels[1].values[no_of_points] = g;
+                            point_cloud.channels[2].values[no_of_points] = b;
+
+                        }
+
+                        no_of_points++;
+                    }
+                }
+            }
+        }
+    }
+
+    point_cloud.header.stamp = ros::Time::now();
+    point_cloud.header.frame_id = "stereo_cloud";
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "stereocam_broadcast");
@@ -232,6 +449,7 @@ int main(int argc, char** argv)
   image_transport::Publisher left_pub = it.advertise("stereo/left/image_raw", 1);
   image_transport::Publisher right_pub = it.advertise("stereo/right/image_raw", 1);
   image_transport::Publisher disparity_pub = it.advertise("stereo/image_disparity", 1);
+  ros::Publisher point_cloud_pub = n.advertise<sensor_msgs::PointCloud>("stereo/point_cloud", 1);
   ros::Rate loop_rate(30);
   int count = 0;
 
@@ -283,6 +501,7 @@ int main(int argc, char** argv)
   const int MAX_IMAGE_WIDTH = 640;
   const int MAX_IMAGE_HEIGHT = 480;
   const int VERTICAL_SAMPLING = 2;
+  const int sub_pixel_multiplier = 16;
   int max_disparity_pixels = MAX_IMAGE_WIDTH * max_disparity_percent / 100;
   int disparity_space_length = (max_disparity_pixels / disparity_step) * MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
   int disparity_map_length = MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
@@ -345,21 +564,37 @@ int main(int argc, char** argv)
         memcpy ((void*)(&left_image.data[0]), (void*)l_, left_image.width*left_image.height*3);
         memcpy ((void*)(&right_image.data[0]), (void*)r_, right_image.width*right_image.height*3);
 
-        // convert to stereo_msgs::DisparityImage format
-        disparity_map_to_DisparityImage(
+        // convert to stereo_msgs::Image format
+        disparity_map_to_Image(
             disparity_map,
             disparity,
             vertical_sampling,
             smoothing_radius,
             max_disparity_percent,
-            16,
+            sub_pixel_multiplier,
             baseline_mm,
             focal_length_pixels);
+
+        // create a point cloud from the disparity map
+        float uncertainty_pixels = 1;
+        sensor_msgs::PointCloud point_cloud;
+        disparity_map_to_PointCloud(
+            disparity_map,
+            l_, left_image.width, left_image.height,
+            vertical_sampling,
+            smoothing_radius,
+            max_disparity_percent,
+            sub_pixel_multiplier,
+            baseline_mm,
+            focal_length_pixels,
+            uncertainty_pixels,
+            point_cloud);
 
         // Publish
         left_pub.publish(left_image);
         right_pub.publish(right_image);
         disparity_pub.publish(disparity);
+        point_cloud_pub.publish(point_cloud);
 
         ROS_INFO("Stereo images published");
     }
