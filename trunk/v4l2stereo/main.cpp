@@ -40,7 +40,7 @@
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.046
+#define VERSION 1.047
 
 using namespace std;
 
@@ -903,11 +903,11 @@ int main(int argc, char* argv[]) {
 
 			for (int f = 0; f < no_of_feats; f++, feats_remaining--) {
 
-				int x = (int)stereocam->feature_x[f];
+				int x = (int)stereocam->feature_x[f] / SVS_SUB_PIXEL;
 				int y = 4 + (row * SVS_VERTICAL_SAMPLING);
 
 				if (cam == 0) {
-				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 0, 255, 0);
+				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
 				}
 				else {
 					x -= calibration_offset_x;

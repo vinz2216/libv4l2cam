@@ -31,7 +31,7 @@
 #include "polynomial.h"
 #include "linefit.h"
 
-#define SVS_MAX_FEATURES         2000
+#define SVS_MAX_FEATURES         8000
 #define SVS_MAX_MATCHES          2000
 #define SVS_MAX_IMAGE_WIDTH      1024
 #define SVS_MAX_IMAGE_HEIGHT     1024

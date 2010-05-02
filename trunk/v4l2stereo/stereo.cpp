@@ -394,8 +394,7 @@ int segment) {
 	if ((int) imgWidth - inhibition_radius - 1 < start_x)
 		start_x = (int) imgWidth - inhibition_radius - 1;
 
-	for (y = 4 + calibration_offset_y; y < (int) imgHeight - 4; y
-			+= SVS_VERTICAL_SAMPLING) {
+	for (y = 4 + calibration_offset_y; y < (int) imgHeight - 4; y += SVS_VERTICAL_SAMPLING) {
 
 		/* reset number of features on the row */
 		no_of_feats = 0;
@@ -439,7 +438,7 @@ int segment) {
 
 						no_of_feats++;
 						if (no_of_features == SVS_MAX_FEATURES) {
-							y = imgHeight;
+							y = (int)imgHeight;
 							printf("stereo feature buffer full\n");
 							break;
 						}
@@ -486,8 +485,7 @@ int calibration_offset_x, int calibration_offset_y, int segment) {
 	if ((int) imgHeight - inhibition_radius - 1 < start_y)
 		start_y = (int) imgHeight - inhibition_radius - 1;
 
-	for (x = 4 + calibration_offset_x; x < (int) imgWidth - 4; x
-			+= SVS_HORIZONTAL_SAMPLING) {
+	for (x = 4 + calibration_offset_x; x < (int) imgWidth - 4; x += SVS_HORIZONTAL_SAMPLING) {
 
 		/* reset number of features on the row */
 		no_of_feats = 0;
@@ -501,11 +499,10 @@ int calibration_offset_x, int calibration_offset_y, int segment) {
 			for (y = start_y; y > 15; y--) {
 				if (row_peaks[y] > 0) {
 
-					feature_y[no_of_features++] = (short int) (y
-							+ calibration_offset_y);
+					feature_y[no_of_features++] = (short int) (y + calibration_offset_y);
 					no_of_feats++;
 					if (no_of_features == SVS_MAX_FEATURES) {
-						x = imgWidth;
+						x = (int)imgWidth;
 						printf("stereo feature buffer full\n");
 						break;
 					}
