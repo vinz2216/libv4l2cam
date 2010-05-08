@@ -32,6 +32,7 @@
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappbuffer.h>
 #include <sstream>
+#include <omp.h>
 
 #include "anyoption.h"
 #include "drawing.h"
@@ -649,7 +650,7 @@ int main(int argc, char* argv[]) {
 
   /* feature detection params */
   int inhibition_radius = 6;
-  unsigned int minimum_response = 250;
+  unsigned int minimum_response = 25;
 
   /* matching params */
   int ideal_no_of_matches = 400;
@@ -824,21 +825,26 @@ int main(int argc, char* argv[]) {
 
 	}
 
-    int calib_offset_x = calibration_offset_x;
-    int calib_offset_y = calibration_offset_y;
-    unsigned char* rectified_frame_buf = NULL;
+    #pragma omp parallel for
 	for (int cam = 1; cam >= 0; cam--) {
 
+	    int calib_offset_x = 0;
+	    int calib_offset_y = 0;
+	    unsigned char* rectified_frame_buf = NULL;
 		int no_of_feats = 0;
 		int no_of_feats_horizontal = 0;
 		svs* stereocam = NULL;
 		if (cam == 0) {
 			rectified_frame_buf = l_;
 			stereocam = lcam;
+		    calib_offset_x = 0;
+		    calib_offset_y = 0;
 		}
 		else {
 			rectified_frame_buf = r_;
 			stereocam = rcam;
+		    calib_offset_x = calibration_offset_x;
+		    calib_offset_y = calibration_offset_y;
 		}
 
 		no_of_feats = stereocam->get_features_vertical(
@@ -847,7 +853,7 @@ int main(int argc, char* argv[]) {
 	        minimum_response,
 	        calib_offset_x,
 	        calib_offset_y,
-	        1-cam);
+	        0);
 
 		if ((cam == 0) || (show_features) || (show_lines)) {
 		    no_of_feats_horizontal = stereocam->get_features_horizontal(
@@ -856,7 +862,7 @@ int main(int argc, char* argv[]) {
 	            minimum_response,
 	            calib_offset_x,
 	            calib_offset_y,
-	            1-cam);
+	            0);
 		}
 
 		if (show_lines) {
@@ -948,9 +954,6 @@ int main(int argc, char* argv[]) {
 			}
 
 		}
-
-		calib_offset_x = 0;
-		calib_offset_y = 0;
 	}
 
 	/* set ground plane parameters */
@@ -967,7 +970,6 @@ int main(int argc, char* argv[]) {
 		learnGrad,
 		groundPrior,
 		use_priors);
-
 
 	if (show_regions) {
 		lcam->enable_segmentation = 1;

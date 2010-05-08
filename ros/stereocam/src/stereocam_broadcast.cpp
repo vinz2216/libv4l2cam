@@ -1,5 +1,5 @@
 /*
-    ROS driver to broadcast stereo images from a stereo webcam (eg. Minoru)    
+    ROS driver to broadcast stereo images from a stereo webcam (eg. Minoru)
     Copyright (C) 2010 Bob Mottram and Giacomo Spigler
     fuzzgun@gmail.com
 
@@ -24,6 +24,7 @@
 #include <image_transport/image_transport.h>
 #include <sstream>
 
+#include <omp.h>
 #include <iostream>
 #include <cv.h>
 #include <highgui.h>
@@ -32,14 +33,22 @@
 #include "stereocam/camera_active.h"
 #include "stereocam/stereocam_params.h"
 #include "stereocam/densestereo_params.h"
+#include "stereocam/featurestereo_params.h"
 #include "libcam.h"
 #include "libcam.cpp"
+#include "polynomial.h"
+#include "polynomial.cpp"
+#include "stereo.h"
+#include "stereo.cpp"
 #include "stereodense.h"
 #include "stereodense.cpp"
 
 // if you wish the cameras to begin broadcasting immediately
 // instead of waiting for subscribers then set this flag
 bool broadcast_immediately = false;
+
+bool flip_left_image = false;
+bool flip_right_image = false;
 
 std::string dev0 = "";
 std::string dev1 = "";
@@ -68,14 +77,29 @@ int cross_checking_threshold = 50;
 float baseline_mm = 60;
 float focal_length_pixels = 150;
 
+bool publish_feature_matches = false;
+bool publish_disparity_map = false;
+
+// feature based stereo parameters
+svs* lcam = NULL;
+svs* rcam = NULL;
+int inhibition_radius = 6;
+unsigned int minimum_response = 25;
+int learnDesc = 18*5;  /* weight associated with feature descriptor match */
+int learnLuma = 7*5;   /* weight associated with luminance match */
+int learnDisp = 1;     /* weight associated with disparity (bias towards smaller disparities) */
+int learnGrad = 4;     /* weight associated with horizontal gradient */
+int groundPrior = 200; /* weight for ground plane prior */
+int use_priors = 1;
+
 /*!
  * \brief stop the stereo camera
  * \param left_camera left camera object
  * \param right_camera right camera object
  */
 void stop_cameras(
-  Camera *&left_camera,
-  Camera *&right_camera)
+    Camera *&left_camera,
+    Camera *&right_camera)
 {
     if (left_camera != NULL) {
         delete left_camera;
@@ -92,8 +116,8 @@ void stop_cameras(
  * \param res returned parameters
  */
 bool camera_active(
-  stereocam::camera_active::Request &req,
-  stereocam::camera_active::Response &res)
+    stereocam::camera_active::Request &req,
+    stereocam::camera_active::Response &res)
 {
     if ((int)req.camera_active > 0) {
         if (dev0 != "") {
@@ -111,18 +135,18 @@ bool camera_active(
         cam_active_request = false;
         res.ack = 1;
     }
-    
+
     return(true);
-} 
+}
 
 /*!
  * \brief service requests camera parameters to be changed
  * \param req requested parameters
  * \param res returned parameters
- */ 
+ */
 bool request_params(
-  stereocam::stereocam_params::Request &req,
-  stereocam::stereocam_params::Response &res)
+    stereocam::stereocam_params::Request &req,
+    stereocam::stereocam_params::Response &res)
 {
     if (!cam_active) {
         ROS_INFO("Left camera:  %s", req.left_device.c_str());
@@ -146,6 +170,9 @@ bool request_params(
 
         fps = (int)req.fps;
 
+        flip_left_image = req.flip_left;
+        flip_right_image = req.flip_right;
+
         disparity.width = left_image.width;
         disparity.height = left_image.height;
         disparity.encoding = "mono8";
@@ -161,16 +188,16 @@ bool request_params(
         res.ack = -1;
     }
     return(true);
-} 
+}
 
 /*!
  * \brief service requests dense stereo parameters to be changed
- * \param req requested parametersflo
+ * \param req requested parameters
  * \param res returned parameters
- */ 
+ */
 bool request_dense_stereo_params(
-  stereocam::densestereo_params::Request &req,
-  stereocam::densestereo_params::Response &res)
+    stereocam::densestereo_params::Request &req,
+    stereocam::densestereo_params::Response &res)
 {
     offset_x = (int)req.offset_x;
     offset_y = (int)req.offset_y;
@@ -182,10 +209,27 @@ bool request_dense_stereo_params(
     disparity_threshold_percent = (int)req.disparity_threshold_percent;
     despeckle = (bool)req.despeckle;
     cross_checking_threshold = (int)req.cross_checking_threshold;
-
     res.ack = 1;
+    publish_disparity_map = true;
     return(true);
-} 
+}
+
+/*!
+ * \brief service requests feature stereo parameters to be changed
+ * \param req requested parameters
+ * \param res returned parameters
+ */
+bool request_feature_stereo_params(
+    stereocam::featurestereo_params::Request &req,
+    stereocam::featurestereo_params::Response &res)
+{
+    offset_x = (int)req.offset_x;
+    offset_y = (int)req.offset_y;
+    max_disparity_percent = (int)max_disparity_percent;
+    res.ack = 1;
+    publish_feature_matches = true;
+    return(true);
+}
 
 /*!
  * \brief convert the disparity map to stereo_msgs::Image
@@ -216,11 +260,11 @@ void disparity_map_to_Image(
 
     for (int y = 0; y < img_height; y++) {
         int n2 = ((y / vertical_sampling) / smooth_vert) * width2;
-	for (int x = 0; x < img_width; x++) {
-	    int n = y*img_width + x;
-	    int n2b = (n2 + (x / smoothing_radius)) * 2;
+        for (int x = 0; x < img_width; x++) {
+            int n = y*img_width + x;
+            int n2b = (n2 + (x / smoothing_radius)) * 2;
             data[n] = (unsigned char)(disparity_map[n2b + 1] * 255 / max_disparity_pixels);
-	}
+        }
     }
 }
 
@@ -251,9 +295,9 @@ bool intersection(
     float& yi)
 {
     float a1, b1, c1,         //constants of linear equations
-          a2, b2, c2,
-          det_inv,            //the inverse of the determinant of the coefficient
-          m1, m2, dm;         //the gradients of each line
+    a2, b2, c2,
+    det_inv,            //the inverse of the determinant of the coefficient
+    m1, m2, dm;         //the gradients of each line
     bool insideLine = false;  //is the intersection along the lines given, or outside them
     float tx, ty, bx, by;
 
@@ -290,12 +334,40 @@ bool intersection(
         yi = ((a2 * c1 - a1 * c2) * det_inv);
 
         //is the intersection inside the line or outside it?
-        if (x0 < x1) { tx = x0; bx = x1; } else { tx = x1; bx = x0; }
-        if (y0 < y1) { ty = y0; by = y1; } else { ty = y1; by = y0; }
+        if (x0 < x1) {
+            tx = x0;
+            bx = x1;
+        }
+        else {
+            tx = x1;
+            bx = x0;
+        }
+        if (y0 < y1) {
+            ty = y0;
+            by = y1;
+        }
+        else {
+            ty = y1;
+            by = y0;
+        }
         if ((xi >= tx) && (xi <= bx) && (yi >= ty) && (yi <= by))
         {
-            if (x2 < x3) { tx = x2; bx = x3; } else { tx = x3; bx = x2; }
-            if (y2 < y3) { ty = y2; by = y3; } else { ty = y3; by = y2; }
+            if (x2 < x3) {
+                tx = x2;
+                bx = x3;
+            }
+            else {
+                tx = x3;
+                bx = x2;
+            }
+            if (y2 < y3) {
+                ty = y2;
+                by = y3;
+            }
+            else {
+                ty = y3;
+                by = y2;
+            }
             if ((xi >= tx) && (xi <= bx) && (yi >= ty) && (yi <= by))
             {
                 insideLine = true;
@@ -330,7 +402,7 @@ void disparity_map_to_PointCloud(
     unsigned int* disparity_map,
     unsigned char* img_left,
     int img_width,
-    int img_height,    
+    int img_height,
     int vertical_sampling,
     int smoothing_radius,
     int max_disparity_percent,
@@ -356,7 +428,7 @@ void disparity_map_to_PointCloud(
         }
     }
 
-    point_cloud.points.resize (no_of_points); 
+    point_cloud.points.resize (no_of_points);
     point_cloud.channels.resize (3);
     point_cloud.channels[0].name = "r";
     point_cloud.channels[0].values.resize(no_of_points);
@@ -364,6 +436,9 @@ void disparity_map_to_PointCloud(
     point_cloud.channels[1].values.resize(no_of_points);
     point_cloud.channels[2].name = "b";
     point_cloud.channels[2].values.resize(no_of_points);
+
+    // multiplier used to convert to metres
+    float mult = 1.0f / 1000.0f;
 
     int baseline_x = baseline_mm / 2.0;
     float cx = img_width / 2.0f;
@@ -418,9 +493,9 @@ void disparity_map_to_PointCloud(
                             float point_z = (dz - uncertainty_pixels + (((rand() % 128)-64)*uncertainty2)) * fraction;
 
                             // set the point position
-                            point_cloud.points[no_of_points].x = point_x;
-                            point_cloud.points[no_of_points].y = point_y;
-                            point_cloud.points[no_of_points].z = point_z;
+                            point_cloud.points[no_of_points].x = point_x * mult;
+                            point_cloud.points[no_of_points].y = point_y * mult;
+                            point_cloud.points[no_of_points].z = point_z * mult;
 
                             // set the colour
                             point_cloud.channels[0].values[no_of_points] = r;
@@ -440,176 +515,410 @@ void disparity_map_to_PointCloud(
     point_cloud.header.frame_id = "stereo_cloud";
 }
 
-int main(int argc, char** argv)
+/*!
+ * \brief turns feature matches into a point cloud.
+ * \param no_of_matches number of feature matches
+ * \param img_left left colour image
+ * \param img_width width of the image
+ * \param img_height height of the image
+ * \param baseline_mm stereo camera baseline
+ * \param focal_length_pixels focal length in pixels
+ * \param point_cloud returned point cloud
+ */
+void feature_matches_to_PointCloud(
+    int no_of_matches,
+    unsigned char* img_left,
+    int img_width,
+    int img_height,
+    float baseline_mm,
+    float focal_length_pixels,
+    sensor_msgs::PointCloud &point_cloud)
 {
-  ros::init(argc, argv, "stereocam_broadcast");
-  ros::NodeHandle n;
+    point_cloud.points.resize (no_of_matches);
+    point_cloud.channels.resize (3);
+    point_cloud.channels[0].name = "r";
+    point_cloud.channels[0].values.resize(no_of_matches);
+    point_cloud.channels[1].name = "g";
+    point_cloud.channels[1].values.resize(no_of_matches);
+    point_cloud.channels[2].name = "b";
+    point_cloud.channels[2].values.resize(no_of_matches);
 
-  image_transport::ImageTransport it(n);
-  image_transport::Publisher left_pub = it.advertise("stereo/left/image_raw", 1);
-  image_transport::Publisher right_pub = it.advertise("stereo/right/image_raw", 1);
-  image_transport::Publisher disparity_pub = it.advertise("stereo/image_disparity", 1);
-  ros::Publisher point_cloud_pub = n.advertise<sensor_msgs::PointCloud>("stereo/point_cloud", 1);
-  ros::Rate loop_rate(30);
-  int count = 0;
+    int baseline_x = baseline_mm / 2.0;
+    float cx = img_width / 2.0f;
+    float cy = img_height / 2.0f;
 
-  IplImage *l=NULL;
-  IplImage *r=NULL;
-  unsigned char *l_=NULL;
-  unsigned char *r_=NULL;
+    float x0 = -baseline_x;
+    float y0 = 0;
+    float x2 = baseline_x;
+    float y2 = 0;
+    float y1 = focal_length_pixels;
+    float y3 = focal_length_pixels;
 
-  // start service which can be used to start and stop the stereo camera
-  ros::ServiceServer service_active = n.advertiseService("camera_active", camera_active);
+    // multiplier used to convert to metres
+    float mult = 1.0f / 1000.0f;
 
-  // start service which can be used to change camera parameters
-  ros::ServiceServer service_params = n.advertiseService("stereocam_params", request_params);
+    for (int i = 0; i < no_of_matches; i++) {
+        if ((lcam->svs_matches[i*5] > 0) &&
+                (lcam->svs_matches[i*5+4] != 9999)) {
+            float x = lcam->svs_matches[i*5 + 1]/(float)SVS_SUB_PIXEL;
+            float y = lcam->svs_matches[i*5 + 2];
+            float dz = cy - (y / (float)img_height);
+            float disp = lcam->svs_matches[i*5 + 3]/(float)SVS_SUB_PIXEL;
 
-  // start service which can be used to change camera parameters
-  ros::ServiceServer service_densestereo = n.advertiseService("densestereo_params", request_dense_stereo_params);
+            int n = ((int)y*img_width + (int)x)*3;
+            int r = img_left[n+2];
+            int g = img_left[n+1];
+            int b = img_left[n];
 
-  if (!broadcast_immediately) {
-      // wait for subscribers
-      ROS_INFO("Stereo camera node running");
-      ROS_INFO("Waiting for subscribers...");
-  }
-  else {
-      // set some default values
-      dev0 = "/dev/video1";
-      dev1 = "/dev/video0";
+            float left_x = x - cx;
+            float x1 = left_x + x0;
 
-      left_image.width  = 320;
-      left_image.height = 240;
-      left_image.step = left_image.width * 3;
-      left_image.encoding = "bgr8";
-      left_image.set_data_size(left_image.width*left_image.height*3);
+            float right_x = x - disp - cx;
+            float x3 = right_x + x2;
 
-      right_image.width  = left_image.width;
-      right_image.height = left_image.height;
-      right_image.step = right_image.width * 3;
-      right_image.encoding = "bgr8";
-      right_image.set_data_size(right_image.width*right_image.height*3);
+            float point_x = 0, point_y = 0;
+            intersection(x0,y0,x1,y1, x2,y2,x3,y3, point_x,point_y);
+            if (point_x != 9999) {
+                float fraction = point_y / focal_length_pixels;
+                float point_z = dz * fraction;
 
-      disparity.width = left_image.width;
-      disparity.height = left_image.height;
-      disparity.encoding = "mono8";
-      disparity.set_data_size(disparity.width*disparity.height);
+                // set the point position in metres
+                point_cloud.points[i].x = point_x * mult;
+                point_cloud.points[i].y = point_y * mult;
+                point_cloud.points[i].z = point_z * mult;
 
-      fps = 30;
-      cam_active_request = true;
-  }
+                // set the colour
+                point_cloud.channels[0].values[i] = r;
+                point_cloud.channels[1].values[i] = g;
+                point_cloud.channels[2].values[i] = b;
+            }
+        }
+    }
 
-  const int MAX_IMAGE_WIDTH = 640;
-  const int MAX_IMAGE_HEIGHT = 480;
-  const int VERTICAL_SAMPLING = 2;
-  const int sub_pixel_multiplier = 16;
-  int max_disparity_pixels = MAX_IMAGE_WIDTH * max_disparity_percent / 100;
-  int disparity_space_length = (max_disparity_pixels / disparity_step) * MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
-  int disparity_map_length = MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
-  unsigned int* disparity_space = new unsigned int[disparity_space_length];
-  unsigned int* disparity_map = new unsigned int[disparity_map_length];
+    point_cloud.header.stamp = ros::Time::now();
+    point_cloud.header.frame_id = "stereo_feature_cloud";
+    ROS_INFO("No of feature matches %d", no_of_matches);
+}
 
-  while (ros::ok())
-  {
-    // request to turn camera on or off
-    if (cam_active_request != cam_active) {
-        if (cam_active_request == false) {
-            stop_cameras(c1,c2);
+/*!
+ * \brief extracts edge features and stereo matches them
+ * \param left_img left image data
+ * \param right_img right image data
+ * \param image_width width of the image
+ * \param image_height height of the image
+ * \param ideal_no_of_matches desired number of stereo matches to be returned
+ * \param max_disparity_percent maximum stereo disparity as a percentage of image width
+ * \return number of matched features
+ */
+int update_feature_matches(
+    unsigned char* left_img,
+    unsigned char* right_img,
+    int image_width,
+    int image_height,
+    int ideal_no_of_matches,
+    int max_disparity_percent)
+{
+    if (lcam == NULL) {
+        lcam = new svs(image_width, image_height);
+        rcam = new svs(image_width, image_height);
+    }
+
+#pragma omp parallel for
+    for (int cam = 1; cam >= 0; cam--) {
+
+        int calib_offset_x = 0;
+        int calib_offset_y = 0;
+        unsigned char* rectified_frame_buf = NULL;
+        svs* stereo_cam = NULL;
+        if (cam == 0) {
+            rectified_frame_buf = left_img;
+            stereo_cam = lcam;
+            calib_offset_x = 0;
+            calib_offset_y = 0;
         }
         else {
-            stop_cameras(c1, c2);
+            rectified_frame_buf = right_img;
+            stereo_cam = rcam;
+            calib_offset_x = offset_x;
+            calib_offset_y = offset_y;
+        }
 
-            // create appropriately sized images
-            if (l_ != NULL) {
-                cvReleaseImage(&l);
-                cvReleaseImage(&r);
-            }
-            l=cvCreateImage(cvSize(left_image.width, left_image.height), 8, 3);
-            r=cvCreateImage(cvSize(right_image.width, right_image.height), 8, 3);
+        int no_of_feats = stereo_cam->get_features_vertical(
+                          rectified_frame_buf,
+                          inhibition_radius,
+                          minimum_response,
+                          calib_offset_x,
+                          calib_offset_y,
+                          0);
 
-            l_=(unsigned char *)l->imageData;
-            r_=(unsigned char *)r->imageData;
+        ROS_INFO("number of edges %d", no_of_feats);
 
-            // start the cameras
-            c1 = new Camera(dev0.c_str(), left_image.width, left_image.height, fps);
-            c2 = new Camera(dev1.c_str(), right_image.width, right_image.height, fps);
-            cam_active = true;
+        if (cam == 0) {
+            stereo_cam->get_features_horizontal(
+                rectified_frame_buf,
+                inhibition_radius,
+                minimum_response,
+                calib_offset_x,
+                calib_offset_y,
+                0);
         }
     }
 
-    if (cam_active) {
+    lcam->enable_ground_priors = false;
+    lcam->ground_y_percent = 0;
 
-        // Read image data
-        while(c1->Get()==0 || c2->Get()==0) usleep(100);
+    int matches = lcam->match(
+                      rcam,
+                      ideal_no_of_matches,
+                      max_disparity_percent,
+                      learnDesc,
+                      learnLuma,
+                      learnDisp,
+                      learnGrad,
+                      groundPrior,
+                      use_priors);
 
-        // Convert to IplImage
-        c1->toIplImage(l);
-        c2->toIplImage(r);
+    return(matches);
+}
 
-        // create disparity map
-	stereodense::update_disparity_map(
-	    l_,r_,left_image.width,left_image.height,
-  	    offset_x, offset_y,
-            vertical_sampling,
-	    max_disparity_percent,
-	    correlation_radius,
-	    smoothing_radius,
-	    disparity_step,
-	    disparity_threshold_percent,
-	    despeckle,
-	    cross_checking_threshold,
-	    disparity_space,
-	    disparity_map);
+int main(int argc, char** argv)
+{
+    ros::init(argc, argv, "stereocam_broadcast");
+    ros::NodeHandle n;
 
-        // Convert to sensor_msgs::Image
-        memcpy ((void*)(&left_image.data[0]), (void*)l_, left_image.width*left_image.height*3);
-        memcpy ((void*)(&right_image.data[0]), (void*)r_, right_image.width*right_image.height*3);
+    image_transport::ImageTransport it(n);
+    image_transport::Publisher left_pub = it.advertise("stereo/left/image_raw", 1);
+    image_transport::Publisher right_pub = it.advertise("stereo/right/image_raw", 1);
+    image_transport::Publisher disparity_pub = it.advertise("stereo/image_disparity", 1);
+    ros::Publisher point_cloud_pub = n.advertise<sensor_msgs::PointCloud>("stereo/point_cloud", 1);
+    ros::Rate loop_rate(30);
 
-        // convert to stereo_msgs::Image format
-        disparity_map_to_Image(
-            disparity_map,
-            disparity,
-            vertical_sampling,
-            smoothing_radius,
-            max_disparity_percent,
-            sub_pixel_multiplier,
-            baseline_mm,
-            focal_length_pixels);
+    IplImage *l=NULL;
+    IplImage *r=NULL;
+    unsigned char *l_=NULL;
+    unsigned char *r_=NULL;
 
-        // create a point cloud from the disparity map
-        float uncertainty_pixels = 1;
-        sensor_msgs::PointCloud point_cloud;
-        disparity_map_to_PointCloud(
-            disparity_map,
-            l_, left_image.width, left_image.height,
-            vertical_sampling,
-            smoothing_radius,
-            max_disparity_percent,
-            sub_pixel_multiplier,
-            baseline_mm,
-            focal_length_pixels,
-            uncertainty_pixels,
-            point_cloud);
+    // start service which can be used to start and stop the stereo camera
+    ros::ServiceServer service_active = n.advertiseService("camera_active", camera_active);
 
-        // Publish
-        left_pub.publish(left_image);
-        right_pub.publish(right_image);
-        disparity_pub.publish(disparity);
-        point_cloud_pub.publish(point_cloud);
+    // start service which can be used to change camera parameters
+    ros::ServiceServer service_params = n.advertiseService("stereocam_params", request_params);
 
-        ROS_INFO("Stereo images published");
+    // start service which can be used to change dense stereo parameters
+    ros::ServiceServer service_densestereo = n.advertiseService("densestereo_params", request_dense_stereo_params);
+
+    // start service which can be used to change feature based stereo parameters
+    ros::ServiceServer service_featurestereo = n.advertiseService("featurestereo_params", request_feature_stereo_params);
+
+    if (!broadcast_immediately) {
+        // wait for subscribers
+        ROS_INFO("Stereo camera node running");
+        ROS_INFO("Waiting for subscribers...");
+    }
+    else {
+        // set some default values
+        dev0 = "/dev/video1";
+        dev1 = "/dev/video0";
+
+        left_image.width  = 320;
+        left_image.height = 240;
+        left_image.step = left_image.width * 3;
+        left_image.encoding = "bgr8";
+        left_image.set_data_size(left_image.width*left_image.height*3);
+
+        right_image.width  = left_image.width;
+        right_image.height = left_image.height;
+        right_image.step = right_image.width * 3;
+        right_image.encoding = "bgr8";
+        right_image.set_data_size(right_image.width*right_image.height*3);
+
+        disparity.width = left_image.width;
+        disparity.height = left_image.height;
+        disparity.encoding = "mono8";
+        disparity.set_data_size(disparity.width*disparity.height);
+
+        fps = 30;
+        cam_active_request = true;
     }
 
-    ros::spinOnce();
-    loop_rate.sleep();
-    ++count;
-  }
+    const int MAX_IMAGE_WIDTH = 640;
+    const int MAX_IMAGE_HEIGHT = 480;
+    const int VERTICAL_SAMPLING = 2;
+    const int sub_pixel_multiplier = 16;
+    int max_disparity_pixels = MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+    int disparity_space_length = (max_disparity_pixels / disparity_step) * MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
+    int disparity_map_length = MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
+    unsigned int* disparity_space = new unsigned int[disparity_space_length];
+    unsigned int* disparity_map = new unsigned int[disparity_map_length];
 
-  delete[] disparity_space;
-  delete[] disparity_map;
-  if (l_ != NULL) {
-      cvReleaseImage(&l);
-      cvReleaseImage(&r);
-  }
-  stop_cameras(c1,c2);
+    unsigned char* rectification_buffer = NULL;
+
+    int no_matches = 0;
+    bool restart_cameras = false;
+
+    while (n.ok())
+    {
+        // request to turn camera on or off
+        if ((cam_active_request != cam_active) || (restart_cameras)) {
+            if ((cam_active_request == false) && (!restart_cameras)) {
+                stop_cameras(c1,c2);
+            }
+            else {
+                // create appropriately sized images
+                if (l_ != NULL) {
+                    cvReleaseImage(&l);
+                    cvReleaseImage(&r);
+                }
+                l=cvCreateImage(cvSize(left_image.width, left_image.height), 8, 3);
+                r=cvCreateImage(cvSize(right_image.width, right_image.height), 8, 3);
+
+                l_=(unsigned char *)l->imageData;
+                r_=(unsigned char *)r->imageData;
+
+                if (lcam != NULL) {
+                    delete lcam;
+                    delete rcam;
+                    lcam = NULL;
+                    rcam = NULL;
+                }
+
+                // start the cameras
+                if (c1 != NULL) {
+                    delete c1;
+                    delete c2;
+                }
+
+                c1 = new Camera(dev0.c_str(), left_image.width, left_image.height, fps);
+                c2 = new Camera(dev1.c_str(), right_image.width, right_image.height, fps);
+
+                cam_active = true;
+                restart_cameras = false;
+            }
+        }
+
+        if (cam_active) {
+
+            // Read image data
+            while ((c1->Get() == 0) || (c2->Get() == 0)) {
+                usleep(100);
+            }
+
+            // Convert to IplImage
+            c1->toIplImage(l);
+            c2->toIplImage(r);
+
+            // flip images
+            if (flip_left_image) {
+                if (rectification_buffer == NULL) {
+                    rectification_buffer = new unsigned char[left_image.width * left_image.height * 3];
+                }
+                lcam->flip(l_, rectification_buffer);
+            }
+            if (flip_right_image) {
+                if (rectification_buffer == NULL) {
+                    rectification_buffer = new unsigned char[left_image.width * left_image.height * 3];
+                }
+                rcam->flip(r_, rectification_buffer);
+            }
+
+            if (publish_feature_matches) {
+                // match features
+                int matches = update_feature_matches(l_,r_,left_image.width,left_image.height, 400, max_disparity_percent);
+
+                // convert features into a point cloud
+                sensor_msgs::PointCloud point_cloud;
+                feature_matches_to_PointCloud(
+                    matches,
+                    l_, left_image.width,left_image.height,
+                    baseline_mm,
+                    focal_length_pixels,
+                    point_cloud);
+                point_cloud_pub.publish(point_cloud);
+
+                if (matches == 0) {
+                    no_matches++;
+                    if (no_matches > 3) {
+                        restart_cameras = true;
+                        no_matches = 0;
+                    }
+                }
+            }
+
+            if (publish_disparity_map) {
+                // create disparity map
+                stereodense::update_disparity_map(
+                    l_,r_,left_image.width,left_image.height,
+                    offset_x, offset_y,
+                    vertical_sampling,
+                    max_disparity_percent,
+                    correlation_radius,
+                    smoothing_radius,
+                    disparity_step,
+                    disparity_threshold_percent,
+                    despeckle,
+                    cross_checking_threshold,
+                    disparity_space,
+                    disparity_map);
+
+                // convert to stereo_msgs::Image format
+                disparity_map_to_Image(
+                    disparity_map,
+                    disparity,
+                    vertical_sampling,
+                    smoothing_radius,
+                    max_disparity_percent,
+                    sub_pixel_multiplier,
+                    baseline_mm,
+                    focal_length_pixels);
+
+                // create a point cloud from the disparity map
+                float uncertainty_pixels = 1;
+                sensor_msgs::PointCloud point_cloud;
+                disparity_map_to_PointCloud(
+                    disparity_map,
+                    l_, left_image.width, left_image.height,
+                    vertical_sampling,
+                    smoothing_radius,
+                    max_disparity_percent,
+                    sub_pixel_multiplier,
+                    baseline_mm,
+                    focal_length_pixels,
+                    uncertainty_pixels,
+                    point_cloud);
+
+                disparity_pub.publish(disparity);
+                point_cloud_pub.publish(point_cloud);
+            }
+
+            // Convert to sensor_msgs::Image
+            memcpy ((void*)(&left_image.data[0]), (void*)l_, left_image.width*left_image.height*3);
+            memcpy ((void*)(&right_image.data[0]), (void*)r_, right_image.width*right_image.height*3);
+
+            left_pub.publish(left_image);
+            right_pub.publish(right_image);
+
+            ROS_INFO("Stereo images published");
+        }
+
+        ros::spinOnce();
+        int wait = cvWaitKey(10) & 255;
+        if ( wait == 27 ) break;
+    }
+
+    if (l_ != NULL) {
+        cvReleaseImage(&l);
+        cvReleaseImage(&r);
+    }
+
+    if (lcam != NULL) {
+        delete lcam;
+        delete rcam;
+    }
+    if (rectification_buffer != NULL) delete[] rectification_buffer;
+    if (disparity_space != NULL) delete[] disparity_space;
+    if (disparity_map != NULL) delete[] disparity_map;
+
+    stop_cameras(c1,c2);
+    ROS_INFO("Exit Success");
 }
 

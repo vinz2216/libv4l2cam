@@ -1,5 +1,5 @@
 /*
-    Example ROS subscription to stereo images being broadcast from a stereo webcam (eg. Minoru)    
+    Example ROS subscription to stereo images being broadcast from a stereo webcam (eg. Minoru)
     Copyright (C) 2010 Bob Mottram and Giacomo Spigler
     fuzzgun@gmail.com
 
@@ -29,11 +29,12 @@
 #include "stereocam/camera_active.h"
 #include "stereocam/stereocam_params.h"
 #include "stereocam/densestereo_params.h"
+#include "stereocam/featurestereo_params.h"
 #include "cv_bridge/CvBridge.h"
 #include <image_transport/image_transport.h>
 
 // whether to display the stereo images
-bool show_images = true;
+bool show_images = false;
 
 IplImage* left = NULL;
 IplImage* right = NULL;
@@ -41,6 +42,7 @@ IplImage* disparity = NULL;
 sensor_msgs::CvBridge bridge_;
 ros::ServiceClient client_camera_params;
 ros::ServiceClient client_densestereo_params;
+ros::ServiceClient client_featurestereo_params;
 ros::ServiceClient client_camera_active;
 std::string left_image_title = "Left Image";
 std::string right_image_title = "Right Image";
@@ -52,17 +54,17 @@ std::string disparity_image_title = "Disparity Image";
  */
 void disparityImageCallback(const sensor_msgs::ImageConstPtr& ptr)
 {
-  ROS_INFO("Received disparity image");
+    ROS_INFO("Received disparity image");
 
-  try
-  {
-      disparity = bridge_.imgMsgToCv(ptr, "mono8");
-      if (show_images) cvShowImage(disparity_image_title.c_str(), disparity);
-  }
-  catch (sensor_msgs::CvBridgeException error)
-  {
-      ROS_ERROR("Error converting disparity image to IplImage");
-  }
+    try
+    {
+        disparity = bridge_.imgMsgToCv(ptr, "mono8");
+        if (show_images) cvShowImage(disparity_image_title.c_str(), disparity);
+    }
+    catch (sensor_msgs::CvBridgeException error)
+    {
+        ROS_ERROR("Error converting disparity image to IplImage");
+    }
 
 }
 
@@ -72,17 +74,17 @@ void disparityImageCallback(const sensor_msgs::ImageConstPtr& ptr)
  */
 void leftImageCallback(const sensor_msgs::ImageConstPtr& ptr)
 {
-  ROS_INFO("Received left image");
+    ROS_INFO("Received left image");
 
-  try
-  {
-      left = bridge_.imgMsgToCv(ptr, "bgr8");
-      if (show_images) cvShowImage(left_image_title.c_str(), left);
-  }
-  catch (sensor_msgs::CvBridgeException error)
-  {
-      ROS_ERROR("Error converting left image to IplImage");
-  }
+    try
+    {
+        left = bridge_.imgMsgToCv(ptr, "bgr8");
+        if (show_images) cvShowImage(left_image_title.c_str(), left);
+    }
+    catch (sensor_msgs::CvBridgeException error)
+    {
+        ROS_ERROR("Error converting left image to IplImage");
+    }
 }
 
 /*!
@@ -91,17 +93,17 @@ void leftImageCallback(const sensor_msgs::ImageConstPtr& ptr)
  */
 void rightImageCallback(const sensor_msgs::ImageConstPtr& ptr)
 {
-  ROS_INFO("Received right image");
+    ROS_INFO("Received right image");
 
-  try
-  {
-      right = bridge_.imgMsgToCv(ptr, "bgr8");
-      if (show_images) cvShowImage(right_image_title.c_str(), right);
-  }
-  catch (sensor_msgs::CvBridgeException error)
-  {
-      ROS_ERROR("Error converting right image to IplImage");
-  }
+    try
+    {
+        right = bridge_.imgMsgToCv(ptr, "bgr8");
+        if (show_images) cvShowImage(right_image_title.c_str(), right);
+    }
+    catch (sensor_msgs::CvBridgeException error)
+    {
+        ROS_ERROR("Error converting right image to IplImage");
+    }
 }
 
 /*!
@@ -109,9 +111,9 @@ void rightImageCallback(const sensor_msgs::ImageConstPtr& ptr)
  */
 void PointCloudImageCallback(const sensor_msgs::PointCloudConstPtr& ptr)
 {
-  ROS_INFO("Received point cloud");
+    ROS_INFO("Received point cloud");
 
-  sensor_msgs::PointCloud point_cloud = *ptr;
+    sensor_msgs::PointCloud point_cloud = *ptr;
 }
 
 /*!
@@ -119,24 +121,24 @@ void PointCloudImageCallback(const sensor_msgs::PointCloudConstPtr& ptr)
  */
 void camera_on()
 {
-  stereocam::camera_active srv;
-  srv.request.camera_active = 1;
-  if (client_camera_active.call(srv)) {
-      if ((int)srv.response.ack == 1) {
-          ROS_INFO("Camera On");
-      }
-      else {
-          if ((int)srv.response.ack == -1) {
-              ROS_WARN("Camera parameters must be specified using set_stereo_camera_params before starting the camera");
-          }
-          else {
-              ROS_ERROR("Failed to activate camera");
-          }
-      }
-  }
-  else {
-      ROS_ERROR("Failed to activate camera");
-  }
+    stereocam::camera_active srv;
+    srv.request.camera_active = 1;
+    if (client_camera_active.call(srv)) {
+        if ((int)srv.response.ack == 1) {
+            ROS_INFO("Camera On");
+        }
+        else {
+            if ((int)srv.response.ack == -1) {
+                ROS_WARN("Camera parameters must be specified using set_stereo_camera_params before starting the camera");
+            }
+            else {
+                ROS_ERROR("Failed to activate camera");
+            }
+        }
+    }
+    else {
+        ROS_ERROR("Failed to activate camera");
+    }
 }
 
 /*!
@@ -144,19 +146,19 @@ void camera_on()
  */
 void camera_off()
 {
-  stereocam::camera_active srv;
-  srv.request.camera_active = 0;
-  if (client_camera_active.call(srv)) {
-      if ((int)srv.response.ack == 1) {
-          ROS_INFO("Camera Off");
-      }
-      else {
-          ROS_ERROR("Failed to deactivate camera");
-      }
-  }
-  else {
-      ROS_ERROR("Failed to deactivate camera");
-  }
+    stereocam::camera_active srv;
+    srv.request.camera_active = 0;
+    if (client_camera_active.call(srv)) {
+        if ((int)srv.response.ack == 1) {
+            ROS_INFO("Camera Off");
+        }
+        else {
+            ROS_ERROR("Failed to deactivate camera");
+        }
+    }
+    else {
+        ROS_ERROR("Failed to deactivate camera");
+    }
 }
 
 /*!
@@ -168,6 +170,8 @@ void camera_off()
  * \param fps frames per second
  * \param baseline_mm stereo baseline in millimetres
  * \param focal_length_pixels focal length in pixels
+ * \param flip_left_image whether to flip the left image
+ * \param flip_right_image whether to flip the right image
  */
 void set_stereo_camera_params(
     std::string left_device,
@@ -176,27 +180,31 @@ void set_stereo_camera_params(
     int height,
     int fps,
     int baseline_mm,
-    int focal_length_pixels)
+    int focal_length_pixels,
+    bool flip_left_image,
+    bool flip_right_image)
 {
-  stereocam::stereocam_params srv;
-  srv.request.left_device = left_device;
-  srv.request.right_device = right_device;
-  srv.request.width = width;
-  srv.request.height = height;
-  srv.request.fps = fps;
-  srv.request.baseline_mm = baseline_mm;
-  srv.request.focal_length_pixels = focal_length_pixels;
-  if (client_camera_params.call(srv)) {
-      if ((int)srv.response.ack == -1) {
-          ROS_WARN("Can't change image properties whilst the cameras are running");
-      }
-      else {
-          ROS_INFO("Changed stereo camera parameters");
-      }
-  }
-  else {
-      ROS_ERROR("Failed to call service stereocam_params");
-  }
+    stereocam::stereocam_params srv;
+    srv.request.left_device = left_device;
+    srv.request.right_device = right_device;
+    srv.request.width = width;
+    srv.request.height = height;
+    srv.request.fps = fps;
+    srv.request.flip_left = flip_left_image;
+    srv.request.flip_right = flip_right_image;
+    srv.request.baseline_mm = baseline_mm;
+    srv.request.focal_length_pixels = focal_length_pixels;
+    if (client_camera_params.call(srv)) {
+        if ((int)srv.response.ack == -1) {
+            ROS_WARN("Can't change image properties whilst the cameras are running");
+        }
+        else {
+            ROS_INFO("Changed stereo camera parameters");
+        }
+    }
+    else {
+        ROS_ERROR("Failed to call service stereocam_params");
+    }
 }
 
 /*!
@@ -224,64 +232,93 @@ void set_dense_stereo_params(
     bool despeckle,
     int cross_checking_threshold)
 {
-  stereocam::densestereo_params srv;
-  srv.request.offset_x = offset_x;
-  srv.request.offset_y = offset_y;
-  srv.request.vertical_sampling = vertical_sampling;
-  srv.request.max_disparity_percent = max_disparity_percent;
-  srv.request.correlation_radius = correlation_radius;
-  srv.request.smoothing_radius = smoothing_radius;
-  srv.request.disparity_step = disparity_step;
-  srv.request.disparity_threshold_percent = disparity_threshold_percent;
-  srv.request.despeckle = despeckle;
-  srv.request.cross_checking_threshold = cross_checking_threshold;
-  if (client_densestereo_params.call(srv)) {
-      ROS_INFO("Changed dense stereo parameters");
-  }
-  else {
-      ROS_ERROR("Failed to call service densestereo_params");
-  }
+    stereocam::densestereo_params srv;
+    srv.request.offset_x = offset_x;
+    srv.request.offset_y = offset_y;
+    srv.request.vertical_sampling = vertical_sampling;
+    srv.request.max_disparity_percent = max_disparity_percent;
+    srv.request.correlation_radius = correlation_radius;
+    srv.request.smoothing_radius = smoothing_radius;
+    srv.request.disparity_step = disparity_step;
+    srv.request.disparity_threshold_percent = disparity_threshold_percent;
+    srv.request.despeckle = despeckle;
+    srv.request.cross_checking_threshold = cross_checking_threshold;
+    if (client_densestereo_params.call(srv)) {
+        ROS_INFO("Changed dense stereo parameters");
+    }
+    else {
+        ROS_ERROR("Failed to call service densestereo_params");
+    }
+}
+
+/*!
+ * \brief set the parameters used for feature based stereo
+ * \param offset_x calibration x offset
+ * \param offset_y calibration y offset
+ * \param max_disparity_percent maximum disparity as a percentage of image width
+ */
+void set_feature_stereo_params(
+    int offset_x,
+    int offset_y,
+    int max_disparity_percent)
+{
+    stereocam::featurestereo_params srv;
+    srv.request.offset_x = offset_x;
+    srv.request.offset_y = offset_y;
+    srv.request.max_disparity_percent = max_disparity_percent;
+    if (client_featurestereo_params.call(srv)) {
+        ROS_INFO("Changed feature based stereo parameters");
+    }
+    else {
+        ROS_ERROR("Failed to call service featurestereo_params");
+    }
 }
 
 int main(int argc, char** argv)
 {
-  if (show_images) {
-      cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-      cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-  }
+    if (show_images) {
+        cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+        cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+    }
 
-  ros::init(argc, argv, "stereocam_subscribe");
-  ros::NodeHandle n;
-  image_transport::ImageTransport it(n);
-  image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_raw", 1, leftImageCallback);
-  image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_raw", 1, rightImageCallback);
-  image_transport::Subscriber disparity_sub = it.subscribe("stereo/image_disparity", 1, disparityImageCallback);
-  ros::Subscriber point_cloud_sub = n.subscribe("stereo/point_cloud", 1, PointCloudImageCallback);
-  client_camera_active = n.serviceClient<stereocam::camera_active>("camera_active");
-  client_camera_params = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
-  client_densestereo_params = n.serviceClient<stereocam::densestereo_params>("densestereo_params");
+    ros::init(argc, argv, "stereocam_subscribe");
+    ros::NodeHandle n;
+    image_transport::ImageTransport it(n);
+    image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_raw", 1, leftImageCallback);
+    image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_raw", 1, rightImageCallback);
+    image_transport::Subscriber disparity_sub = it.subscribe("stereo/image_disparity", 1, disparityImageCallback);
+    ros::Subscriber point_cloud_sub = n.subscribe("stereo/point_cloud", 1, PointCloudImageCallback);
+    client_camera_active = n.serviceClient<stereocam::camera_active>("camera_active");
+    client_camera_params = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
+    client_densestereo_params = n.serviceClient<stereocam::densestereo_params>("densestereo_params");
+    client_featurestereo_params = n.serviceClient<stereocam::featurestereo_params>("featurestereo_params");
 
-  int offset_x = -16;
-  int offset_y = 2;
-  int max_disparity_percent = 30;
-  set_stereo_camera_params("/dev/video1","/dev/video0",320,240,30,60,150);
-  set_dense_stereo_params(offset_x,offset_y,2,max_disparity_percent,1,2,8,0,true,30);
+    int offset_x = -16;
+    int offset_y = 2;
+    int max_disparity_percent = 30;
+    set_stereo_camera_params("/dev/video1","/dev/video0",320,240,30,60,150,false,false);
+    //set_dense_stereo_params(offset_x,offset_y,2,max_disparity_percent,1,2,8,0,true,30);
+    set_feature_stereo_params(offset_x,offset_y,max_disparity_percent);
 
-  camera_on();
+    camera_on();
 
-  if (show_images) {
-      ros::Rate loop_rate(30);
-      while(1) {    
-        ros::spinOnce();
-        loop_rate.sleep();
+    if (show_images) {
+        ros::Rate loop_rate(30);
+        while (n.ok()) {
+            ros::spinOnce();
+            loop_rate.sleep();
 
-        int wait = cvWaitKey(10) & 255;
-        if( wait == 27 ) break;
-      }
-  }
-  else {
-      ros::spin();
-  }
-  return 0;
+            int wait = cvWaitKey(10) & 255;
+            if ( wait == 27 ) break;
+        }
+
+        // close windows
+        cvDestroyWindow(left_image_title.c_str());
+        cvDestroyWindow(right_image_title.c_str());
+    }
+    else {
+        ros::spin();
+    }
+    return 0;
 }
 
