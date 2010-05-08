@@ -173,145 +173,146 @@ void svs::histogram_equalise(
 /* Updates sliding sums and edge response values along a single row or column
  * Returns the mean luminance along the row or column */
 int svs::update_sums(int cols, /* if non-zero we're dealing with columns not rows */
-int i, /* row or column index */
-unsigned char* rectified_frame_buf, /* image data */
-int segment) { /* if non zero update low contrast areas used for segmentation */
+                     int i, /* row or column index */
+                     unsigned char* rectified_frame_buf, /* image data */
+                     int segment) { /* if non zero update low contrast areas used for segmentation */
 
-	int j, k, x, y, idx, max, sum = 0, mean = 0;
+    int j, k, x, y, idx, max, sum = 0, mean = 0;
 
-	if (cols == 0) {
-		/* compute sums along the row */
-		y = i;
-		idx = imgWidth * y * 3 + 2;
-		max = (int) imgWidth;
-		int w = max*3*2;
+    if (cols == 0) {
+        /* compute sums along the row */
+        y = i;
+        idx = imgWidth * y * 3 + 2;
+        max = (int) imgWidth;
 
-		row_sum[0] = rectified_frame_buf[idx];
-		for (x = 1; x < max; x++, idx += 3) {
-			sum += rectified_frame_buf[idx] +
-			       rectified_frame_buf[idx - w] +
-			       rectified_frame_buf[idx + w];
-			row_sum[x] = sum;
-		}
-	} else {
-		/* compute sums along the column */
-		idx = i * 3 + 2;
-		x = i;
-		max = (int) imgHeight;
-		int stride = (int) imgWidth * 3;
+        row_sum[0] = rectified_frame_buf[idx];
+        for (x = 1; x < max; x++, idx += 3) {
+            sum += rectified_frame_buf[idx];
+            row_sum[x] = sum;
+        }
 
-		row_sum[0] = rectified_frame_buf[idx];
-		for (y = 1; y < max; y++, idx += stride) {
-			sum += rectified_frame_buf[idx];
-			row_sum[y] = sum;
-		}
-	}
+    } else {
+        /* compute sums along the column */
+        idx = i * 3 + 2;
+        x = i;
+        max = (int) imgHeight;
+        int stride = (int) imgWidth * 3;
 
-	/* row mean luminance */
-	mean = row_sum[max - 1] / (max * 2);
+        row_sum[0] = rectified_frame_buf[idx];
+        for (y = 1; y < max; y++, idx += stride) {
+            sum += rectified_frame_buf[idx];
+            row_sum[y] = sum;
+        }
 
-	/* compute peaks */
-	int p0, p1, p2, p;
-	av_peaks = 0;
-	for (j = 6; j < max - 6; j++) {
-		sum = row_sum[j];
-		/* edge using 1 pixel radius */
-		p0 = (sum - row_sum[j - 1]) - (row_sum[j + 1] - sum);
-		if (p0 < 0)
-			p0 = -p0;
+    }
 
-		/* edge using 3 pixel radius */
-		p1 = (sum - row_sum[j - 3]) - (row_sum[j + 3] - sum);
-		if (p1 < 0)
-			p1 = -p1;
+    /* row mean luminance */
+    mean = sum / max;
 
-		/* edge using 5 pixel radius */
-		p2 = (sum - row_sum[j - 5]) - (row_sum[j + 5] - sum);
-		if (p2 < 0)
-			p2 = -p2;
+    /* compute peaks */
+    int p0, p1, p2, p;
+    av_peaks = 0;
+    for (j = SVS_PEAK_WIDTH; j < max - SVS_PEAK_WIDTH; j++) {
+        sum = row_sum[j];
 
-		/* overall edge response */
-		p = p0*8 + p1*2 + p2;
-		row_peaks[j] = p;
-		av_peaks += p;
-	}
-	av_peaks /= (max - 8);
+        /* edge using 1 pixel radius */
+        p0 = (sum - row_sum[j - 1]) - (row_sum[j + 1] - sum);
+        if (p0 < 0)
+            p0 = -p0;
 
-	memcpy((void*)temp_row_peaks, (void*)row_peaks, max*sizeof(unsigned int));
+        /* edge using 3 pixel radius */
+        p1 = (sum - row_sum[j - 3]) - (row_sum[j + 3] - sum);
+        if (p1 < 0)
+            p1 = -p1;
 
-	/* create a map of low contrast areas, to be used for segmentation */
-	if (enable_segmentation) {
-		if (low_contrast == NULL) {
-			low_contrast = new unsigned short[SVS_MAX_IMAGE_WIDTH
-					* SVS_MAX_IMAGE_HEIGHT];
-			region_volume = new unsigned int[SVS_MAX_REGIONS];
-			region_centre = new unsigned int[SVS_MAX_REGIONS * 2];
-			prev_region_centre = new unsigned short*[SVS_REGION_HISTORY];
-			region_disparity = new unsigned char[SVS_MAX_REGIONS * 3];
-			for (j = 0; j < SVS_REGION_HISTORY; j++) {
-				prev_region_centre[j] = new unsigned short[SVS_MAX_REGIONS * 4
-						+ 1];
-				prev_region_centre[j][0] = 0;
-			}
-			region_bounding_box = new unsigned short[SVS_MAX_REGIONS * 4];
-			region_colour = new unsigned int[SVS_MAX_REGIONS * 3];
-		}
+        /* edge using 5 pixel radius */
+        p2 = (sum - row_sum[j - 5]) - (row_sum[j + 5] - sum);
+        if (p2 < 0)
+            p2 = -p2;
 
-		if (cols == 0) {
-			for (j = 4; j < max - 4; j++) {
-				if (row_peaks[j] < av_peaks)
-					low_contrast[i * imgWidth + j] = 65535;
-			}
-		} else {
-			for (j = 4; j < max - 5; j++) {
-				if (row_peaks[j] > av_peaks) {
-					for (k = -1; k <= 1; k++) {
-						low_contrast[j * imgWidth + i + k] = 0;
-						low_contrast[(j - 1) * imgWidth + i + k] = 0;
-					}
-				}
-			}
-		}
-	}
+        /* overall edge response */
+        p = p0*8 + p1*2 + p2;
+        row_peaks[j] = p;
+        av_peaks += p;
+    }
+    av_peaks /= (max - 8);
 
-	return (mean);
+    memcpy((void*)temp_row_peaks, (void*)row_peaks, max*sizeof(unsigned int));
+
+    /* create a map of low contrast areas, to be used for segmentation */
+    if (enable_segmentation) {
+        if (low_contrast == NULL) {
+            low_contrast = new unsigned short[SVS_MAX_IMAGE_WIDTH
+                                              * SVS_MAX_IMAGE_HEIGHT];
+            region_volume = new unsigned int[SVS_MAX_REGIONS];
+            region_centre = new unsigned int[SVS_MAX_REGIONS * 2];
+            prev_region_centre = new unsigned short*[SVS_REGION_HISTORY];
+            region_disparity = new unsigned char[SVS_MAX_REGIONS * 3];
+            for (j = 0; j < SVS_REGION_HISTORY; j++) {
+                prev_region_centre[j] = new unsigned short[SVS_MAX_REGIONS * 4
+                        + 1];
+                prev_region_centre[j][0] = 0;
+            }
+            region_bounding_box = new unsigned short[SVS_MAX_REGIONS * 4];
+            region_colour = new unsigned int[SVS_MAX_REGIONS * 3];
+        }
+
+        if (cols == 0) {
+            for (j = 4; j < max - 4; j++) {
+                if (row_peaks[j] < av_peaks)
+                    low_contrast[i * imgWidth + j] = 65535;
+            }
+        } else {
+            for (j = 4; j < max - 5; j++) {
+                if (row_peaks[j] > av_peaks) {
+                    for (k = -1; k <= 1; k++) {
+                        low_contrast[j * imgWidth + i + k] = 0;
+                        low_contrast[(j - 1) * imgWidth + i + k] = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    return (mean);
 }
 
 /* performs non-maximal suppression on the given row or column */
 void svs::non_max(int cols, /* if non-zero we're dealing with columns not rows */
 int inhibition_radius, /* radius for non-maximal suppression */
-unsigned int min_response) { /* minimum threshold as a percent in the range 0-200 */
+unsigned int min_response) { /* minimum threshold as a percent in the range 0-100 */
 
 	int i, r, max, max2;
 	unsigned int v;
 
-	/* average response */
-	unsigned int av_peaks = 0;
+	/* maximum response */
+	unsigned int max_peaks = (unsigned int)0;
 	max = (int) imgWidth;
 	if (cols != 0)
 		max = (int) imgHeight;
 	max2 = max - inhibition_radius;
-	max -= 4;
-	for (i = 4; i < max; i++) {
-		av_peaks += row_peaks[i];
+	max -= SVS_PEAK_WIDTH;
+	for (i = SVS_PEAK_WIDTH; i < max2; i++) {
+		if (row_peaks[i] > max_peaks) max_peaks = row_peaks[i];
 	}
+	unsigned int threshold = max_peaks * min_response / 100;
 
-	/* adjust the threshold */
-	av_peaks = av_peaks * min_response / (100 * (max - 4));
-
-	for (i = 4; i < max2; i++) {
-		if (row_peaks[i] < av_peaks)
-			row_peaks[i] = 0;
-		v = row_peaks[i];
-		if (v > 0) {
-			for (r = 1; r < inhibition_radius; r++) {
-				if (row_peaks[i + r] < v) {
-					row_peaks[i + r] = 0;
-				} else {
-					row_peaks[i] = 0;
-					r = inhibition_radius;
-				}
-			}
+	for (i = SVS_PEAK_WIDTH; i < max2; i++) {
+		if (row_peaks[i] < threshold) {
+			row_peaks[i] = (unsigned int)0;
+		}
+		else {
+		    v = row_peaks[i];
+		    if (v > 0) {
+			    for (r = 1; r < inhibition_radius; r++) {
+				    if (row_peaks[i + r] < v) {
+					    row_peaks[i + r] = (unsigned int)0;
+				    } else {
+					    row_peaks[i] = (unsigned int)0;
+					    break;
+				    }
+			    }
+		    }
 		}
 	}
 }
@@ -380,7 +381,7 @@ int inhibition_radius, /* radius for non-maximal supression */
 unsigned int minimum_response, /* minimum threshold */
 int calibration_offset_x, /* calibration x offset in pixels */
 int calibration_offset_y, /* calibration y offset in pixels */
-int segment) {
+int segment) { /* if non zero update low contrast areas used for segmentation */
 
 	unsigned short int no_of_feats;
 	int x, y, row_mean, start_x, prev_x, mid_x, grad;
@@ -451,8 +452,6 @@ int segment) {
 		features_per_row[row_idx++] = no_of_feats;
 	}
 
-	no_of_features = no_of_features;
-
 #ifdef SVS_VERBOSE
 	printf("%d vertically oriented edge features located\n", no_of_features);
 #endif
@@ -465,7 +464,9 @@ int segment) {
 int svs::get_features_horizontal(unsigned char* rectified_frame_buf, /* image data */
 int inhibition_radius, /* radius for non-maximal supression */
 unsigned int minimum_response, /* minimum threshold */
-int calibration_offset_x, int calibration_offset_y, int segment) {
+int calibration_offset_x, /* calibration x offset in pixels */
+int calibration_offset_y, /* calibration y offset in pixels */
+int segment) { /* if non zero update low contrast areas used for segmentation */
 	unsigned short int no_of_feats;
 	int x, y, col_mean, start_y;
 	int no_of_features = 0;

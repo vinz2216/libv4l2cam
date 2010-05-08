@@ -16,15 +16,15 @@
 
 
 struct buffer {
-        void *                  start;
-        size_t                  length;
+    void *                  start;
+    size_t                  length;
 };
 
 
 typedef enum {
-	IO_METHOD_READ,
-	IO_METHOD_MMAP,
-	IO_METHOD_USERPTR,
+    IO_METHOD_READ,
+    IO_METHOD_MMAP,
+    IO_METHOD_USERPTR,
 } io_method;
 
 
@@ -33,80 +33,80 @@ typedef enum {
 
 class Camera {
 private:
-  void Open();
-  void Close();
+    void Open();
+    void Close();
 
-  void Init();
-  void UnInit();
+    void Init();
+    void UnInit();
 
-  void Start();
-  void Stop();
+    void Start();
+    void Stop();
 
-  void init_userp(unsigned int buffer_size);
-  void init_mmap();
-  void init_read(unsigned int buffer_size);
+    void init_userp(unsigned int buffer_size);
+    void init_mmap();
+    void init_read(unsigned int buffer_size);
 
 
 
 
 public:
-  const char *name;  //dev_name
-  int width;
-  int height;
-  int fps;
+    const char *name;  //dev_name
+    int width;
+    int height;
+    int fps;
 
-  int w2;
-
-
-  unsigned char *data;
+    int w2;
 
 
-  io_method io;
-  int fd;
-  buffer *buffers;
-  int n_buffers;
-
-  int mb, Mb, db, mc, Mc, dc, ms, Ms, ds, mh, Mh, dh, msh, Msh, dsh;
-  bool ha;
+    unsigned char *data;
 
 
-  Camera(const char *name, int w, int h, int fps=30);
-  ~Camera();
+    io_method io;
+    int fd;
+    buffer *buffers;
+    int n_buffers;
 
-  unsigned char *Get();    //deprecated
-  unsigned char *Update(unsigned int t=100); //better  (t=0.1ms, in usecs)
-  unsigned char *Update(Camera *c2, unsigned int t=100);
+    int mb, Mb, db, mc, Mc, dc, ms, Ms, ds, mh, Mh, dh, msh, Msh, dsh;
+    bool ha;
+
+
+    Camera(const char *name, int w, int h, int fps=30);
+    ~Camera();
+
+    unsigned char *Get();    //deprecated
+    unsigned char *Update(unsigned int t=100); //better  (t=0.1ms, in usecs)
+    unsigned char *Update(Camera *c2, unsigned int t=100);
 
 #ifdef USE_OPENCV
-  void toIplImage(IplImage *im);
+    void toIplImage(IplImage *im);
 #endif
 
 
 
 
-  int minBrightness();
-  int maxBrightness();
-  int defaultBrightness();
-  int minContrast();
-  int maxContrast();
-  int defaultContrast();
-  int minSaturation();
-  int maxSaturation();
-  int defaultSaturation();
-  int minHue();
-  int maxHue();
-  int defaultHue();
-  bool isHueAuto();
-  int minSharpness();
-  int maxSharpness();
-  int defaultSharpness();
+    int minBrightness();
+    int maxBrightness();
+    int defaultBrightness();
+    int minContrast();
+    int maxContrast();
+    int defaultContrast();
+    int minSaturation();
+    int maxSaturation();
+    int defaultSaturation();
+    int minHue();
+    int maxHue();
+    int defaultHue();
+    bool isHueAuto();
+    int minSharpness();
+    int maxSharpness();
+    int defaultSharpness();
 
-  int setBrightness(int v);
-  int setContrast(int v);
-  int setSaturation(int v);
-  int setHue(int v);
-  int setHueAuto(bool v);
-  int setSharpness(int v);
+    int setBrightness(int v);
+    int setContrast(int v);
+    int setSaturation(int v);
+    int setHue(int v);
+    int setHueAuto(bool v);
+    int setSharpness(int v);
 
 
 

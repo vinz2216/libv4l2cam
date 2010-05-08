@@ -1,0 +1,5 @@
+int32 offset_x
+int32 offset_y
+int32 max_disparity_percent
+---
+int32 ack

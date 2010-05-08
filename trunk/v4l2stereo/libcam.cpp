@@ -120,7 +120,7 @@ void Camera::Open() {
   fd=open(name, O_RDWR | O_NONBLOCK, 0);
 
   if(-1 == fd) {
-    fprintf(stderr, "Canno open '%s': %d, %s\n", name, errno, strerror(errno));
+    fprintf(stderr, "Cannot open '%s': %d, %s\n", name, errno, strerror(errno));
     exit(1);
   }
 

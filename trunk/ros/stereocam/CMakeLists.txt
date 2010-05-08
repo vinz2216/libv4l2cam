@@ -16,7 +16,10 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 #set the default path for built libraries to the "lib" directory
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #access to openmp
-set(CMAKE_EXE_LINKER_FLAGS "-fopenmp")
+set(ENABLE_OPENMP 1)
+set(CCMAKE_CXX_FLAGS "-fopenmp")
+set(CCMAKE_C_FLAGS "-fopenmp")
+set(CMAKE_EXE_LINKER_FLAGS "-lgomp")
 
 #uncomment if you have defined messages
 #rosbuild_genmsg()

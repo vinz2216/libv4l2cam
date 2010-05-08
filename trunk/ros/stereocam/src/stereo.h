@@ -29,7 +29,6 @@
 #include <math.h>
 #include <fstream>
 #include "polynomial.h"
-#include "linefit.h"
 
 #define SVS_MAX_FEATURES         8000
 #define SVS_MAX_MATCHES          2000
