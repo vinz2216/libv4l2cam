@@ -276,6 +276,8 @@ void set_feature_stereo_params(
 
 int main(int argc, char** argv)
 {
+    std::string stereo_camera_index_str = "0";
+
     if (show_images) {
         cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
         cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
@@ -284,20 +286,40 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "stereocam_subscribe");
     ros::NodeHandle n;
     image_transport::ImageTransport it(n);
-    image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_raw", 1, leftImageCallback);
-    image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_raw", 1, rightImageCallback);
-    image_transport::Subscriber disparity_sub = it.subscribe("stereo/image_disparity", 1, disparityImageCallback);
-    ros::Subscriber point_cloud_sub = n.subscribe("stereo/point_cloud", 1, PointCloudImageCallback);
-    client_camera_active = n.serviceClient<stereocam::camera_active>("camera_active");
-    client_camera_params = n.serviceClient<stereocam::stereocam_params>("stereocam_params");
-    client_densestereo_params = n.serviceClient<stereocam::densestereo_params>("densestereo_params");
-    client_featurestereo_params = n.serviceClient<stereocam::featurestereo_params>("featurestereo_params");
+
+    std::string topic_str = "stereo/left/image_raw" + stereo_camera_index_str;
+    image_transport::Subscriber left_sub = it.subscribe(topic_str, 1, leftImageCallback);
+
+    topic_str = "stereo/right/image_raw" + stereo_camera_index_str;
+    image_transport::Subscriber right_sub = it.subscribe(topic_str, 1, rightImageCallback);
+
+    topic_str = "stereo/image_disparity" + stereo_camera_index_str;
+    image_transport::Subscriber disparity_sub = it.subscribe(topic_str, 1, disparityImageCallback);
+
+    topic_str = "stereo/point_cloud" + stereo_camera_index_str;
+    ros::Subscriber point_cloud_sub = n.subscribe(topic_str, 1, PointCloudImageCallback);
+
+    std::string service_str = "camera_active" + stereo_camera_index_str;
+    client_camera_active = n.serviceClient<stereocam::camera_active>(service_str);
+
+    service_str = "stereocam_params" + stereo_camera_index_str;
+    client_camera_params = n.serviceClient<stereocam::stereocam_params>(service_str);
+
+    service_str = "densestereo_params" + stereo_camera_index_str;
+    client_densestereo_params = n.serviceClient<stereocam::densestereo_params>(service_str);
+
+    service_str = "featurestereo_params" + stereo_camera_index_str;
+    client_featurestereo_params = n.serviceClient<stereocam::featurestereo_params>(service_str);
 
     int offset_x = -16;
     int offset_y = 2;
     int max_disparity_percent = 30;
     set_stereo_camera_params("/dev/video1","/dev/video0",320,240,30,60,150,false,false);
+
+    // subscribe to dense stereo
     //set_dense_stereo_params(offset_x,offset_y,2,max_disparity_percent,1,2,8,0,true,30);
+
+    // subscribe to feature based stereo
     set_feature_stereo_params(offset_x,offset_y,max_disparity_percent);
 
     camera_on();

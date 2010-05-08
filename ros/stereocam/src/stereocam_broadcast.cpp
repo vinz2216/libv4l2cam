@@ -77,6 +77,9 @@ int cross_checking_threshold = 50;
 float baseline_mm = 60;
 float focal_length_pixels = 150;
 
+// an index number assigned to the stereo camera
+int stereo_camera_index = 0;
+
 bool publish_feature_matches = false;
 bool publish_disparity_map = false;
 
@@ -396,6 +399,7 @@ bool intersection(
  * \param baseline_mm stereo camera baseline
  * \param focal_length_pixels focal length in pixels
  * \param uncertainty_pixels position uncertainty for each observed disparity
+ * \param stereo_camera_index an index number for the stereo camera
  * \param point_cloud returned point cloud
  */
 void disparity_map_to_PointCloud(
@@ -410,6 +414,7 @@ void disparity_map_to_PointCloud(
     float baseline_mm,
     float focal_length_pixels,
     float uncertainty_pixels,
+    std::string stereo_camera_index_str,
     sensor_msgs::PointCloud &point_cloud)
 {
     // each disparity is represented by this number of points in the cloud
@@ -512,7 +517,7 @@ void disparity_map_to_PointCloud(
     }
 
     point_cloud.header.stamp = ros::Time::now();
-    point_cloud.header.frame_id = "stereo_cloud";
+    point_cloud.header.frame_id = "stereo_cloud" + stereo_camera_index_str;
 }
 
 /*!
@@ -523,6 +528,7 @@ void disparity_map_to_PointCloud(
  * \param img_height height of the image
  * \param baseline_mm stereo camera baseline
  * \param focal_length_pixels focal length in pixels
+ * \param stereo_camera_index an index number for the stereo camera
  * \param point_cloud returned point cloud
  */
 void feature_matches_to_PointCloud(
@@ -532,6 +538,7 @@ void feature_matches_to_PointCloud(
     int img_height,
     float baseline_mm,
     float focal_length_pixels,
+    std::string stereo_camera_index_str,
     sensor_msgs::PointCloud &point_cloud)
 {
     point_cloud.points.resize (no_of_matches);
@@ -596,7 +603,7 @@ void feature_matches_to_PointCloud(
     }
 
     point_cloud.header.stamp = ros::Time::now();
-    point_cloud.header.frame_id = "stereo_feature_cloud";
+    point_cloud.header.frame_id = "stereo_feature_cloud" + stereo_camera_index_str;
     ROS_INFO("No of feature matches %d", no_of_matches);
 }
 
@@ -686,11 +693,30 @@ int main(int argc, char** argv)
     ros::init(argc, argv, "stereocam_broadcast");
     ros::NodeHandle n;
 
+    // get the index number of the stereo camera
+    ros::NodeHandle nh("~");
+    nh.getParam("index", stereo_camera_index);
+    char stereo_camera_index2[20];
+    sprintf(stereo_camera_index2,"%d", stereo_camera_index);
+    std::string stereo_camera_index_str = "";
+    if (stereo_camera_index > -1) {
+        stereo_camera_index_str += stereo_camera_index2;
+        ROS_INFO("Stereo camera index: %s", stereo_camera_index_str.c_str());
+    }
+
     image_transport::ImageTransport it(n);
-    image_transport::Publisher left_pub = it.advertise("stereo/left/image_raw", 1);
-    image_transport::Publisher right_pub = it.advertise("stereo/right/image_raw", 1);
-    image_transport::Publisher disparity_pub = it.advertise("stereo/image_disparity", 1);
-    ros::Publisher point_cloud_pub = n.advertise<sensor_msgs::PointCloud>("stereo/point_cloud", 1);
+
+    std::string topic_str = "stereo/left/image_raw" + stereo_camera_index_str;
+    image_transport::Publisher left_pub = it.advertise(topic_str.c_str(), 1);
+
+    topic_str = "stereo/right/image_raw" + stereo_camera_index_str;
+    image_transport::Publisher right_pub = it.advertise(topic_str, 1);
+
+    topic_str = "stereo/image_disparity" + stereo_camera_index_str;
+    image_transport::Publisher disparity_pub = it.advertise(topic_str, 1);
+
+    topic_str = "stereo/point_cloud" + stereo_camera_index_str;
+    ros::Publisher point_cloud_pub = n.advertise<sensor_msgs::PointCloud>(topic_str, 1);
     ros::Rate loop_rate(30);
 
     IplImage *l=NULL;
@@ -699,16 +725,20 @@ int main(int argc, char** argv)
     unsigned char *r_=NULL;
 
     // start service which can be used to start and stop the stereo camera
-    ros::ServiceServer service_active = n.advertiseService("camera_active", camera_active);
+    std::string service_str = "camera_active" + stereo_camera_index_str;
+    ros::ServiceServer service_active = n.advertiseService(service_str, camera_active);
 
     // start service which can be used to change camera parameters
-    ros::ServiceServer service_params = n.advertiseService("stereocam_params", request_params);
+    service_str = "stereocam_params" + stereo_camera_index_str;
+    ros::ServiceServer service_params = n.advertiseService(service_str, request_params);
 
     // start service which can be used to change dense stereo parameters
-    ros::ServiceServer service_densestereo = n.advertiseService("densestereo_params", request_dense_stereo_params);
+    service_str = "densestereo_params" + stereo_camera_index_str;
+    ros::ServiceServer service_densestereo = n.advertiseService(service_str, request_dense_stereo_params);
 
     // start service which can be used to change feature based stereo parameters
-    ros::ServiceServer service_featurestereo = n.advertiseService("featurestereo_params", request_feature_stereo_params);
+    service_str = "featurestereo_params" + stereo_camera_index_str;
+    ros::ServiceServer service_featurestereo = n.advertiseService(service_str, request_feature_stereo_params);
 
     if (!broadcast_immediately) {
         // wait for subscribers
@@ -832,6 +862,7 @@ int main(int argc, char** argv)
                     l_, left_image.width,left_image.height,
                     baseline_mm,
                     focal_length_pixels,
+                    stereo_camera_index_str,
                     point_cloud);
                 point_cloud_pub.publish(point_cloud);
 
@@ -884,6 +915,7 @@ int main(int argc, char** argv)
                     baseline_mm,
                     focal_length_pixels,
                     uncertainty_pixels,
+                    stereo_camera_index_str,
                     point_cloud);
 
                 disparity_pub.publish(disparity);
