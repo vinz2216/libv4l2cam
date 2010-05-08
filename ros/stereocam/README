@@ -27,7 +27,7 @@ Start ROS:
 
 Then in a separate shell begin broadcasting:
 
-    rosrun stereocam stereocam_broadcast
+    rosrun stereocam stereocam_broadcast _index:=0
 
 And in another shell you can subscribe to the broadcast:
 
