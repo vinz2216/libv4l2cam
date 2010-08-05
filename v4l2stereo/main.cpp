@@ -41,7 +41,7 @@
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.047
+#define VERSION 1.048
 
 using namespace std;
 
@@ -50,6 +50,7 @@ int main(int argc, char* argv[]) {
   int hh = 240;
   int skip_frames = 1;
   int prev_matches = 0;
+  int image_index = 0;
   bool show_features = false;
   bool show_matches = false;
   bool show_regions = false;
@@ -127,6 +128,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --log                      Logs stereo matches to the given output file (only when no file exists)");
   opt->addUsage( " -V  --version                  Show version number");
   opt->addUsage( "     --save                     Save raw images");
+  opt->addUsage( "     --saveperiod               Save images repeatedly every x seconds");
   opt->addUsage( "     --flipright                Flip the right image");
   opt->addUsage( "     --flipleft                 Flip the left image");
   opt->addUsage( "     --stream                   Stream output using gstreamer");
@@ -134,6 +136,7 @@ int main(int argc, char* argv[]) {
   opt->addUsage( "     --help                     Show help");
   opt->addUsage( "" );
 
+  opt->setOption(  "saveperiod" );
   opt->setOption(  "ground" );
   opt->setOption(  "cd0x" );
   opt->setOption(  "cd0y" );
@@ -356,6 +359,12 @@ int main(int argc, char* argv[]) {
 	  show_lines = false;
 	  show_FAST = false;
 	  show_disparity_map = false;
+  }
+
+  int save_period_sec = 0;
+  if( opt->getValue( "saveperiod" ) != NULL  ) {
+	  save_period_sec = atoi(opt->getValue("saveperiod"));
+	  if (save_period_sec < 1) save_period_sec=1;
   }
 
   int desired_corner_features = 70;
@@ -1263,6 +1272,21 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (skip_frames == 0) {
+
+		if (save_period_sec > 0) {
+			char filename[256];
+			sprintf((char*)filename,"stereo_%d_0.jpg", image_index);
+			cvSaveImage(filename, l);
+			sprintf((char*)filename,"stereo_%d_1.jpg", image_index);
+			if ((!show_matches) &&
+				(!show_FAST) &&
+				(!show_depthmap) &&
+				(!show_anaglyph) &&
+				(!show_disparity_map))
+				cvSaveImage(filename, r);
+			image_index++;
+			sleep(save_period_sec);
+		}
 
 		/* save left and right images to file, then quit */
 		if (save_images) {

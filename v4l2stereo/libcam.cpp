@@ -639,7 +639,6 @@ void Camera::Stop() {
 
 unsigned char *Camera::Get() {
   struct v4l2_buffer buf;
-  unsigned int i;
 
 
   switch(io) {
@@ -725,7 +724,7 @@ return data;
       break;
   }
 
-
+  return 0;
 }
 
 
