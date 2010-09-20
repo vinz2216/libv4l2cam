@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2009 Giacomo Spigler
  * CopyPolicy: Released under the terms of the GNU GPL v3.0.
+ *
+ * YUYV bug (not using y1) submitted by richard.rowell
  */
 
 #include <stdio.h>
@@ -785,9 +787,9 @@ void Camera::toIplImage(IplImage *l) {
       l_[i+2] = (unsigned char)(r); //R
 
 
-      r = y0 + (1.370705 * (v-128));
-      g = y0 - (0.698001 * (v-128)) - (0.337633 * (u-128));
-      b = y0 + (1.732446 * (u-128));
+      r = y1 + (1.370705 * (v-128));
+      g = y1 - (0.698001 * (v-128)) - (0.337633 * (u-128));
+      b = y1 + (1.732446 * (u-128));
 
       if(r > 255) r = 255;
       if(g > 255) g = 255;
