@@ -1,7 +1,5 @@
 For the latest instructions see http://code.google.com/p/sentience/wiki/MinoruWebcam.  For anyone who cannot access this site a plain text copy is shown below.
 
-
-
 The Minoru is UVC compilant, and therefore very easy to use on a GNU/Linux operating system. Plug in the camera, then open a command shell and type:
 
 ls /dev/video*
