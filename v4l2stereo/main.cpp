@@ -126,6 +126,8 @@ int main(int argc, char* argv[]) {
     Elas * elas = NULL;
 
     camcalib camera_calibration;
+    camera_calibration.ParseCalibrationFile("calibration.txt");
+    rectify_images = camera_calibration.rectification_loaded;
 
     int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -483,12 +485,12 @@ int main(int argc, char* argv[]) {
         hh = atoi(opt->getValue("height"));
     }
 
-    int calibration_offset_x = -16;
+    int calibration_offset_x = 0;
     if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
         calibration_offset_x = atoi(opt->getValue("offsetx"));
     }
 
-    int calibration_offset_y = 2;
+    int calibration_offset_y = camera_calibration.v_shift;
     if( opt->getValue( 'y' ) != NULL  || opt->getValue( "offsety" ) != NULL  ) {
         calibration_offset_y = atoi(opt->getValue("offsety"));
     }

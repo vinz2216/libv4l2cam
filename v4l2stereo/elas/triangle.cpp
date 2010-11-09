@@ -7649,8 +7649,9 @@ void transfernodes(struct mesh *m, struct behavior *b, float *pointlist,
   m->nextras = numberofpointattribs;
   m->readnodefile = 0;
   if (m->invertices < 3) {
-    printf("Error:  Input must have at least three input vertices.\n");
-    triexit(1);
+    return;
+    /* printf("Error:  Input must have at least three input vertices.\n");
+    triexit(1); */
   }
   if (m->nextras == 0) {
     b->weighted = 0;
