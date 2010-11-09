@@ -6849,7 +6849,8 @@ bool colour) { /* whether to additionally save colour of each match */
 				};
 
 				MatchData *m = new MatchData[FAST_MAX_CORNERS_PREVIOUS];
-				size_t s = fread(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
+				size_t s = 0;
+                                s = fread(m, sizeof(MatchData), FAST_MAX_CORNERS_PREVIOUS, file);
 				num_nonmax = 0;
 				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
 					if ((m[i].x ==  9999) && (m[i].y == 9999)) {
@@ -6871,7 +6872,8 @@ bool colour) { /* whether to additionally save colour of each match */
 				};
 
 				MatchDataColour *m = new MatchDataColour[FAST_MAX_CORNERS_PREVIOUS];
-				size_t s = fread(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
+				size_t s = 0;
+                                s = fread(m, sizeof(MatchDataColour), FAST_MAX_CORNERS_PREVIOUS, file);
 				num_nonmax = 0;
 				for (i = 0; i < FAST_MAX_CORNERS_PREVIOUS; i++, num_nonmax++) {
 					if ((m[i].x ==  9999) && (m[i].y == 9999)) {

@@ -1,6 +1,18 @@
 /*
- * Copyright (C) 2009 Giacomo Spigler
- * CopyPolicy: Released under the terms of the GNU GPL v3.0.
+ Copyright (C) 2009 Giacomo Spigler
+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <stdio.h>
@@ -30,14 +42,9 @@
 
 #include "libcam.h"
 
-
-
 #ifdef USE_OPENCV
 #include <cv.h>
 #endif
-
-
-
 
 static void errno_exit (const char *           s)
 {
@@ -46,7 +53,6 @@ static void errno_exit (const char *           s)
 
         exit (EXIT_FAILURE);
 }
-
 
 static int xioctl(int fd, int request, void *arg)
 {
@@ -57,20 +63,6 @@ static int xioctl(int fd, int request, void *arg)
 
         return r;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 Camera::Camera(const char *n, int w, int h, int f) {
   name=n;
@@ -92,18 +84,13 @@ Camera::Camera(const char *n, int w, int h, int f) {
 
 }
 
-
-
 Camera::~Camera() {
   this->Stop();
   this->UnInit();
   this->Close();
 
   free(data);
-
 }
-
-
 
 void Camera::Open() {
   struct stat st;
@@ -126,8 +113,6 @@ void Camera::Open() {
 
 }
 
-
-
 void Camera::Close() {
   if(-1==close(fd)) {
     errno_exit("close");
@@ -135,8 +120,6 @@ void Camera::Close() {
   fd=-1;
 
 }
-
-
 
 void Camera::Init() {
   struct v4l2_capability cap;
@@ -201,9 +184,7 @@ void Camera::Init() {
       /* Errors ignored. */
     }
 
-
     CLEAR (fmt);
-
 
     fmt.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     fmt.fmt.pix.width       = width;
@@ -240,9 +221,6 @@ p.parm.capture.timeperframe.denominator=fps;
 
 if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
   errno_exit("VIDIOC_S_PARM");
-
-
-
 
   //default values, mins and maxes
   struct v4l2_queryctrl queryctrl;
@@ -352,31 +330,10 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
   Msh=queryctrl.maximum;
   dsh=queryctrl.default_value;
 
-
-
-
-
-
-
-
 //TODO: TO ADD SETTINGS
 //here should go custom calls to xioctl
 
-
-
-
-
-
-
-
-
-
-
 //END TO ADD SETTINGS
-
-
-
-
 
   /* Note VIDIOC_S_FMT may change width and height. */
 
@@ -403,8 +360,6 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
     }
 
 }
-
-
 
 void Camera::init_userp(unsigned int buffer_size) {
 /*
@@ -451,8 +406,6 @@ void Camera::init_userp(unsigned int buffer_size) {
 */
 }
 
-
-
 void Camera::init_mmap() {
   struct v4l2_requestbuffers req;
 
@@ -483,7 +436,7 @@ void Camera::init_mmap() {
     exit(1);
   }
 
-  for(n_buffers = 0; n_buffers < req.count; ++n_buffers) {
+  for(n_buffers = 0; n_buffers < (int)req.count; ++n_buffers) {
     struct v4l2_buffer buf;
 
     CLEAR (buf);
@@ -508,8 +461,6 @@ void Camera::init_mmap() {
 
 }
 
-
-
 void Camera::init_read (unsigned int buffer_size) {
 /*
         buffers = calloc (1, sizeof (*buffers));
@@ -529,8 +480,6 @@ void Camera::init_read (unsigned int buffer_size) {
 */
 }
 
-
-
 void Camera::UnInit() {
   unsigned int i;
 
@@ -540,22 +489,19 @@ void Camera::UnInit() {
       break;
 
     case IO_METHOD_MMAP:
-      for(i = 0; i < n_buffers; ++i)
+      for(i = 0; i < (unsigned int)n_buffers; ++i)
         if(-1 == munmap (buffers[i].start, buffers[i].length))
           errno_exit ("munmap");
       break;
 
     case IO_METHOD_USERPTR:
-      for (i = 0; i < n_buffers; ++i)
+      for (i = 0; i < (unsigned int)n_buffers; ++i)
         free (buffers[i].start);
       break;
   }
 
   free (buffers);
-
 }
-
-
 
 void Camera::Start() {
   unsigned int i;
@@ -567,7 +513,7 @@ void Camera::Start() {
       break;
 
     case IO_METHOD_MMAP:
-      for(i = 0; i < n_buffers; ++i) {
+      for(i = 0; i < (unsigned int)n_buffers; ++i) {
         struct v4l2_buffer buf;
 
         CLEAR (buf);
@@ -588,7 +534,7 @@ void Camera::Start() {
       break;
 
     case IO_METHOD_USERPTR:
-      for(i = 0; i < n_buffers; ++i) {
+      for(i = 0; i < (unsigned int)n_buffers; ++i) {
         struct v4l2_buffer buf;
 
         CLEAR (buf);
@@ -613,8 +559,6 @@ void Camera::Start() {
 
 }
 
-
-
 void Camera::Stop() {
   enum v4l2_buf_type type;
 
@@ -634,8 +578,6 @@ void Camera::Stop() {
   }
 
 }
-
-
 
 unsigned char *Camera::Get() {
   struct v4l2_buffer buf;
@@ -677,7 +619,7 @@ unsigned char *Camera::Get() {
         }
       }
 
-      assert(buf.index < n_buffers);
+      assert(buf.index < (unsigned int)n_buffers);
 
       memcpy(data, (unsigned char *)buffers[buf.index].start, buffers[buf.index].length);
 
@@ -727,9 +669,6 @@ return data;
   return 0;
 }
 
-
-
-
 unsigned char *Camera::Update(unsigned int t) {
   while(this->Get()==0) {
     usleep(t);
@@ -738,14 +677,11 @@ unsigned char *Camera::Update(unsigned int t) {
 
 }
 
-
 unsigned char *Camera::Update(Camera *c2, unsigned int t) {
   while(this->Get()==0 || c2->Get()==0) usleep(t);
   return this->data;
 
 }
-
-
 
 #ifdef USE_OPENCV
 void Camera::toIplImage(IplImage *l) {
@@ -800,9 +736,6 @@ void Camera::toIplImage(IplImage *l) {
 
 }
 #endif
-
-
-
 
 int Camera::minBrightness() {
   return mb;
@@ -883,9 +816,6 @@ int Camera::defaultSharpness() {
   return dsh;
 }
 
-
-
-
 int Camera::setBrightness(int v) {
   if(v<mb || v>Mb) return -1;
 
@@ -900,7 +830,6 @@ int Camera::setBrightness(int v) {
 
   return 1;
 }
-
 
 int Camera::setContrast(int v) {
   if(v<mc || v>Mc) return -1;
@@ -917,7 +846,6 @@ int Camera::setContrast(int v) {
   return 1;
 }
 
-
 int Camera::setSaturation(int v) {
   if(v<ms || v>Ms) return -1;
 
@@ -932,7 +860,6 @@ int Camera::setSaturation(int v) {
 
   return 1;
 }
-
 
 int Camera::setHue(int v) {
   if(v<mh || v>Mh) return -1;
@@ -949,7 +876,6 @@ int Camera::setHue(int v) {
   return 1;
 }
 
-
 int Camera::setHueAuto(bool v) {
   if(v<mh || v>Mh) return -1;
 
@@ -965,7 +891,6 @@ int Camera::setHueAuto(bool v) {
   return 1;
 }
 
-
 int Camera::setSharpness(int v) {
   if(v<mh || v>Mh) return -1;
 
@@ -980,10 +905,4 @@ int Camera::setSharpness(int v) {
 
   return 1;
 }
-
-
-
-
-
-
 

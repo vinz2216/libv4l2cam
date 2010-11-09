@@ -1,14 +1,14 @@
 /*
     v4l2stereo
     A command line utility for stereoscopic vision
-    Copyright (C) 2009 Bob Mottram and Giacomo Spigler
+    Copyright (C) 2010 Bob Mottram and Giacomo Spigler
     fuzzgun@gmail.com
 
     Requires packages:
 		libgstreamer-plugins-base0.10-dev
 		libgst-dev
 
-    sudo apt-get install libcv4 libhighgui4 libcvaux4 libcv-dev libcvaux-dev libhighgui-dev libgstreamer-plugins-base0.10-dev libgst-dev
+    sudo apt-get install libcv2.1 libhighgui2.1 libcvaux2.1 libcv-dev libcvaux-dev libhighgui-dev libgstreamer-plugins-base0.10-dev libgst-dev
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -24,15 +24,21 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/* enable or disable gstreamer functionality */
+//#define GSTREAMER
+
 #include <iostream>
 #include <cv.h>
 #include <highgui.h>
 #include <stdio.h>
+#include <sstream>
+#include <omp.h>
+
+#ifdef GSTREAMER
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappbuffer.h>
-#include <sstream>
-#include <omp.h>
+#endif
 
 #include "anyoption.h"
 #include "drawing.h"
@@ -41,672 +47,650 @@
 #include "fast.h"
 #include "libcam.h"
 
-#define VERSION 1.048
+#include "camcalib.h"
+
+#define VERSION 1.05
 
 using namespace std;
 
 int main(int argc, char* argv[]) {
-  int ww = 320;
-  int hh = 240;
-  int skip_frames = 1;
-  int prev_matches = 0;
-  int image_index = 0;
-  bool show_features = false;
-  bool show_matches = false;
-  bool show_regions = false;
-  bool show_depthmap = false;
-  bool show_anaglyph = false;
-  bool show_histogram = false;
-  bool show_lines = false;
-  bool show_disparity_map = false;
-  bool rectify_images = false;
-  bool show_FAST = false;
-  int use_priors = 1;
-  int matches;
-  int FOV_degrees = 50;
-
-  int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
-
-  // Port to start streaming from - second video will be on this + 1
-  int start_port = 5000;
-
-  AnyOption *opt = new AnyOption();
-  assert(opt != NULL);
-
-  // help
-  opt->addUsage( "Example: " );
-  opt->addUsage( "  v4l2stereo -0 /dev/video1 -1 /dev/video0 -w 320 -h 240 --features" );
-  opt->addUsage( " " );
-  opt->addUsage( "Usage: " );
-  opt->addUsage( "" );
-  opt->addUsage( " -0  --dev0                     Video device number of the left camera");
-  opt->addUsage( " -1  --dev1                     Video device number of the right camera");
-  opt->addUsage( " -w  --width                    Image width in pixels");
-  opt->addUsage( " -h  --height                   Image height in pixels");
-  opt->addUsage( " -x  --offsetx                  Calibration x offset in pixels");
-  opt->addUsage( " -y  --offsety                  Calibration y offset in pixels");
-  opt->addUsage( " -d  --disparity                Max disparity as a percent of image width");
-  opt->addUsage( "     --baseline                 Baseline distance in millimetres");
-  opt->addUsage( "     --equal                    Perform histogram equalisation");
-  opt->addUsage( "     --ground                   y coordinate of the ground plane as percent of image height");
-  opt->addUsage( "     --features                 Show stereo features");
-  opt->addUsage( "     --disparitymap             Show dense disparity map");
-  opt->addUsage( "     --disparitystep            Disparity step size in pixels for dense stereo");
-  opt->addUsage( "     --disparitythreshold       Threshold applied to the disparity map as a percentage of max disparity");
-  opt->addUsage( "     --smoothing                Smoothing radius in pixels for dense stereo");
-  opt->addUsage( "     --patchsize                Correlation patch radius in pixels for dense stereo");
-  opt->addUsage( "     --crosscheck               Threshold used for dense stereo pixel cross checking");
-  opt->addUsage( "     --zoom                     Zoom level given as a percentage");
-  opt->addUsage( "     --matches                  Show stereo matches");
-  opt->addUsage( "     --regions                  Show regions");
-  opt->addUsage( "     --depth                    Show depth map");
-  opt->addUsage( "     --lines                    Show lines");
-  opt->addUsage( "     --anaglyph                 Show anaglyph");
-  opt->addUsage( "     --histogram                Show disparity histogram");
-  opt->addUsage( "     --calibrate                Calibrate offsets");
-  opt->addUsage( "     --cd0x                     Centre of distortion x coord for the left camera");
-  opt->addUsage( "     --cd0y                     Centre of distortion y coord for the left camera");
-  opt->addUsage( "     --cd1x                     Centre of distortion x coord for the right camera");
-  opt->addUsage( "     --cd1y                     Centre of distortion y coord for the right camera");
-  opt->addUsage( "     --coeff00                  Distortion coefficient 0 for the left camera");
-  opt->addUsage( "     --coeff01                  Distortion coefficient 1 for the left camera");
-  opt->addUsage( "     --coeff02                  Distortion coefficient 2 for the left camera");
-  opt->addUsage( "     --coeff10                  Distortion coefficient 0 for the right camera");
-  opt->addUsage( "     --coeff11                  Distortion coefficient 1 for the right camera");
-  opt->addUsage( "     --coeff12                  Distortion coefficient 2 for the right camera");
-  opt->addUsage( "     --rot0                     Calibration rotation of the left camera in radians");
-  opt->addUsage( "     --rot1                     Calibration rotation of the right camera in radians");
-  opt->addUsage( "     --scale0                   Calibration scale of the left camera");
-  opt->addUsage( "     --scale1                   Calibration scale of the right camera");
-  opt->addUsage( "     --fast                     Show FAST corners");
-  opt->addUsage( "     --descriptors              Saves feature descriptor for each FAST corner");
-  opt->addUsage( "     --fov                      Field of view in degrees");
-  opt->addUsage( " -f  --fps                      Frames per second");
-  opt->addUsage( " -s  --skip                     Skip this number of frames");
-  opt->addUsage( " -i  --input                    Loads stereo matches from the given output file");
-  opt->addUsage( " -o  --output                   Saves stereo matches to the given output file");
-  opt->addUsage( "     --log                      Logs stereo matches to the given output file (only when no file exists)");
-  opt->addUsage( " -V  --version                  Show version number");
-  opt->addUsage( "     --save                     Save raw images");
-  opt->addUsage( "     --saveperiod               Save images repeatedly every x seconds");
-  opt->addUsage( "     --flipright                Flip the right image");
-  opt->addUsage( "     --flipleft                 Flip the left image");
-  opt->addUsage( "     --stream                   Stream output using gstreamer");
-  opt->addUsage( "     --headless                 Disable video output (for use with --stream)");
-  opt->addUsage( "     --help                     Show help");
-  opt->addUsage( "" );
-
-  opt->setOption(  "saveperiod" );
-  opt->setOption(  "ground" );
-  opt->setOption(  "cd0x" );
-  opt->setOption(  "cd0y" );
-  opt->setOption(  "cd1x" );
-  opt->setOption(  "cd1y" );
-  opt->setOption(  "coeff00" );
-  opt->setOption(  "coeff01" );
-  opt->setOption(  "coeff02" );
-  opt->setOption(  "coeff10" );
-  opt->setOption(  "coeff11" );
-  opt->setOption(  "coeff12" );
-  opt->setOption(  "fast" );
-  opt->setOption(  "descriptors" );
-  opt->setOption(  "rot0" );
-  opt->setOption(  "rot1" );
-  opt->setOption(  "save" );
-  opt->setOption(  "scale0" );
-  opt->setOption(  "scale1" );
-  opt->setOption(  "fps", 'f' );
-  opt->setOption(  "dev0", '0' );
-  opt->setOption(  "dev1", '1' );
-  opt->setOption(  "width", 'w' );
-  opt->setOption(  "height", 'h' );
-  opt->setOption(  "offsetx", 'x' );
-  opt->setOption(  "offsety", 'y' );
-  opt->setOption(  "disparity", 'd' );
-  opt->setOption(  "input", 'i' );
-  opt->setOption(  "output", 'o' );
-  opt->setOption(  "log" );
-  opt->setOption(  "skip", 's' );
-  opt->setOption(  "fov" );
-  opt->setOption(  "disparitystep" );
-  opt->setOption(  "smoothing" );
-  opt->setOption(  "patchsize" );
-  opt->setOption(  "disparitythreshold" );
-  opt->setOption(  "crosscheck" );
-  opt->setOption(  "zoom" );
-  opt->setOption(  "baseline" );
-  opt->setFlag(  "help" );
-  opt->setFlag(  "flipleft" );
-  opt->setFlag(  "flipright" );
-  opt->setFlag(  "features" );
-  opt->setFlag(  "regions" );
-  opt->setFlag(  "matches" );
-  opt->setFlag(  "depth" );
-  opt->setFlag(  "lines" );
-  opt->setFlag(  "anaglyph" );
-  opt->setFlag(  "histogram" );
-  opt->setFlag(  "calibrate" );
-  opt->setFlag(  "version", 'V' );
-  opt->setFlag(  "stream"  );
-  opt->setFlag(  "headless"  );
-  opt->setFlag(  "disparitymap"  );
-  opt->setFlag(  "equal"  );
-
-  opt->processCommandArgs(argc, argv);
-
-  if( ! opt->hasOptions())
-  {
-      // print usage if no options
-      opt->printUsage();
-      delete opt;
-      return(0);
-  }
-
-  if( opt->getFlag( "version" ) || opt->getFlag( 'V' ) )
-  {
-      printf("Version %f\n", VERSION);
-      delete opt;
-      return(0);
-  }
-
-  bool stream = false;
-  if( opt->getFlag( "stream" ) ) {
-	  stream = true;
-  }
-
-  bool headless = false;
-  if( opt->getFlag( "headless" ) ) {
-      headless = true;
-  }
-
-  bool flip_left_image = false;
-  if( opt->getFlag( "flipleft" ) )
-  {
-	  flip_left_image = true;
-  }
-
-  bool flip_right_image = false;
-  if( opt->getFlag( "flipright" ) )
-  {
-	  flip_right_image = true;
-  }
-
-  bool histogram_equalisation = false;
-  if( opt->getFlag( "equal" ) )
-  {
-	  histogram_equalisation = true;
-  }
-
-  bool save_images = false;
-  std::string save_filename = "";
-  if( opt->getValue( "save" ) != NULL  ) {
-  	  save_filename = opt->getValue("save");
-  	  if (save_filename == "") save_filename = "image_";
-  	  save_images = true;
-  }
-
-  if( opt->getFlag( "help" ) ) {
-      opt->printUsage();
-      delete opt;
-      return(0);
-  }
-
-  if( opt->getFlag( "disparitymap" ) ) {
-	  show_regions = false;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = true;
-  }
-
-  if( opt->getFlag( "features" ) ) {
-	  show_regions = false;
-	  show_features = true;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  if( opt->getFlag( "histogram" ) ) {
-	  show_regions = false;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = true;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  if( opt->getFlag( "matches" ) ) {
-	  show_regions = false;
-	  show_features = false;
-	  show_matches = true;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  if( opt->getFlag( "regions" ) ) {
-	  show_regions = true;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  if( opt->getFlag( "depth" ) ) {
-	  show_regions = false;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = true;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  if( opt->getFlag( "lines" ) ) {
-	  show_regions = false;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = true;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  if( opt->getFlag( "anaglyph" ) ) {
-	  show_regions = false;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = true;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  bool calibrate_offsets = false;
-  if( opt->getFlag( "calibrate" ) ) {
-	  show_regions = false;
-	  calibrate_offsets = true;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = false;
-	  show_disparity_map = false;
-  }
-
-  int save_period_sec = 0;
-  if( opt->getValue( "saveperiod" ) != NULL  ) {
-	  save_period_sec = atoi(opt->getValue("saveperiod"));
-	  if (save_period_sec < 1) save_period_sec=1;
-  }
-
-  int desired_corner_features = 70;
-  if( opt->getValue( "fast" ) != NULL  ) {
-	  show_regions = false;
-	  calibrate_offsets = false;
-	  show_features = false;
-	  show_matches = false;
-	  show_depthmap = false;
-	  show_anaglyph = false;
-	  show_histogram = false;
-	  show_lines = false;
-	  show_FAST = true;
-	  show_disparity_map = false;
-	  desired_corner_features = atoi(opt->getValue("fast"));
-	  if (desired_corner_features > 150) desired_corner_features=150;
-	  if (desired_corner_features < 50) desired_corner_features=50;
-  }
-
-  int enable_ground_priors = 0;
-  int ground_y_percent = 50;
-  if( opt->getValue( "ground" ) != NULL  ) {
-	  enable_ground_priors = 1;
-	  ground_y_percent = atoi(opt->getValue("ground"));
-  }
-
-  if( opt->getValue( "fov" ) != NULL  ) {
-  	  FOV_degrees = atoi(opt->getValue("fov"));
-  }
-
-  std::string dev0 = "/dev/video1";
-  if( opt->getValue( '0' ) != NULL  || opt->getValue( "dev0" ) != NULL  ) {
-  	  dev0 = opt->getValue("dev0");
-  }
-
-  std::string dev1 = "/dev/video2";
-  if( opt->getValue( '1' ) != NULL  || opt->getValue( "dev1" ) != NULL  ) {
-  	  dev1 = opt->getValue("dev1");
-  }
-
-  if( opt->getValue( 'w' ) != NULL  || opt->getValue( "width" ) != NULL  ) {
-  	  ww = atoi(opt->getValue("width"));
-  }
-
-  if( opt->getValue( 'h' ) != NULL  || opt->getValue( "height" ) != NULL  ) {
-  	  hh = atoi(opt->getValue("height"));
-  }
-
-  int calibration_offset_x = -16;
-  if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
-  	  calibration_offset_x = atoi(opt->getValue("offsetx"));
-  }
-
-  int calibration_offset_y = 2;
-  if( opt->getValue( 'y' ) != NULL  || opt->getValue( "offsety" ) != NULL  ) {
-  	  calibration_offset_y = atoi(opt->getValue("offsety"));
-  }
-
-  int max_disparity_percent = 40;
-  if( opt->getValue( 'd' ) != NULL  || opt->getValue( "disparity" ) != NULL  ) {
-	  max_disparity_percent = atoi(opt->getValue("disparity"));
-	  if (max_disparity_percent < 2) max_disparity_percent = 2;
-	  if (max_disparity_percent > 90) max_disparity_percent = 90;
-  }
-
-  float centre_of_distortion_x0 = ww/2;
-  if( opt->getValue( "cd0x" ) != NULL  ) {
-	  centre_of_distortion_x0 = atof(opt->getValue("cd0x"));
-	  rectify_images = true;
-  }
-
-  float centre_of_distortion_y0 = hh/2;
-  if( opt->getValue( "cd0y" ) != NULL  ) {
-	  centre_of_distortion_y0 = atof(opt->getValue("cd0y"));
-	  rectify_images = true;
-  }
-
-  float centre_of_distortion_x1 = ww/2;
-  if( opt->getValue( "cd1x" ) != NULL  ) {
-	  centre_of_distortion_x1 = atof(opt->getValue("cd1x"));
-	  rectify_images = true;
-  }
-
-  float centre_of_distortion_y1 = hh/2;
-  if( opt->getValue( "cd1y" ) != NULL  ) {
-	  centre_of_distortion_y1 = atof(opt->getValue("cd1y"));
-	  rectify_images = true;
-  }
-
-  float coeff[2][3];
-
-  /* surveyor svs */
-  coeff[0][0] = (float)1.03159213066101;
-  coeff[0][1] = (float)-1.04955497590709E-05;
-  coeff[0][2] = (float)-4.3939662646153E-06;
-  coeff[1][0] = (float)1.03159213066101;
-  coeff[1][1] = (float)-1.04955497590709E-05;
-  coeff[1][2] = (float)-4.3939662646153E-06;
-
-  /* minoru */
-  coeff[0][0] = (float)1.14295991712303;
-  coeff[0][1] = (float)-0.00178321008445744;
-  coeff[0][2] = (float)2.97387766992807E-06;
-  coeff[1][0] = (float)1.14295991712303;
-  coeff[1][1] = (float)-0.00178321008445744;
-  coeff[1][2] = (float)2.97387766992807E-06;
-
-  if( opt->getValue( "coeff00" ) != NULL  ) {
-	  coeff[0][0] = atof(opt->getValue("coeff00"));
-	  rectify_images = true;
-  }
-  if( opt->getValue( "coeff01" ) != NULL  ) {
-	  coeff[0][1] = atof(opt->getValue("coeff01"));
-	  rectify_images = true;
-  }
-  if( opt->getValue( "coeff02" ) != NULL  ) {
-      coeff[0][2] = atof(opt->getValue("coeff02"));
-      rectify_images = true;
-  }
-  if( opt->getValue( "coeff10" ) != NULL  ) {
-	  coeff[1][0] = atof(opt->getValue("coeff10"));
-	  rectify_images = true;
-  }
-  if( opt->getValue( "coeff11" ) != NULL  ) {
-	  coeff[1][1] = atof(opt->getValue("coeff11"));
-	  rectify_images = true;
-  }
-  if( opt->getValue( "coeff12" ) != NULL  ) {
-	  coeff[1][2] = atof(opt->getValue("coeff12"));
-	  rectify_images = true;
-  }
-
-  float rotation0 = 0;
-  if( opt->getValue( "rot0" ) != NULL  ) {
-	  rotation0 = atof(opt->getValue("rot0"));
-	  rectify_images = true;
-  }
-  float rotation1 = 0;
-  if( opt->getValue( "rot1" ) != NULL  ) {
-	  rotation1 = atof(opt->getValue("rot1"));
-	  rectify_images = true;
-  }
-
-  float scale0 = 1;
-  if( opt->getValue( "scale0" ) != NULL  ) {
-	  scale0 = atof(opt->getValue("scale0"));
-	  rectify_images = true;
-  }
-  float scale1 = 1;
-  if( opt->getValue( "scale1" ) != NULL  ) {
-	  scale1 = atof(opt->getValue("scale1"));
-	  rectify_images = true;
-  }
-
-  int fps = 30;
-  if( opt->getValue( 'f' ) != NULL  || opt->getValue( "fps" ) != NULL  ) {
-	  fps = atoi(opt->getValue("fps"));
-  }
-
-  std::string descriptors_filename = "";
-  if( opt->getValue( "descriptors" ) != NULL  ) {
-	  descriptors_filename = opt->getValue("descriptors");
-  }
-
-  std::string stereo_matches_filename = "";
-  if( opt->getValue( 'o' ) != NULL  || opt->getValue( "output" ) != NULL  ) {
-	  stereo_matches_filename = opt->getValue("output");
-	  skip_frames = 6;
-  }
-
-  std::string stereo_matches_input_filename = "";
-  if( opt->getValue( 'i' ) != NULL  || opt->getValue( "input" ) != NULL  ) {
-	  stereo_matches_input_filename = opt->getValue("input");
-  }
-
-  std::string log_stereo_matches_filename = "";
-  if( opt->getValue( "log" ) != NULL  ) {
-	  log_stereo_matches_filename = opt->getValue("log");
-  }
-
-  if( opt->getValue( 's' ) != NULL  || opt->getValue( "skip" ) != NULL  ) {
-	  skip_frames = atoi(opt->getValue("skip"));
-  }
-
-  // disparity step size in pixels for dense stereo
-  int disparity_step = 8;
-  if( opt->getValue( "disparitystep" ) != NULL  ) {
-	  disparity_step = atoi(opt->getValue("disparitystep"));
-	  if (disparity_step < 1) disparity_step = 1;
-	  if (disparity_step > 20) disparity_step = 20;
-  }
-
-  // radius used for patch matching in dense stereo
-  int disparity_map_correlation_radius = 1;
-  if( opt->getValue( "patchsize" ) != NULL  ) {
-	  disparity_map_correlation_radius = atoi(opt->getValue("patchsize"));
-	  if (disparity_map_correlation_radius < 1) disparity_map_correlation_radius = 1;
-	  if (disparity_map_correlation_radius > 10) disparity_map_correlation_radius = 10;
-  }
-
-  // radius for disparity space smoothing in dense stereo
-  int disparity_map_smoothing_radius = 2;
-  if( opt->getValue( "smoothing" ) != NULL  ) {
-	  disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
-	  if (disparity_map_smoothing_radius < 1) disparity_map_smoothing_radius = 1;
-	  if (disparity_map_smoothing_radius > 10) disparity_map_smoothing_radius = 10;
-  }
-
-  // disparity map threshold as a percentage
-  int disparity_threshold_percent = 0;
-  if( opt->getValue( "disparitythreshold" ) != NULL  ) {
-	  disparity_threshold_percent = atoi(opt->getValue("disparitythreshold"));
-	  if (disparity_threshold_percent < 0) disparity_threshold_percent = 0;
-	  if (disparity_threshold_percent > 100) disparity_threshold_percent = 100;
-  }
-
-  // cross checking threshold
-  int cross_checking_threshold = 50;
-  if( opt->getValue( "crosscheck" ) != NULL  ) {
-	  cross_checking_threshold = atoi(opt->getValue("crosscheck"));
-	  if (cross_checking_threshold < 2) cross_checking_threshold = 2;
-	  if (cross_checking_threshold > 100) cross_checking_threshold = 100;
-  }
-
-  // baseline distance
-  int baseline_mm = 60;
-  if( opt->getValue( "baseline" ) != NULL  ) {
-	  baseline_mm = atoi(opt->getValue("baseline"));
-	  if (baseline_mm < 10) baseline_mm = 10;
-  }
-
-  // zoom percentage
-  int zoom = 0;
-  if( opt->getValue( "zoom" ) != NULL  ) {
-	  zoom = atoi(opt->getValue("zoom"));
-	  if (zoom < 0) zoom = 0;
-	  if (zoom > 100) zoom = 100;
-  }
-  int zoom_tx = zoom * ((ww/2)*80/100) / 100;
-  int zoom_ty = zoom * ((hh/2)*80/100) / 100;
-  int zoom_bx = ww - zoom_tx;
-  int zoom_by = hh - zoom_ty;
-
-  // adjust offsets to compensate for the zoom
-  calibration_offset_x = calibration_offset_x * ww / (zoom_bx - zoom_tx);
-  calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
-
-  delete opt;
-
-  Camera c(dev0.c_str(), ww, hh, fps);
-  Camera c2(dev1.c_str(), ww, hh, fps);
-
-  std::string left_image_title = "Left image";
-  std::string right_image_title = "Right image";
-
-  if (show_features) {
-	  left_image_title = "Left image features";
-	  right_image_title = "Right image features";
-  }
-  if (show_regions) {
-	  left_image_title = "Left image regions";
-	  right_image_title = "Right image regions";
-  }
-  if (show_FAST) left_image_title = "FAST corners";
-  if (show_matches) left_image_title = "Stereo matches";
-  if (show_depthmap) left_image_title = "Depth map";
-  if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
-  if (show_anaglyph) left_image_title = "Anaglyph";
-  if (show_disparity_map) left_image_title = "Disparity map";
-
-//cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
-
-  if ((!save_images) &&
-	  (!calibrate_offsets) && (!headless) &&
-	  (stereo_matches_filename == "")) {
-
-      cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-      if ((!show_matches) &&
-    	  (!show_FAST) &&
-    	  (!show_depthmap) &&
-    	  (!show_anaglyph) &&
-    	  (!show_disparity_map)) {
-          cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
-      }
-  }
-
-  IplImage *l=cvCreateImage(cvSize(ww, hh), 8, 3);
-  unsigned char *l_=(unsigned char *)l->imageData;
-
-  IplImage *r=cvCreateImage(cvSize(ww, hh), 8, 3);
-  unsigned char *r_=(unsigned char *)r->imageData;
-
-  /* feature detection params */
-  int inhibition_radius = 6;
-  unsigned int minimum_response = 25;
-
-  /* matching params */
-  int ideal_no_of_matches = 400;
-
-  /* These weights are used during matching of stereo features.
-   * You can adjust them if you wish */
-  int learnDesc = 18*5;  /* weight associated with feature descriptor match */
-  int learnLuma = 7*5;   /* weight associated with luminance match */
-  int learnDisp = 1;   /* weight associated with disparity (bias towards smaller disparities) */
-  int learnGrad = 4;  /* weight associated with horizontal gradient */
-  int groundPrior = 200; /* weight for ground plane prior */
-
-  svs* lcam = new svs(ww, hh);
-  svs* rcam = new svs(ww, hh);
-  //motionmodel* motion = new motionmodel();
-  fast* corners_left = new fast();
-
-  unsigned char* rectification_buffer = NULL;
-  unsigned char* depthmap_buffer = NULL;
-
-  linefit *lines = new linefit();
-
-  /*
-   * Send the video over a network for use in embedded applications
-   * using the gstreamer library.
-   */
-  GstElement* l_source = NULL;
-  GstElement* r_source = NULL;
-  GstBuffer* l_app_buffer = NULL;
-  GstBuffer* r_app_buffer = NULL;
-  GstFlowReturn ret;
-
-  // Yuck
-  std::stringstream lp_str;
-  lp_str << start_port;
-  std::stringstream rp_str;
-  rp_str << start_port + 1;
-
-  std::string caps;
-
-  if( stream ) {
-	// Initialise gstreamer and glib
-      	gst_init( NULL, NULL );
-	GError* l_error = 0;
-	GError* r_error = 0;
-	GstElement* l_pipeline = 0;
-	GstElement* r_pipeline = 0;
+    int ww = 320;
+    int hh = 240;
+    int skip_frames = 1;
+    int prev_matches = 0;
+    int image_index = 0;
+    bool show_features = false;
+    bool show_matches = false;
+    bool show_regions = false;
+    bool show_depthmap = false;
+    bool show_anaglyph = false;
+    bool show_histogram = false;
+    bool show_lines = false;
+    bool show_disparity_map = false;
+    bool rectify_images = false;
+    bool show_FAST = false;
+    int use_priors = 1;
+    int matches;
+    int FOV_degrees = 50;
+
+    camcalib camera_calibration;
+
+    int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
+
+#ifdef GSTREAMER
+    // Port to start streaming from - second video will be on this + 1
+    int start_port = 5000;
+#endif
+
+    AnyOption *opt = new AnyOption();
+    assert(opt != NULL);
+
+    // help
+    opt->addUsage( "Example: " );
+    opt->addUsage( "  v4l2stereo -0 /dev/video1 -1 /dev/video0 -w 320 -h 240 --features" );
+    opt->addUsage( " " );
+    opt->addUsage( "Usage: " );
+    opt->addUsage( "" );
+    opt->addUsage( " -0  --dev0                Video device number of the left camera");
+    opt->addUsage( " -1  --dev1                Video device number of the right camera");
+    opt->addUsage( "     --camera              Sets a stereo camera type, eg. \"Minoru\"");
+    opt->addUsage( " -w  --width               Image width in pixels");
+    opt->addUsage( " -h  --height              Image height in pixels");
+    opt->addUsage( " -x  --offsetx             Calibration x offset in pixels");
+    opt->addUsage( " -y  --offsety             Calibration y offset in pixels");
+    opt->addUsage( " -d  --disparity           Max disparity as a percent of image width");
+    opt->addUsage( "     --calibrate           Enables you to calibrate a stereo camera");
+    opt->addUsage( "     --intleft             Intrinsic calibration parameters for the left camera");
+    opt->addUsage( "     --intright            Intrinsic calibration parameters for the left camera");
+    opt->addUsage( "     --rectleft            Rectification matrix parameters for the left camera");
+    opt->addUsage( "     --rectright           Rectification matrix parameters for the right camera");
+    opt->addUsage( "     --translation         Extrinsic translation calibration parameters");
+    opt->addUsage( "     --rotation            Extrinsic rotation calibration parameters");
+    opt->addUsage( "     --baseline            Baseline distance in millimetres");
+    opt->addUsage( "     --equal               Perform histogram equalisation");
+    opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
+    opt->addUsage( "     --features            Show stereo features");
+    opt->addUsage( "     --disparitymap        Show dense disparity map");
+    opt->addUsage( "     --disparitystep       Disparity step size in pixels for dense stereo");
+    opt->addUsage( "     --disparitythreshold  Threshold applied to the disparity map as a percentage of max disparity");
+    opt->addUsage( "     --smoothing           Smoothing radius in pixels for dense stereo");
+    opt->addUsage( "     --patchsize           Correlation patch radius in pixels for dense stereo");
+    opt->addUsage( "     --crosscheck          Threshold used for dense stereo pixel cross checking");
+    opt->addUsage( "     --zoom                Zoom level given as a percentage");
+    opt->addUsage( "     --matches             Show stereo matches");
+    opt->addUsage( "     --regions             Show regions");
+    opt->addUsage( "     --depth               Show depth map");
+    opt->addUsage( "     --lines               Show lines");
+    opt->addUsage( "     --anaglyph            Show anaglyph");
+    opt->addUsage( "     --histogram           Show disparity histogram");
+    opt->addUsage( "     --fast                Show FAST corners");
+    opt->addUsage( "     --descriptors         Saves feature descriptor for each FAST corner");
+    opt->addUsage( "     --fov                 Field of view in degrees");
+    opt->addUsage( " -f  --fps                 Frames per second");
+    opt->addUsage( " -s  --skip                Skip this number of frames");
+    opt->addUsage( " -i  --input               Loads stereo matches from the given output file");
+    opt->addUsage( " -o  --output              Saves stereo matches to the given output file");
+    opt->addUsage( "     --log                 Logs stereo matches to the given output file (only when no file exists)");
+    opt->addUsage( " -V  --version             Show version number");
+    opt->addUsage( "     --save                Save raw images");
+    opt->addUsage( "     --saveperiod          Save images repeatedly every x seconds");
+    opt->addUsage( "     --flipright           Flip the right image");
+    opt->addUsage( "     --flipleft            Flip the left image");
+#ifdef GSTREAMER
+    opt->addUsage( "     --stream              Stream output using gstreamer");
+#endif
+    opt->addUsage( "     --headless            Disable video output (for use with --stream)");
+    opt->addUsage( "     --help                Show help");
+    opt->addUsage( "" );
+
+    opt->setOption( "camera" );
+    opt->setOption( "calibrate" );
+    opt->setOption( "intleft" );
+    opt->setOption( "intright" );
+    opt->setOption( "rectleft" );
+    opt->setOption( "rectright" );
+    opt->setOption( "translation" );
+    opt->setOption( "rotation" );
+    opt->setOption( "saveperiod" );
+    opt->setOption( "ground" );
+    opt->setOption( "fast" );
+    opt->setOption( "descriptors" );
+    opt->setOption( "save" );
+    opt->setOption( "fps", 'f' );
+    opt->setOption( "dev0", '0' );
+    opt->setOption( "dev1", '1' );
+    opt->setOption( "width", 'w' );
+    opt->setOption( "height", 'h' );
+    opt->setOption( "offsetx", 'x' );
+    opt->setOption( "offsety", 'y' );
+    opt->setOption( "disparity", 'd' );
+    opt->setOption( "input", 'i' );
+    opt->setOption( "output", 'o' );
+    opt->setOption( "log" );
+    opt->setOption( "skip", 's' );
+    opt->setOption( "fov" );
+    opt->setOption( "disparitystep" );
+    opt->setOption( "smoothing" );
+    opt->setOption( "patchsize" );
+    opt->setOption( "disparitythreshold" );
+    opt->setOption( "crosscheck" );
+    opt->setOption( "zoom" );
+    opt->setOption( "baseline" );
+    opt->setFlag( "help" );
+    opt->setFlag( "flipleft" );
+    opt->setFlag( "flipright" );
+    opt->setFlag( "features" );
+    opt->setFlag( "regions" );
+    opt->setFlag( "matches" );
+    opt->setFlag( "depth" );
+    opt->setFlag( "lines" );
+    opt->setFlag( "anaglyph" );
+    opt->setFlag( "histogram" );
+    opt->setFlag( "version", 'V' );
+    opt->setFlag( "headless"  );
+    opt->setFlag( "disparitymap"  );
+    opt->setFlag( "equal"  );
+#ifdef GSTREAMER
+    opt->setFlag( "stream"  );
+#endif
+
+    opt->processCommandArgs(argc, argv);
+
+    if(!opt->hasOptions())
+    {
+        // print usage if no options
+        opt->printUsage();
+        delete opt;
+        return(0);
+    }
+
+    if( opt->getFlag( "version" ) || opt->getFlag( 'V' ) )
+    {
+        printf("Version %f\n", VERSION);
+        delete opt;
+        return(0);
+    }
+
+#ifdef GSTREAMER
+    bool stream = false;
+    if( opt->getFlag( "stream" ) ) {
+        stream = true;
+    }
+#endif
+
+    if( opt->getValue( "camera" ) != NULL ) {
+        camera_calibration.SetStereoCamera(opt->getValue("camera"));
+        rectify_images = true;
+    }
+
+    bool headless = false;
+    if( opt->getFlag( "headless" ) ) {
+        headless = true;
+    }
+
+    bool flip_left_image = false;
+    if( opt->getFlag( "flipleft" ) )
+    {
+        flip_left_image = true;
+    }
+
+    bool flip_right_image = false;
+    if( opt->getFlag( "flipright" ) )
+    {
+        flip_right_image = true;
+    }
+
+    bool histogram_equalisation = false;
+    if( opt->getFlag( "equal" ) )
+    {
+        histogram_equalisation = true;
+    }
+
+    bool save_images = false;
+    std::string save_filename = "";
+    if( opt->getValue( "save" ) != NULL  ) {
+        save_filename = opt->getValue("save");
+        if (save_filename == "") save_filename = "image_";
+        save_images = true;
+    }
+
+    if( opt->getFlag( "help" ) ) {
+        opt->printUsage();
+        delete opt;
+        return(0);
+    }
+
+    if( opt->getFlag( "disparitymap" ) ) {
+        show_regions = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+	show_anaglyph = false;
+	show_histogram = false;
+	show_lines = false;
+	show_FAST = false;
+	show_disparity_map = true;
+    }
+
+    if (opt->getFlag("features")) {
+        show_regions = false;
+        show_features = true;
+        show_matches = false;
+        show_depthmap = false;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = false;
+    }
+
+    if( opt->getFlag( "histogram" ) ) {
+        show_regions = false;
+	show_features = false;
+	show_matches = false;
+	show_depthmap = false;
+	show_anaglyph = false;
+	show_histogram = true;
+	show_lines = false;
+	show_FAST = false;
+	show_disparity_map = false;
+    }
+
+    if( opt->getFlag( "matches" ) ) {
+        show_regions = false;
+	show_features = false;
+	show_matches = true;
+	show_depthmap = false;
+	show_anaglyph = false;
+	show_histogram = false;
+	show_lines = false;
+	show_FAST = false;
+	show_disparity_map = false;
+    }
+
+    if(opt->getFlag("regions")) {
+        show_regions = true;
+	show_features = false;
+	show_matches = false;
+	show_depthmap = false;
+	show_anaglyph = false;
+	show_histogram = false;
+	show_lines = false;
+	show_FAST = false;
+	show_disparity_map = false;
+    }
+
+    if( opt->getFlag( "depth" ) ) {
+        show_regions = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = true;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = false;
+    }
+
+    if(opt->getFlag("lines")) {
+        show_regions = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = true;
+        show_FAST = false;
+        show_disparity_map = false;
+    }
+
+    if (opt->getFlag("anaglyph")) {
+        show_regions = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+        show_anaglyph = true;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = false;
+    }
+
+    int save_period_sec = 0;
+    if(opt->getValue("saveperiod") != NULL) {
+        save_period_sec = atoi(opt->getValue("saveperiod"));
+	if (save_period_sec < 1) save_period_sec=1;
+    }
+
+    int desired_corner_features = 70;
+    if( opt->getValue( "fast" ) != NULL  ) {
+        show_regions = false;
+	show_features = false;
+	show_matches = false;
+	show_depthmap = false;
+	show_anaglyph = false;
+	show_histogram = false;
+	show_lines = false;
+	show_FAST = true;
+	show_disparity_map = false;
+	desired_corner_features = atoi(opt->getValue("fast"));
+	if (desired_corner_features > 150) desired_corner_features=150;
+	if (desired_corner_features < 50) desired_corner_features=50;
+    }
+
+    int enable_ground_priors = 0;
+    int ground_y_percent = 50;
+    if( opt->getValue( "ground" ) != NULL  ) {
+        enable_ground_priors = 1;
+	ground_y_percent = atoi(opt->getValue("ground"));
+    }
+
+    if( opt->getValue( "fov" ) != NULL  ) {
+        FOV_degrees = atoi(opt->getValue("fov"));
+    }
+
+    std::string dev0 = "/dev/video1";
+    if( opt->getValue( '0' ) != NULL  || opt->getValue( "dev0" ) != NULL  ) {
+        dev0 = opt->getValue("dev0");
+    }
+
+    std::string dev1 = "/dev/video2";
+    if( opt->getValue( '1' ) != NULL  || opt->getValue( "dev1" ) != NULL  ) {
+        dev1 = opt->getValue("dev1");
+    }
+
+    if( opt->getValue( 'w' ) != NULL  || opt->getValue( "width" ) != NULL  ) {
+        ww = atoi(opt->getValue("width"));
+    }
+
+    if( opt->getValue( 'h' ) != NULL  || opt->getValue( "height" ) != NULL  ) {
+        hh = atoi(opt->getValue("height"));
+    }
+
+    int calibration_offset_x = -16;
+    if( opt->getValue( 'x' ) != NULL  || opt->getValue( "offsetx" ) != NULL  ) {
+        calibration_offset_x = atoi(opt->getValue("offsetx"));
+    }
+
+    int calibration_offset_y = 2;
+    if( opt->getValue( 'y' ) != NULL  || opt->getValue( "offsety" ) != NULL  ) {
+        calibration_offset_y = atoi(opt->getValue("offsety"));
+    }
+
+    int max_disparity_percent = 40;
+    if( opt->getValue( 'd' ) != NULL  || opt->getValue( "disparity" ) != NULL  ) {
+        max_disparity_percent = atoi(opt->getValue("disparity"));
+        if (max_disparity_percent < 2) max_disparity_percent = 2;
+        if (max_disparity_percent > 90) max_disparity_percent = 90;
+    }
+
+    int fps = 30;
+    if( opt->getValue( 'f' ) != NULL  || opt->getValue( "fps" ) != NULL  ) {
+        fps = atoi(opt->getValue("fps"));
+    }
+
+    std::string descriptors_filename = "";
+    if( opt->getValue( "descriptors" ) != NULL  ) {
+        descriptors_filename = opt->getValue("descriptors");
+    }
+
+    std::string stereo_matches_filename = "";
+    if( opt->getValue( 'o' ) != NULL  || opt->getValue( "output" ) != NULL  ) {
+        stereo_matches_filename = opt->getValue("output");
+        skip_frames = 6;
+    }
+
+    std::string stereo_matches_input_filename = "";
+    if( opt->getValue( 'i' ) != NULL  || opt->getValue( "input" ) != NULL  ) {
+        stereo_matches_input_filename = opt->getValue("input");
+    }
+
+    std::string log_stereo_matches_filename = "";
+    if( opt->getValue( "log" ) != NULL  ) {
+        log_stereo_matches_filename = opt->getValue("log");
+    }
+
+    if( opt->getValue( 's' ) != NULL  || opt->getValue( "skip" ) != NULL  ) {
+        skip_frames = atoi(opt->getValue("skip"));
+    }
+
+    // disparity step size in pixels for dense stereo
+    int disparity_step = 8;
+    if( opt->getValue( "disparitystep" ) != NULL  ) {
+        disparity_step = atoi(opt->getValue("disparitystep"));
+        if (disparity_step < 1) disparity_step = 1;
+        if (disparity_step > 20) disparity_step = 20;
+    }
+
+    // radius used for patch matching in dense stereo
+    int disparity_map_correlation_radius = 1;
+    if( opt->getValue( "patchsize" ) != NULL  ) {
+        disparity_map_correlation_radius = atoi(opt->getValue("patchsize"));
+        if (disparity_map_correlation_radius < 1) disparity_map_correlation_radius = 1;
+        if (disparity_map_correlation_radius > 10) disparity_map_correlation_radius = 10;
+    }
+
+    // radius for disparity space smoothing in dense stereo
+    int disparity_map_smoothing_radius = 2;
+    if( opt->getValue( "smoothing" ) != NULL  ) {
+        disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
+        if (disparity_map_smoothing_radius < 1) disparity_map_smoothing_radius = 1;
+        if (disparity_map_smoothing_radius > 10) disparity_map_smoothing_radius = 10;
+    }
+
+    // disparity map threshold as a percentage
+    int disparity_threshold_percent = 0;
+    if( opt->getValue( "disparitythreshold" ) != NULL  ) {
+        disparity_threshold_percent = atoi(opt->getValue("disparitythreshold"));
+        if (disparity_threshold_percent < 0) disparity_threshold_percent = 0;
+        if (disparity_threshold_percent > 100) disparity_threshold_percent = 100;
+    }
+
+    // cross checking threshold
+    int cross_checking_threshold = 50;
+    if( opt->getValue( "crosscheck" ) != NULL  ) {
+        cross_checking_threshold = atoi(opt->getValue("crosscheck"));
+        if (cross_checking_threshold < 2) cross_checking_threshold = 2;
+        if (cross_checking_threshold > 100) cross_checking_threshold = 100;
+    }
+
+    // baseline distance
+    int baseline_mm = 60;
+    if( opt->getValue( "baseline" ) != NULL  ) {
+        baseline_mm = atoi(opt->getValue("baseline"));
+        if (baseline_mm < 10) baseline_mm = 10;
+    }
+
+    // zoom percentage
+    int zoom = 0;
+    if( opt->getValue( "zoom" ) != NULL  ) {
+        zoom = atoi(opt->getValue("zoom"));
+        if (zoom < 0) zoom = 0;
+        if (zoom > 100) zoom = 100;
+    }
+    int zoom_tx = zoom * ((ww/2)*80/100) / 100;
+    int zoom_ty = zoom * ((hh/2)*80/100) / 100;
+    int zoom_bx = ww - zoom_tx;
+    int zoom_by = hh - zoom_ty;
+
+    // adjust offsets to compensate for the zoom
+    calibration_offset_x = calibration_offset_x * ww / (zoom_bx - zoom_tx);
+    calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
+
+    if( opt->getValue( "intleft" ) != NULL ) {
+        if (camera_calibration.ParseIntrinsic(opt->getValue("intleft"),0)==0) {
+            std::cout << "9 intrinsic calibration values are ";
+            std::cout << "needed for the left camera\n";
+            delete opt;
+            return 0;
+        }
+    }
+
+    if( opt->getValue( "intright" ) != NULL ) {
+        if (camera_calibration.ParseIntrinsic(opt->getValue("intright"),1) == 0) {
+            std::cout << "9 intrinsic calibration values are ";
+            std::cout << "needed for the right camera\n";
+            delete opt;
+            return 0;
+        }
+    }
+
+    if( opt->getValue( "rectleft" ) != NULL ) {
+        if (camera_calibration.ParseRectification(opt->getValue("rectleft"),0)==0) {
+            std::cout << "9 rectification matrix values are ";
+            std::cout << "needed for the left camera\n";
+            delete opt;
+            return 0;
+        }
+        rectify_images = true;
+    }
+
+    if( opt->getValue( "rectright" ) != NULL ) {
+        if (camera_calibration.ParseRectification(opt->getValue("rectright"),1)==0) {
+            std::cout << "9 rectification matrix values are ";
+            std::cout << "needed for the right camera\n";
+            delete opt;
+            return 0;
+        }
+        rectify_images = true;
+    }
+
+    if( opt->getValue( "translation" ) != NULL ) {
+        if (camera_calibration.ParseExtrinsicTranslation(opt->getValue("translation"))==0) {
+            std::cout << "3 extrinsic translation calibration values are ";
+            std::cout << "needed\n";
+            delete opt;
+            return 0;
+        }
+    }
+
+    if( opt->getValue( "rotation" ) != NULL ) {
+        if (camera_calibration.ParseExtrinsicRotation(opt->getValue("rotation"))==0) {
+            std::cout << "9 extrinsic rotation calibration values are ";
+            std::cout << "needed\n";
+            delete opt;
+            return 0;
+        }
+    }
+
+    if( opt->getValue("calibrate") != NULL ) {
+        int pattern_squares_x=9,pattern_squares_y=6,square_size_mm=24;
+        if (camera_calibration.ParseCalibrationParameters(
+            opt->getValue("calibrate"),
+            pattern_squares_x, pattern_squares_y, square_size_mm)==0) {
+            std::cout << "3 Calibration parameters are needed: ";
+            std::cout << "squares across, squares down, square size (mm)\n";
+        }
+        else {
+            camera_calibration.stereo_camera_calibrate(
+                ww, hh,
+                pattern_squares_x, pattern_squares_y,
+                square_size_mm,
+                dev0, dev1,
+                flip_left_image,
+                flip_right_image,
+                20, headless);
+        }
+        delete opt;
+        return 0;
+    }
+
+    delete opt;
+
+    Camera c(dev0.c_str(), ww, hh, fps);
+    Camera c2(dev1.c_str(), ww, hh, fps);
+
+    std::string left_image_title = "Left image";
+    std::string right_image_title = "Right image";
+
+    if (show_features) {
+        left_image_title = "Left image features";
+        right_image_title = "Right image features";
+    }
+    if (show_regions) {
+        left_image_title = "Left image regions";
+        right_image_title = "Right image regions";
+    }
+    if (show_FAST) left_image_title = "FAST corners";
+    if (show_matches) left_image_title = "Stereo matches";
+    if (show_depthmap) left_image_title = "Depth map";
+    if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
+    if (show_anaglyph) left_image_title = "Anaglyph";
+    if (show_disparity_map) left_image_title = "Disparity map";
+
+    //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
+
+    if ((!save_images) &&
+        (!headless) &&
+        (stereo_matches_filename == "")) {
+
+        cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+        if ((!show_matches) &&
+            (!show_FAST) &&
+            (!show_depthmap) &&
+            (!show_anaglyph) &&
+            (!show_disparity_map)) {
+            cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
+        }
+    }
+
+    IplImage *l=cvCreateImage(cvSize(ww, hh), 8, 3);
+    unsigned char *l_=(unsigned char *)l->imageData;
+
+    IplImage *r=cvCreateImage(cvSize(ww, hh), 8, 3);
+    unsigned char *r_=(unsigned char *)r->imageData;
+
+    /* feature detection params */
+    int inhibition_radius = 6;
+    unsigned int minimum_response = 25;
+
+    /* matching params */
+    int ideal_no_of_matches = 400;
+
+    /* These weights are used during matching of stereo features.
+     * You can adjust them if you wish */
+    int learnDesc = 18*5;  /* weight associated with feature descriptor match */
+    int learnLuma = 7*5;   /* weight associated with luminance match */
+    int learnDisp = 1;   /* weight associated with disparity (bias towards smaller disparities) */
+    int learnGrad = 4;  /* weight associated with horizontal gradient */
+    int groundPrior = 200; /* weight for ground plane prior */
+
+    svs* lcam = new svs(ww, hh);
+    svs* rcam = new svs(ww, hh);
+    //motionmodel* motion = new motionmodel();
+    fast* corners_left = new fast();
+
+    unsigned char* buffer = NULL;
+    unsigned char* depthmap_buffer = NULL;
+
+    linefit *lines = new linefit();
+
+#ifdef GSTREAMER
+    /*
+     * Send the video over a network for use in embedded applications
+     * using the gstreamer library.
+     */
+    GstElement* l_source = NULL;
+    GstElement* r_source = NULL;
+    GstBuffer* l_app_buffer = NULL;
+    GstBuffer* r_app_buffer = NULL;
+    GstFlowReturn ret;
+
+    // Yuck
+    std::stringstream lp_str;
+    lp_str << start_port;
+    std::stringstream rp_str;
+    rp_str << start_port + 1;
+
+    std::string caps;
+
+    if (stream) {
+        // Initialise gstreamer and glib
+        gst_init( NULL, NULL );
+        GError* l_error = 0;
+        GError* r_error = 0;
+        GstElement* l_pipeline = 0;
+        GstElement* r_pipeline = 0;
 
         caps = "image/jpeg";
 
@@ -741,11 +725,11 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Cannot rely on pipeline, as there maybe a situation where the pipeline is null
-	if( (!show_matches) &&
-		(!show_FAST) &&
-		(!show_depthmap) &&
-		(!show_anaglyph) &&
-		(!show_disparity_map)) {
+	if ((!show_matches) &&
+            (!show_FAST) &&
+            (!show_depthmap) &&
+            (!show_anaglyph) &&
+            (!show_disparity_map)) {
 	    if( r_error == NULL ) {
 		r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
 		gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
@@ -757,286 +741,284 @@ int main(int argc, char* argv[]) {
 		cout << "A gstreamer error occurred: " << r_error->message << endl;
 	    }
 	}
-  }
-
-  // dense disparity
-  unsigned int* disparity_space = NULL;
-  unsigned int* disparity_map = NULL;
-
-  IplImage* hist_image0 = NULL;
-  IplImage* hist_image1 = NULL;
-
-  while(1){
-
-    while(c.Get()==0 || c2.Get()==0) usleep(100);
-
-    c.toIplImage(l);
-    c2.toIplImage(r);
-
-    if (flip_right_image) {
-    	if (rectification_buffer == NULL) {
-    		rectification_buffer = new unsigned char[ww * hh * 3];
-    	}
-    	rcam->flip(r_, rectification_buffer);
     }
+#endif
 
-    if (flip_left_image) {
-    	if (rectification_buffer == NULL) {
-    		rectification_buffer = new unsigned char[ww * hh * 3];
-    	}
-    	lcam->flip(l_, rectification_buffer);
-    }
+    // dense disparity
+    unsigned int* disparity_space = NULL;
+    unsigned int* disparity_map = NULL;
 
-    if (rectify_images) {
-    	if (rectification_buffer == NULL) {
-    		rectification_buffer = new unsigned char[ww * hh * 3];
+    IplImage* hist_image0 = NULL;
+    IplImage* hist_image1 = NULL;
 
-    		/* create mappings for image rectification */
-            lcam->make_map(centre_of_distortion_x0, centre_of_distortion_y0, coeff[0][0], coeff[0][1], coeff[0][2], rotation0, scale0);
-            rcam->make_map(centre_of_distortion_x1, centre_of_distortion_y1, coeff[1][0], coeff[1][1], coeff[1][2], rotation1, scale1);
-    	}
-        lcam->rectify(l_, rectification_buffer);
-        memcpy(l_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
-        rcam->rectify(r_, rectification_buffer);
-        memcpy(r_, rectification_buffer, ww * hh * 3 * sizeof(unsigned char));
-    }
+    while(1){
 
-	if (zoom > 0) {
+        while(c.Get()==0 || c2.Get()==0) usleep(100);
 
-		unsigned char l2_[ww*hh*3];
-		unsigned char r2_[ww*hh*3];
-		memcpy((void*)l2_,l_,ww*hh*3);
-		memcpy((void*)r2_,r_,ww*hh*3);
+        c.toIplImage(l);
+        c2.toIplImage(r);
 
-		stereodense::expand(l2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,l_);
-		stereodense::expand(r2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,r_);
-	}
+        if (flip_right_image) {
+            if (buffer == NULL) {
+                buffer = new unsigned char[ww * hh * 3];
+            }
+            rcam->flip(r_, buffer);
+        }
 
-	if (histogram_equalisation) {
+        if (flip_left_image) {
+            if (buffer == NULL) {
+                buffer = new unsigned char[ww * hh * 3];
+            }
+            lcam->flip(l_, buffer);
+        }
 
-		if (hist_image0 == NULL) {
-			hist_image0 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
-			hist_image1 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
-		}
+        if (rectify_images) {
+            #pragma omp parallel for
+            for (int cam = 0; cam <= 1; cam++) {
+                if (cam == 0) {
+                    camera_calibration.RectifyImage(0, ww, hh, l_, -calibration_offset_y);
+                }
+                else {
+                    camera_calibration.RectifyImage(1, ww, hh, r_, +calibration_offset_y);
+                }
+            }
+        }
+
+        if (zoom > 0) {
+            unsigned char *l2_ = new unsigned char[ww*hh*3];
+            unsigned char *r2_ = new unsigned char[ww*hh*3];
+            memcpy((void*)l2_,l_,ww*hh*3);
+            memcpy((void*)r2_,r_,ww*hh*3);
+
+            stereodense::expand(l2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,l_);
+            stereodense::expand(r2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,r_);
+            delete[] l2_;
+            delete[] r2_;
+        }
+
+        if (histogram_equalisation) {
+
+            if (hist_image0 == NULL) {
+                hist_image0 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
+                hist_image1 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
+            }
 
         #pragma omp parallel for
-		for (int i = 0; i < 2; i++) {
-			unsigned char *img = l_;
-			IplImage* hist_image = hist_image0;
-			if (i > 0) {
-				img = r_;
-				hist_image = hist_image1;
-			}
-			svs::histogram_equalise(
-				hist_image,
-				img, ww, hh);
-		}
-
-	}
-
-    #pragma omp parallel for
-	for (int cam = 1; cam >= 0; cam--) {
-
-	    int calib_offset_x = 0;
-	    int calib_offset_y = 0;
-	    unsigned char* rectified_frame_buf = NULL;
-		int no_of_feats = 0;
-		int no_of_feats_horizontal = 0;
-		svs* stereocam = NULL;
-		if (cam == 0) {
-			rectified_frame_buf = l_;
-			stereocam = lcam;
-		    calib_offset_x = 0;
-		    calib_offset_y = 0;
-		}
-		else {
-			rectified_frame_buf = r_;
-			stereocam = rcam;
-		    calib_offset_x = calibration_offset_x;
-		    calib_offset_y = calibration_offset_y;
-		}
-
-		no_of_feats = stereocam->get_features_vertical(
-	        rectified_frame_buf,
-	        inhibition_radius,
-	        minimum_response,
-	        calib_offset_x,
-	        calib_offset_y,
-	        0);
-
-		if ((cam == 0) || (show_features) || (show_lines)) {
-		    no_of_feats_horizontal = stereocam->get_features_horizontal(
-	            rectified_frame_buf,
-	            inhibition_radius,
-	            minimum_response,
-	            calib_offset_x,
-	            calib_offset_y,
-	            0);
-		}
-
-		if (show_lines) {
-            lines->vertically_oriented(
-                no_of_feats,
-        	    stereocam->feature_x,
-        	    stereocam->features_per_row,
-        	    SVS_VERTICAL_SAMPLING,
-        	    10*320/SVS_MAX_IMAGE_WIDTH);
-            lines->horizontally_oriented(
-            	no_of_feats_horizontal,
-        	    stereocam->feature_y,
-        	    stereocam->features_per_col,
-        	    SVS_HORIZONTAL_SAMPLING,
-        	    6*320/SVS_MAX_IMAGE_WIDTH);
-            for (int line = 0; line < lines->line_vertical[0]; line++) {
-                drawing::drawLine(rectified_frame_buf,ww,hh,
-                	lines->line_vertical[line*5 + 1] - calib_offset_x,
-                	lines->line_vertical[line*5 + 2] - calib_offset_y,
-                	lines->line_vertical[line*5 + 3] - calib_offset_x,
-                	lines->line_vertical[line*5 + 4] - calib_offset_y,
-                	255,0,0,
-                	0,false);
+            for (int i = 0; i < 2; i++) {
+                unsigned char *img = l_;
+                IplImage* hist_image = hist_image0;
+                if (i > 0) {
+                    img = r_;
+                    hist_image = hist_image1;
+                }
+                svs::histogram_equalise(
+                    hist_image,
+                    img, ww, hh);
+                }
             }
-            for (int line = 0; line < lines->line_horizontal[0]; line++) {
-                drawing::drawLine(rectified_frame_buf,ww,hh,
-                	lines->line_horizontal[line*5 + 1] - calib_offset_x,
-                	lines->line_horizontal[line*5 + 2] - calib_offset_y,
-                	lines->line_horizontal[line*5 + 3] - calib_offset_x,
-                	lines->line_horizontal[line*5 + 4] - calib_offset_y,
-                	0,255,0,
-                	0,false);
-            }
-		}
+
+        #pragma omp parallel for
+            for (int cam = 1; cam >= 0; cam--) {
+
+                int calib_offset_x = 0;
+                int calib_offset_y = 0;
+                unsigned char* rectified_frame_buf = NULL;
+                int no_of_feats = 0;
+                int no_of_feats_horizontal = 0;
+                svs* stereocam = NULL;
+                if (cam == 0) {
+                    rectified_frame_buf = l_;
+                    stereocam = lcam;
+                    calib_offset_x = 0;
+                    calib_offset_y = 0;
+                }
+                else {
+                    rectified_frame_buf = r_;
+                    stereocam = rcam;
+                    calib_offset_x = calibration_offset_x;
+                    calib_offset_y = calibration_offset_y;
+                }
+
+                no_of_feats = stereocam->get_features_vertical(
+                    rectified_frame_buf,
+                    inhibition_radius,
+                    minimum_response,
+                    calib_offset_x,
+                    calib_offset_y,
+                    0);
+
+                if ((cam == 0) || (show_features) || (show_lines)) {
+                    no_of_feats_horizontal = stereocam->get_features_horizontal(
+                        rectified_frame_buf,
+                        inhibition_radius,
+                        minimum_response,
+                        calib_offset_x,
+                        calib_offset_y,
+                        0);
+                }
+
+                if (show_lines) {
+                    lines->vertically_oriented(
+                        no_of_feats,
+                        stereocam->feature_x,
+                        stereocam->features_per_row,
+                        SVS_VERTICAL_SAMPLING,
+                        10*320/SVS_MAX_IMAGE_WIDTH);
+                    lines->horizontally_oriented(
+                        no_of_feats_horizontal,
+                        stereocam->feature_y,
+                        stereocam->features_per_col,
+                        SVS_HORIZONTAL_SAMPLING,
+                        6*320/SVS_MAX_IMAGE_WIDTH);
+                    for (int line = 0; line < lines->line_vertical[0]; line++) {
+                        drawing::drawLine(rectified_frame_buf,ww,hh,
+                            lines->line_vertical[line*5 + 1] - calib_offset_x,
+                            lines->line_vertical[line*5 + 2] - calib_offset_y,
+                            lines->line_vertical[line*5 + 3] - calib_offset_x,
+                            lines->line_vertical[line*5 + 4] - calib_offset_y,
+                            255,0,0,
+                            0,false);
+                    }
+                    for (int line = 0; line < lines->line_horizontal[0]; line++) {
+                        drawing::drawLine(rectified_frame_buf,ww,hh,
+                            lines->line_horizontal[line*5 + 1] - calib_offset_x,
+                            lines->line_horizontal[line*5 + 2] - calib_offset_y,
+                            lines->line_horizontal[line*5 + 3] - calib_offset_x,
+                            lines->line_horizontal[line*5 + 4] - calib_offset_y,
+                            0,255,0,
+                            0,false);
+                    }
+                }
 
 		//printf("cam %d:  %d\n", cam, no_of_feats);
 
-		/* display the features */
-		if (show_features) {
+                /* display the features */
+                if (show_features) {
 
-			/* vertically oriented features */
-			int row = 0;
-			int feats_remaining = stereocam->features_per_row[row];
+                    /* vertically oriented features */
+                    int row = 0;
+                    int feats_remaining = stereocam->features_per_row[row];
 
-			for (int f = 0; f < no_of_feats; f++, feats_remaining--) {
+                    for (int f = 0; f < no_of_feats; f++, feats_remaining--) {
 
-				int x = (int)stereocam->feature_x[f] / SVS_SUB_PIXEL;
-				int y = 4 + (row * SVS_VERTICAL_SAMPLING);
+                        int x = (int)stereocam->feature_x[f] / SVS_SUB_PIXEL;
+                        int y = 4 + (row * SVS_VERTICAL_SAMPLING);
 
-				if (cam == 0) {
-				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
-				}
-				else {
-					x -= calibration_offset_x;
-					y += calibration_offset_y;
-				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
-				}
+                        if (cam == 0) {
+                            drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
+                        }
+                        else {
+                            x -= calibration_offset_x;
+                            y += calibration_offset_y;
+                            drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 255, 0, 0, 0);
+                        }
 
-				/* move to the next row */
-				if (feats_remaining <= 0) {
-					row++;
-					feats_remaining = stereocam->features_per_row[row];
-				}
-			}
+                        /* move to the next row */
+                        if (feats_remaining <= 0) {
+                            row++;
+                            feats_remaining = stereocam->features_per_row[row];
+                        }
+                    }
 
-			/* horizontally oriented features */
-			int col = 0;
-			feats_remaining = stereocam->features_per_col[col];
+                    /* horizontally oriented features */
+                    int col = 0;
+                    feats_remaining = stereocam->features_per_col[col];
 
-			for (int f = 0; f < no_of_feats_horizontal; f++, feats_remaining--) {
+                    for (int f = 0; f < no_of_feats_horizontal; f++, feats_remaining--) {
 
-				int y = (int)stereocam->feature_y[f];
-				int x = 4 + (col * SVS_HORIZONTAL_SAMPLING);
+                        int y = (int)stereocam->feature_y[f];
+                        int x = 4 + (col * SVS_HORIZONTAL_SAMPLING);
 
-				if (cam == 0) {
-				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
-				}
-				else {
-					x += calibration_offset_x;
-					y -= calibration_offset_y;
-				    drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
-				}
+                        if (cam == 0) {
+                            drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
+                        }
+                        else {
+                            x += calibration_offset_x;
+                            y -= calibration_offset_y;
+                            drawing::drawCross(rectified_frame_buf, ww, hh, x, y, 2, 0, 255, 0, 0);
+                        }
 
-				/* move to the next column */
-				if (feats_remaining <= 0) {
-					col++;
-					feats_remaining = stereocam->features_per_col[col];
-				}
-			}
+                        /* move to the next column */
+                        if (feats_remaining <= 0) {
+                            col++;
+                            feats_remaining = stereocam->features_per_col[col];
+                        }
+                    }
+                }
+            }
 
-		}
-	}
+            /* set ground plane parameters */
+            lcam->enable_ground_priors = enable_ground_priors;
+            lcam->ground_y_percent = ground_y_percent;
 
-	/* set ground plane parameters */
-	lcam->enable_ground_priors = enable_ground_priors;
-	lcam->ground_y_percent = ground_y_percent;
+            matches = lcam->match(
+                rcam,
+                ideal_no_of_matches,
+                max_disparity_percent,
+                learnDesc,
+                learnLuma,
+                learnDisp,
+                learnGrad,
+                groundPrior,
+                use_priors);
 
-	matches = lcam->match(
-		rcam,
-		ideal_no_of_matches,
-		max_disparity_percent,
-		learnDesc,
-		learnLuma,
-		learnDisp,
-		learnGrad,
-		groundPrior,
-		use_priors);
-
-	if (show_regions) {
-		lcam->enable_segmentation = 1;
-		if (lcam->low_contrast != NULL) {
-			lcam->segment(l_, matches);
-			memset((void*)l_, '\0', ww*hh*3);
-			int min_vol = ww*hh/500;
-			int r=255, g=0, b=0;
-			int i = 0;
-			for (int y = 0; y < hh; y++) {
-				for (int x = 0; x < ww; x++, i++) {
-					int ID = lcam->low_contrast[i];
-					if ((ID > 0) && (ID < lcam->no_of_regions )) {
-						if ((int)lcam->region_volume[ID] > min_vol) {
-							int disp = lcam->region_disparity[ID*3];
-							int slope_x = (int)lcam->region_disparity[ID*3+1] - 127;
-							int slope_y = (int)lcam->region_disparity[ID*3+2] - 127;
-							if (disp != 255) {
-								if (!((slope_x == 0) && (slope_y == 0))) {
-									int region_tx = lcam->region_bounding_box[ID*4];
-									int region_ty = lcam->region_bounding_box[ID*4+1];
-									int region_bx = lcam->region_bounding_box[ID*4+2];
-									int region_by = lcam->region_bounding_box[ID*4+3];
-								    int disp_horizontal = 0;
-								    if (region_bx > region_tx) {
-								        disp_horizontal =
-								    	    -(slope_x/2) + ((x - region_tx) * slope_x /
-								             (region_bx - region_tx));
-								    }
-								    int disp_vertical = 0;
-								    if (region_by > region_ty) {
-								        disp_vertical =
-								    	    -(slope_y/2) + ((y - region_ty) * slope_y /
-								             (region_by - region_ty));
-								    }
-								    disp += disp_horizontal + disp_vertical;
-								    if (disp < 0) disp = 0;
-								}
-								r = 20+disp*5;
-								if (r > 255) r = 255;
-								g = r;
-								b = r;
-								l_[i*3] = b;
-								l_[i*3+1] = g;
-								l_[i*3+2] = r;
-							}
-							/*
-							r = lcam->region_colour[ID*3+2];
-							g = lcam->region_colour[ID*3+1];
-							b = lcam->region_colour[ID*3];
-							l_[i*3] = b;
-							l_[i*3+1] = g;
-							l_[i*3+2] = r;
-							*/
-						}
-					}
-			    }
-		    }
+            if (show_regions) {
+                lcam->enable_segmentation = 1;
+                if (lcam->low_contrast != NULL) {
+                    lcam->segment(l_, matches);
+                    memset((void*)l_, '\0', ww*hh*3);
+                    int min_vol = ww*hh/500;
+                    int r=255, g=0, b=0;
+                    int i = 0;
+                    for (int y = 0; y < hh; y++) {
+                        for (int x = 0; x < ww; x++, i++) {
+                            int ID = lcam->low_contrast[i];
+                            if ((ID > 0) && (ID < lcam->no_of_regions )) {
+                                if ((int)lcam->region_volume[ID] > min_vol) {
+                                    int disp = lcam->region_disparity[ID*3];
+                                    int slope_x = (int)lcam->region_disparity[ID*3+1] - 127;
+                                    int slope_y = (int)lcam->region_disparity[ID*3+2] - 127;
+                                    if (disp != 255) {
+                                        if (!((slope_x == 0) && (slope_y == 0))) {
+                                            int region_tx = lcam->region_bounding_box[ID*4];
+                                            int region_ty = lcam->region_bounding_box[ID*4+1];
+                                            int region_bx = lcam->region_bounding_box[ID*4+2];
+                                            int region_by = lcam->region_bounding_box[ID*4+3];
+                                            int disp_horizontal = 0;
+                                            if (region_bx > region_tx) {
+                                                disp_horizontal =
+                                                    -(slope_x/2) + ((x - region_tx) * slope_x /
+                                                     (region_bx - region_tx));
+                                            }
+                                            int disp_vertical = 0;
+                                            if (region_by > region_ty) {
+                                                disp_vertical =
+                                                    -(slope_y/2) + ((y - region_ty) * slope_y /
+                                                    (region_by - region_ty));
+                                            }
+                                            disp += disp_horizontal + disp_vertical;
+                                            if (disp < 0) disp = 0;
+                                        }
+                                        r = 20+disp*5;
+                                        if (r > 255) r = 255;
+                                        g = r;
+                                        b = r;
+                                        l_[i*3] = b;
+                                        l_[i*3+1] = g;
+                                        l_[i*3+2] = r;
+                                    }
+                                    /*
+                                    r = lcam->region_colour[ID*3+2];
+                                    g = lcam->region_colour[ID*3+1];
+                                    b = lcam->region_colour[ID*3];
+                                    l_[i*3] = b;
+                                    l_[i*3+1] = g;
+                                    l_[i*3+2] = r;
+                                    */
+                                }
+                            }
+                        }
+                    }
 
 			/*
 			for (int i = 0; i < lcam->no_of_regions; i++) {
@@ -1309,16 +1291,6 @@ int main(int argc, char* argv[]) {
 
 			break;
 		}
-
-		/* compute calibration offsets, display the results, then quit */
-		if (calibrate_offsets) {
-			int x_range = 25;
-			int y_range = 25;
-			lcam->calibrate_offsets(l_, r_, x_range, y_range, calibration_offset_x, calibration_offset_y);
-			printf("Offset x: %d\n", calibration_offset_x);
-			printf("Offset y: %d\n", calibration_offset_y);
-			break;
-		}
 	}
 
 	/* save stereo matches to a file, then quit */
@@ -1366,6 +1338,7 @@ int main(int argc, char* argv[]) {
 		corners_left->show(l_,ww,hh,1);
 	}
 
+#ifdef GSTREAMER
     /*
      * The streaming bit - seems a bit hacky, someone else can try
      * and convert an IPLImage directly to something GStreamer can handle.
@@ -1390,9 +1363,10 @@ int main(int argc, char* argv[]) {
 		    g_signal_emit_by_name( r_source, "push-buffer", r_app_buffer, &ret );
 	    }
     }
+#endif
 
 	/* display the left and right images */
-	if ((!save_images) && (!calibrate_offsets) && (!headless) && (stereo_matches_filename == "")) {
+	if ((!save_images) && (!headless) && (stereo_matches_filename == "")) {
 	    cvShowImage(left_image_title.c_str(), l);
 	    if ((!show_matches) &&
 	    	(!show_FAST) &&
@@ -1403,42 +1377,41 @@ int main(int argc, char* argv[]) {
 	    }
 	}
 
-    skip_frames--;
-    if (skip_frames < 0) skip_frames = 0;
+        skip_frames--;
+        if (skip_frames < 0) skip_frames = 0;
 
-    int wait = cvWaitKey(10) & 255;
-    if( wait == 27 ) break;
-  }
+        int wait = cvWaitKey(10) & 255;
+        if( wait == 27 ) break;
+    }
 
-  /* destroy the left and right images */
-  if ((!save_images) &&
-	  (!calibrate_offsets) &&
-	  (stereo_matches_filename == "")) {
+    /* destroy the left and right images */
+    if ((!save_images) &&
+        (stereo_matches_filename == "")) {
 
-	  cvDestroyWindow(left_image_title.c_str());
-	  if ((!show_matches) &&
-		  (!show_FAST) &&
-		  (!show_depthmap) &&
-		  (!show_anaglyph) &&
-		  (!show_disparity_map)) {
-	      cvDestroyWindow(right_image_title.c_str());
-	  }
-  }
-  cvReleaseImage(&l);
-  cvReleaseImage(&r);
-  if (hist_image0 != NULL) cvReleaseImage(&hist_image0);
-  if (hist_image1 != NULL) cvReleaseImage(&hist_image1);
+        cvDestroyWindow(left_image_title.c_str());
+        if ((!show_matches) &&
+            (!show_FAST) &&
+            (!show_depthmap) &&
+            (!show_anaglyph) &&
+            (!show_disparity_map)) {
+            cvDestroyWindow(right_image_title.c_str());
+        }
+    }
+    cvReleaseImage(&l);
+    cvReleaseImage(&r);
+    if (hist_image0 != NULL) cvReleaseImage(&hist_image0);
+    if (hist_image1 != NULL) cvReleaseImage(&hist_image1);
 
-  delete lcam;
-  delete rcam;
-  delete corners_left;
-  delete lines;
-  if (rectification_buffer != NULL) delete[] rectification_buffer;
-  if (depthmap_buffer != NULL) delete[] depthmap_buffer;
-  if (disparity_space != NULL) delete[] disparity_space;
-  if (disparity_map != NULL) delete[] disparity_map;
+    delete lcam;
+    delete rcam;
+    delete corners_left;
+    delete lines;
+    if (buffer != NULL) delete[] buffer;
+    if (depthmap_buffer != NULL) delete[] depthmap_buffer;
+    if (disparity_space != NULL) delete[] disparity_space;
+    if (disparity_map != NULL) delete[] disparity_map;
 
-  return 0;
+    return 0;
 }
 
 
