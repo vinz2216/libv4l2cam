@@ -81,10 +81,10 @@ void elas_disparity_map(
     if (elas==NULL) {
         Elas::parameters param;
         elas = new Elas(param);
-        I1 = (uint8_t*)malloc(image_width*image_height*sizeof(uint8_t));
-        I2 = (uint8_t*)malloc(image_width*image_height*sizeof(uint8_t));
-        left_disparities = (float*)malloc(image_width*image_height*sizeof(float));
-        right_disparities = (float*)malloc(image_width*image_height*sizeof(float));
+        I1 = new uint8_t[image_width*image_height];
+        I2 = new uint8_t[image_width*image_height];
+        left_disparities = new float[image_width*image_height];
+        right_disparities = new float[image_width*image_height];
     }
 
     // convert to single byte format
@@ -1505,6 +1505,14 @@ int main(int argc, char* argv[]) {
     if (depthmap_buffer != NULL) delete[] depthmap_buffer;
     if (disparity_space != NULL) delete[] disparity_space;
     if (disparity_map != NULL) delete[] disparity_map;
+
+    if (elas!=NULL) {
+        delete elas;
+        delete [] I1;
+        delete [] I2;
+        delete [] left_disparities;
+        delete [] right_disparities;
+    }
 
     return 0;
 }
