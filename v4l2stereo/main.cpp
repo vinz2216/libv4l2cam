@@ -10,6 +10,19 @@
 
     sudo apt-get install libcv2.1 libhighgui2.1 libcvaux2.1 libcv-dev libcvaux-dev libhighgui-dev libgstreamer-plugins-base0.10-dev libgst-dev
 
+    For details of the ELAS dense stereo algorithm see:
+
+        http://rainsoft.de/software/libelas.html
+
+        @INPROCEEDINGS{Geiger10,
+        author = {Andreas Geiger and Martin Roser and Raquel Urtasun},
+        title = {Efficient Large-Scale Stereo Matching},
+        booktitle = {Asian Conference on Computer Vision},
+        year = {2010},
+        month = {November},
+        address = {Queenstown, New Zealand}
+        }
+
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -48,10 +61,42 @@
 #include "libcam.h"
 
 #include "camcalib.h"
+#include "elas/elas.h"
 
 #define VERSION 1.05
 
 using namespace std;
+
+void elas_disparity_map(
+    unsigned char * left_image,
+    unsigned char * right_image,
+    int image_width,
+    int image_height,
+    uint8_t * &I1,
+    uint8_t * &I2,
+    float * &left_disparities,
+    float * &right_disparities,
+    Elas * &elas)
+{
+    if (elas==NULL) {
+        Elas::parameters param;
+        elas = new Elas(param);
+        I1 = (uint8_t*)malloc(image_width*image_height*sizeof(uint8_t));
+        I2 = (uint8_t*)malloc(image_width*image_height*sizeof(uint8_t));
+        left_disparities = (float*)malloc(image_width*image_height*sizeof(float));
+        right_disparities = (float*)malloc(image_width*image_height*sizeof(float));
+    }
+
+    // convert to single byte format
+    for (int i = 0; i < image_width*image_height; i++) {
+        I1[i] = (uint8_t)left_image[i*3+2];
+        I2[i] = (uint8_t)right_image[i*3+2];
+    }
+
+    const int32_t dims[2] = {image_width, image_height};
+    elas->process(I1,I2,left_disparities,right_disparities,dims);
+}
+
 
 int main(int argc, char* argv[]) {
     int ww = 320;
@@ -67,11 +112,18 @@ int main(int argc, char* argv[]) {
     bool show_histogram = false;
     bool show_lines = false;
     bool show_disparity_map = false;
+    bool show_disparity_map_elas = false;
     bool rectify_images = false;
     bool show_FAST = false;
     int use_priors = 1;
     int matches;
     int FOV_degrees = 50;
+
+    uint8_t * I1 = NULL;
+    uint8_t * I2 = NULL;
+    float * left_disparities = NULL;
+    float * right_disparities = NULL;
+    Elas * elas = NULL;
 
     camcalib camera_calibration;
 
@@ -110,6 +162,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --equal               Perform histogram equalisation");
     opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
     opt->addUsage( "     --features            Show stereo features");
+    opt->addUsage( "     --disparitymapelas    Show dense disparity map using ELAS");
     opt->addUsage( "     --disparitymap        Show dense disparity map");
     opt->addUsage( "     --disparitystep       Disparity step size in pixels for dense stereo");
     opt->addUsage( "     --disparitythreshold  Threshold applied to the disparity map as a percentage of max disparity");
@@ -189,6 +242,7 @@ int main(int argc, char* argv[]) {
     opt->setFlag( "version", 'V' );
     opt->setFlag( "headless"  );
     opt->setFlag( "disparitymap"  );
+    opt->setFlag( "disparitymapelas"  );
     opt->setFlag( "equal"  );
 #ifdef GSTREAMER
     opt->setFlag( "stream"  );
@@ -270,6 +324,20 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = true;
+	show_disparity_map_elas = false;
+    }
+
+    if( opt->getFlag( "disparitymapelas" ) ) {
+        show_regions = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+	show_anaglyph = false;
+	show_histogram = false;
+	show_lines = false;
+	show_FAST = false;
+	show_disparity_map = false;
+	show_disparity_map_elas = true;
     }
 
     if (opt->getFlag("features")) {
@@ -282,6 +350,7 @@ int main(int argc, char* argv[]) {
         show_lines = false;
         show_FAST = false;
         show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     if( opt->getFlag( "histogram" ) ) {
@@ -294,6 +363,7 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     if( opt->getFlag( "matches" ) ) {
@@ -306,6 +376,7 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     if(opt->getFlag("regions")) {
@@ -318,6 +389,7 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     if( opt->getFlag( "depth" ) ) {
@@ -330,6 +402,7 @@ int main(int argc, char* argv[]) {
         show_lines = false;
         show_FAST = false;
         show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     if(opt->getFlag("lines")) {
@@ -342,6 +415,7 @@ int main(int argc, char* argv[]) {
         show_lines = true;
         show_FAST = false;
         show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     if (opt->getFlag("anaglyph")) {
@@ -354,6 +428,7 @@ int main(int argc, char* argv[]) {
         show_lines = false;
         show_FAST = false;
         show_disparity_map = false;
+	show_disparity_map_elas = false;
     }
 
     int save_period_sec = 0;
@@ -373,6 +448,7 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = true;
 	show_disparity_map = false;
+	show_disparity_map_elas = false;
 	desired_corner_features = atoi(opt->getValue("fast"));
 	if (desired_corner_features > 150) desired_corner_features=150;
 	if (desired_corner_features < 50) desired_corner_features=50;
@@ -617,6 +693,7 @@ int main(int argc, char* argv[]) {
     if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
     if (show_anaglyph) left_image_title = "Anaglyph";
     if (show_disparity_map) left_image_title = "Disparity map";
+    if (show_disparity_map_elas) left_image_title = "Disparity map (ELAS)";
 
     //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
@@ -629,7 +706,8 @@ int main(int argc, char* argv[]) {
             (!show_FAST) &&
             (!show_depthmap) &&
             (!show_anaglyph) &&
-            (!show_disparity_map)) {
+            (!show_disparity_map) &&
+            (!show_disparity_map_elas)) {
             cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
         }
     }
@@ -708,7 +786,8 @@ int main(int argc, char* argv[]) {
 		(!show_FAST) &&
 		(!show_depthmap) &&
 		(!show_anaglyph) &&
-		(!show_disparity_map)) {
+		(!show_disparity_map) &&
+		(!show_disparity_map_elas)) {
 	    r_pipeline = gst_parse_launch( r_pipetext.c_str(), &r_error );
 	}
 
@@ -729,7 +808,8 @@ int main(int argc, char* argv[]) {
             (!show_FAST) &&
             (!show_depthmap) &&
             (!show_anaglyph) &&
-            (!show_disparity_map)) {
+            (!show_disparity_map) &&
+            (!show_disparity_map_elas)) {
 	    if( r_error == NULL ) {
 		r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
 		gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
@@ -1168,6 +1248,16 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	if (show_disparity_map_elas) {
+            elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
+            int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+            for (int i = 0; i < ww*hh; i++) {
+                l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+                l_[i*3+1] = l_[i*3];
+                l_[i*3+2] = l_[i*3];
+            }
+        }
+
 	if (show_disparity_map) {
 
 		if (disparity_space == NULL) {
@@ -1264,6 +1354,7 @@ int main(int argc, char* argv[]) {
 				(!show_FAST) &&
 				(!show_depthmap) &&
 				(!show_anaglyph) &&
+				(!show_disparity_map_elas) &&
 				(!show_disparity_map))
 				cvSaveImage(filename, r);
 			image_index++;
@@ -1279,6 +1370,7 @@ int main(int argc, char* argv[]) {
 				(!show_FAST) &&
 				(!show_depthmap) &&
 				(!show_anaglyph) &&
+				(!show_disparity_map_elas) &&
 				(!show_disparity_map))
 				cvSaveImage(filename.c_str(), r);
 
@@ -1355,6 +1447,7 @@ int main(int argc, char* argv[]) {
 	    	(!show_FAST) &&
 	    	(!show_depthmap) &&
 	    	(!show_anaglyph) &&
+		(!show_disparity_map_elas) &&
 	    	(!show_disparity_map)) {
 		    CvMat* r_buf;
 		    r_buf = cvEncodeImage(".jpg", r);
@@ -1372,6 +1465,7 @@ int main(int argc, char* argv[]) {
 	    	(!show_FAST) &&
 	    	(!show_depthmap) &&
 	    	(!show_anaglyph) &&
+		(!show_disparity_map_elas) &&
 	    	(!show_disparity_map)) {
 		    cvShowImage(right_image_title.c_str(), r);
 	    }
@@ -1393,6 +1487,7 @@ int main(int argc, char* argv[]) {
             (!show_FAST) &&
             (!show_depthmap) &&
             (!show_anaglyph) &&
+            (!show_disparity_map_elas) &&
             (!show_disparity_map)) {
             cvDestroyWindow(right_image_title.c_str());
         }
