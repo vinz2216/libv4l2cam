@@ -22,6 +22,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 #include "elas.h"
 
 #include <math.h>
+#include <omp.h>
 #include "descriptor.h"
 #include "triangle.h"
 #include "elimination.h"
@@ -41,39 +42,77 @@ void Elas::process (uint8_t* I1,uint8_t* I2,float* D1,float* D2,const int32_t* d
 #ifdef PROFILE
   timer.start("Descriptor");  
 #endif
-  Descriptor desc1(I1,dims);
-  Descriptor desc2(I2,dims);
+  Descriptor *desc1,*desc2;
+  #pragma omp parallel for
+  for (int cam = 0; cam <= 1; cam++) {
+      if (cam==0) {
+          desc1 = new Descriptor(I1,dims);
+      }
+      else {
+          desc2 = new Descriptor(I2,dims);
+      }
+  }
 
 #ifdef PROFILE
   timer.start("Support Matches");
 #endif
-  vector<support_pt> p_support = computeSupportMatches(desc1.I_desc,desc2.I_desc,dims);  
+  vector<support_pt> p_support = computeSupportMatches(desc1->I_desc,desc2->I_desc,dims);  
 
 #ifdef PROFILE
   timer.start("Delaunay Triangulation");
 #endif
-  vector<triangle> tri_1 = computeDelaunayTriangulation(p_support,0);
-  vector<triangle> tri_2 = computeDelaunayTriangulation(p_support,1);
+  vector<triangle> tri_1;
+  vector<triangle> tri_2;
+  #pragma omp parallel for
+  for (int cam = 0; cam <= 1; cam++) {
+      if (cam==0) {
+          tri_1 = computeDelaunayTriangulation(p_support,0);
+      }
+      else {
+          tri_2 = computeDelaunayTriangulation(p_support,1);
+      }
+  }
 
 #ifdef PROFILE
   timer.start("Disparity Planes");
 #endif
-  computeDisparityPlanes(p_support,tri_1,0);
-  computeDisparityPlanes(p_support,tri_2,1);
+  #pragma omp parallel for
+  for (int cam = 0; cam <= 1; cam++) {
+      if (cam==0) {
+          computeDisparityPlanes(p_support,tri_1,0);
+      }
+      else {
+          computeDisparityPlanes(p_support,tri_2,1);
+      }
+  }
 
 #ifdef PROFILE
   timer.start("Grid");
 #endif
   int32_t* disparity_grid_1 = (int32_t*)malloc((param.disp_max+2)*grid_height*grid_width*sizeof(int32_t));
   int32_t* disparity_grid_2 = (int32_t*)malloc((param.disp_max+2)*grid_height*grid_width*sizeof(int32_t));
-  createGrid(p_support,disparity_grid_1,grid_dims,0);
-  createGrid(p_support,disparity_grid_2,grid_dims,1);
+  #pragma omp parallel for
+  for (int cam = 0; cam <= 1; cam++) {
+      if (cam==0) {
+          createGrid(p_support,disparity_grid_1,grid_dims,0);
+      }
+      else {
+          createGrid(p_support,disparity_grid_2,grid_dims,1);
+      }
+  }
 
 #ifdef PROFILE
   timer.start("Matching");
 #endif
-  computeDisparity(p_support,tri_1,disparity_grid_1,grid_dims,desc1.I_desc,desc2.I_desc,dims,0,D1);
-  computeDisparity(p_support,tri_2,disparity_grid_2,grid_dims,desc1.I_desc,desc2.I_desc,dims,1,D2);
+  #pragma omp parallel for
+  for (int cam = 0; cam <= 1; cam++) {
+      if (cam==0) {
+          computeDisparity(p_support,tri_1,disparity_grid_1,grid_dims,desc1->I_desc,desc2->I_desc,dims,0,D1);
+      }
+      else {
+          computeDisparity(p_support,tri_2,disparity_grid_2,grid_dims,desc1->I_desc,desc2->I_desc,dims,1,D2);
+      }
+  }
 
 #ifdef PROFILE
   timer.start("L/R Consistency Check");
@@ -111,6 +150,9 @@ void Elas::process (uint8_t* I1,uint8_t* I2,float* D1,float* D2,const int32_t* d
     if (!param.postprocess_only_left)
       median(D2,dims);
   }
+
+  delete desc1;
+  delete desc2;
   
 #ifdef PROFILE
   timer.plot();
