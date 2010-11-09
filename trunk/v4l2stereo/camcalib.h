@@ -103,12 +103,28 @@ private:
     std::string lowercase(
         std::string str);
 
+    int ParseCalibrationFileMatrix(
+        std::string calibration_filename,
+        std::string title,
+        double * matrix_data,
+        int rows);
+
 public:
     CvMat intrinsicCalibration_right;
     CvMat intrinsicCalibration_left;
     CvMat extrinsicRotation;
     CvMat extrinsicTranslation;
     CvMat disparityToDepth;
+    CvMat fundamentalMatrix;
+    CvMat essentialMatrix;
+    int v_shift;
+    bool rectification_loaded;
+
+    void SetFundamentalMatrix(
+        double * matrix);
+
+    void SetEssentialMatrix(
+        double * matrix);
 
     void stereo_camera_calibrate(
         int image_width,
@@ -163,6 +179,9 @@ public:
 
     void SetStereoCamera(
         std::string camera_type);
+
+    void ParseCalibrationFile(
+        std::string calibration_filename);
 
     camcalib();
     ~camcalib();

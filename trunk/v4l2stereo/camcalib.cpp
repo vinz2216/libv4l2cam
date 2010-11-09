@@ -30,6 +30,8 @@ enum {
 
 camcalib::camcalib()
 {
+    rectification_loaded = false;
+    v_shift = 0;
     double intCalib[] = {
         340,   0, 330,
           0, 340,  94,
@@ -42,13 +44,9 @@ camcalib::camcalib()
     extrinsicTranslation = cvMat(3,1,CV_64F, trans);
 
     disparityToDepth = cvMat(4,4,CV_64F);
-
-    double eye3[] = {
-          1,   0,   0,
-          0,   1,   0,
-          0,   0,   1
-    };
-    extrinsicRotation = cvMat(3,3,CV_64F, eye3);
+    extrinsicRotation = cvMat(3,1,CV_64F);
+    fundamentalMatrix = cvMat(3,3,CV_64F);
+    essentialMatrix = cvMat(3,3,CV_64F);
 }
 
 camcalib::~camcalib()
@@ -680,9 +678,7 @@ void camcalib::SetDisparityToDepth(
 void camcalib::SetExtrinsicRotation(
     double * extrinsic)
 {
-    rotationMatrixFromEuler(
-        extrinsic[0], extrinsic[1], extrinsic[2],
-        &extrinsicRotation);
+    extrinsicRotation = cvMat(3,1,CV_64F,extrinsic);
 }
 
 void camcalib::SetIntrinsic(
@@ -697,11 +693,24 @@ void camcalib::SetIntrinsic(
     }
 }
 
+void camcalib::SetFundamentalMatrix(
+    double * matrix)
+{
+    fundamentalMatrix = cvMat(3,3,CV_64F,matrix);
+}
+
+void camcalib::SetEssentialMatrix(
+    double * matrix)
+{
+    essentialMatrix = cvMat(3,3,CV_64F,matrix);
+}
+
 void camcalib::SetRectification(
     double * params,
     int camera_right)
 {
     rectification[camera_right].Set(params);
+    rectification_loaded = true;
 }
 
 int camcalib::ParseRectification(
@@ -907,6 +916,128 @@ void camcalib::SetStereoCamera(
         SetExtrinsicTranslation(extrinsic_translation_c1);
         SetExtrinsicRotation(extrinsic_rotation_c1);
         SetDisparityToDepth(disparity_to_depth_c1);
+    }
+}
+
+int camcalib::ParseCalibrationFileMatrix(
+    std::string calibration_filename,
+    std::string title,
+    double * matrix_data,
+    int rows)
+{
+    FILE * fp;
+    int matrix_index=0;
+    char * retval;
+    const char * title_str = title.c_str();
+    int i,length1 = title.length();
+    fp = fopen(calibration_filename.c_str(),"r");
+    if (fp != NULL) {
+        char str[100];
+        while (!feof(fp)) {
+            retval = fgets (str, 100, fp);
+            for (i = 0; i < length1; i++) {
+                if (str[i]!=title_str[i]) break;
+                if (i>=(int)strlen(str)) break;
+            }
+            if (i > length1-3) {
+                for (int row = 0; row < rows; row++) {
+                    char c=1;
+                    int index=0;
+                    while ((c != '\n') && (!feof(fp)) && (index < 100)) {
+                        c = fgetc(fp);
+                        if (((c>='0') && (c<='9')) || (c=='-') || (c=='.') || (c==',')) {
+                            str[index++] = c;
+                        }
+                        else {
+                            if (index > 0) {
+                                str[index]=0;
+                                matrix_data[matrix_index++] = atof(str);
+                            }
+                            index = 0;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        fclose(fp);
+    }
+    return matrix_index;
+}
+
+void camcalib::ParseCalibrationFile(
+    std::string calibration_filename)
+{
+    double matrix_data[4*4];
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Left Rectification Homography:",
+        (double*)matrix_data, 3) == 9) {
+        SetRectification(matrix_data, 0);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Right Rectification Homography:",
+        (double*)matrix_data, 3) == 9) {
+        SetRectification(matrix_data, 1);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Relative Translation:",
+        (double*)matrix_data, 3) == 3) {
+        SetExtrinsicTranslation(matrix_data);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Relative Rotation:",
+        (double*)matrix_data, 3) == 3) {
+        SetExtrinsicRotation(matrix_data);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Disparity to depth mapping matrix (Q):",
+        (double*)matrix_data, 4) == 16) {
+        SetDisparityToDepth(matrix_data);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Left Intrinsic Parameters:",
+        (double*)matrix_data, 3) == 9) {
+        SetIntrinsic(matrix_data, 0);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Right Intrinsic Parameters:",
+        (double*)matrix_data, 3) == 9) {
+        SetIntrinsic(matrix_data, 1);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Essensial Matrix:",
+        (double*)matrix_data, 3) == 9) {
+        SetEssentialMatrix(matrix_data);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Fundamental Matrix:",
+        (double*)matrix_data, 3) == 9) {
+        SetFundamentalMatrix(matrix_data);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Vertical shift:",
+        (double*)matrix_data, 1) == 1) {
+        v_shift = (int)matrix_data[0];
     }
 }
 
