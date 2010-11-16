@@ -30,6 +30,10 @@ enum {
 
 camcalib::camcalib()
 {
+    rectification = new Rectify*[2];
+    rectification[0] = new Rectify();
+    rectification[1] = new Rectify();
+
     rectification_loaded = false;
     v_shift = 0;
     double intCalib[] = {
@@ -37,20 +41,44 @@ camcalib::camcalib()
           0, 340,  94,
           0,   0,   1
     };
-    intrinsicCalibration_right = cvMat(3,3,CV_64F,intCalib);
-    intrinsicCalibration_left = cvMat(3,3,CV_64F,intCalib);
+    intrinsicCalibration_right = cvCreateMat(3,3,CV_64F);
+    matSet(intrinsicCalibration_right,intCalib);
+    intrinsicCalibration_left = cvCreateMat(3,3,CV_64F);
+    matSet(intrinsicCalibration_left,intCalib);
 
     double trans[] = { -0.575, 0, 0 };
-    extrinsicTranslation = cvMat(3,1,CV_64F, trans);
+    extrinsicTranslation = cvCreateMat(3,1,CV_64F);
+    matSet(extrinsicTranslation, trans);
 
-    disparityToDepth = cvMat(4,4,CV_64F);
-    extrinsicRotation = cvMat(3,1,CV_64F);
-    fundamentalMatrix = cvMat(3,3,CV_64F);
-    essentialMatrix = cvMat(3,3,CV_64F);
+    disparityToDepth = cvCreateMat(4,4,CV_64F);
+    extrinsicRotation = cvCreateMat(3,1,CV_64F);
+    fundamentalMatrix = cvCreateMat(3,3,CV_64F);
+    essentialMatrix = cvCreateMat(3,3,CV_64F);
+
 }
 
 camcalib::~camcalib()
 {
+    cvReleaseMat(&intrinsicCalibration_right);
+    cvReleaseMat(&intrinsicCalibration_left);
+    cvReleaseMat(&extrinsicRotation);
+    cvReleaseMat(&extrinsicTranslation);
+    cvReleaseMat(&disparityToDepth);
+    cvReleaseMat(&fundamentalMatrix);
+    cvReleaseMat(&essentialMatrix);
+    delete rectification[0];
+    delete rectification[1];
+    delete [] rectification;
+}
+
+void camcalib::matSet(CvMat * m, double * data)
+{
+    int i=0;
+    for (int y = 0; y < m->rows; y++) {
+        for (int x = 0; x < m->cols; x++,i++) {
+            cvmSet(m,y,x,data[i]);
+        }
+    }
 }
 
 CvMat* camcalib::matMul(const CvMat* A, const CvMat* B) 
@@ -666,19 +694,19 @@ int camcalib::ParseCalibrationParameters(
 void camcalib::SetExtrinsicTranslation(
     double * extrinsic)
 {
-    extrinsicTranslation = cvMat(3,1,CV_64F,extrinsic);
+    matSet(extrinsicTranslation, extrinsic);
 }
 
 void camcalib::SetDisparityToDepth(
     double * disparity_to_depth)
 {
-    disparityToDepth = cvMat(4,4,CV_64F,disparity_to_depth);
+    matSet(disparityToDepth, disparity_to_depth);
 }
 
 void camcalib::SetExtrinsicRotation(
     double * extrinsic)
 {
-    extrinsicRotation = cvMat(3,1,CV_64F,extrinsic);
+    matSet(extrinsicRotation, extrinsic);
 }
 
 void camcalib::SetIntrinsic(
@@ -686,30 +714,30 @@ void camcalib::SetIntrinsic(
     int camera_right)
 {
     if (camera_right==0) {
-        intrinsicCalibration_left = cvMat(3,3,CV_64F,intrinsic);
+        matSet(intrinsicCalibration_left,intrinsic);
     }
     else {
-        intrinsicCalibration_right = cvMat(3,3,CV_64F,intrinsic);
+        matSet(intrinsicCalibration_right,intrinsic);
     }
 }
 
 void camcalib::SetFundamentalMatrix(
     double * matrix)
 {
-    fundamentalMatrix = cvMat(3,3,CV_64F,matrix);
+    matSet(fundamentalMatrix, matrix);
 }
 
 void camcalib::SetEssentialMatrix(
     double * matrix)
 {
-    essentialMatrix = cvMat(3,3,CV_64F,matrix);
+    matSet(essentialMatrix, matrix);
 }
 
 void camcalib::SetRectification(
     double * params,
     int camera_right)
 {
-    rectification[camera_right].Set(params);
+    rectification[camera_right]->Set(params);
     rectification_loaded = true;
 }
 
@@ -717,7 +745,7 @@ int camcalib::ParseRectification(
     char * rectification_str,
     int camera_right)
 {
-    return rectification[camera_right].Parse(rectification_str);
+    return rectification[camera_right]->Parse(rectification_str);
 }
 
 void camcalib::rotationMatrixFromEuler(
@@ -769,7 +797,7 @@ void camcalib::RectifyImage(
     unsigned char * image_data,
     int v_shift)
 {
-    rectification[right_image].update(
+    rectification[right_image]->update(
       image_width, image_height, image_data, v_shift);
 }
 
@@ -780,7 +808,7 @@ void camcalib::RectifyImage(
     int16_t *image_data,
     int v_shift)
 {
-    rectification[right_image].update(
+    rectification[right_image]->update(
         image_width, image_height, image_data, v_shift);
 }
 
@@ -969,6 +997,10 @@ void camcalib::ParseCalibrationFile(
     std::string calibration_filename)
 {
     double matrix_data[4*4];
+
+    FILE * fp = fopen(calibration_filename.c_str(),"r");
+    if (fp==NULL) return;
+    fclose(fp);
 
     if (ParseCalibrationFileMatrix(
         calibration_filename,

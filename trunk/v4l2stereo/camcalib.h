@@ -44,7 +44,7 @@
 
 class camcalib {
 private:
-    Rectify rectification[2];
+    Rectify ** rectification;
 
     CvMat* matMul(const CvMat* A, const CvMat* B);
 
@@ -109,14 +109,16 @@ private:
         double * matrix_data,
         int rows);
 
+    void matSet(CvMat * m, double * data);
+
 public:
-    CvMat intrinsicCalibration_right;
-    CvMat intrinsicCalibration_left;
-    CvMat extrinsicRotation;
-    CvMat extrinsicTranslation;
-    CvMat disparityToDepth;
-    CvMat fundamentalMatrix;
-    CvMat essentialMatrix;
+    CvMat * intrinsicCalibration_right;
+    CvMat * intrinsicCalibration_left;
+    CvMat * extrinsicRotation;
+    CvMat * extrinsicTranslation;
+    CvMat * disparityToDepth;
+    CvMat * fundamentalMatrix;
+    CvMat * essentialMatrix;
     int v_shift;
     bool rectification_loaded;
 

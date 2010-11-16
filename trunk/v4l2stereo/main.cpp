@@ -125,9 +125,9 @@ int main(int argc, char* argv[]) {
     float * right_disparities = NULL;
     Elas * elas = NULL;
 
-    camcalib camera_calibration;
-    camera_calibration.ParseCalibrationFile("calibration.txt");
-    rectify_images = camera_calibration.rectification_loaded;
+    camcalib * camera_calibration = new camcalib();
+    camera_calibration->ParseCalibrationFile("calibration.txt");
+    rectify_images = camera_calibration->rectification_loaded;
 
     int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
 
@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
 #endif
 
     if( opt->getValue( "camera" ) != NULL ) {
-        camera_calibration.SetStereoCamera(opt->getValue("camera"));
+        camera_calibration->SetStereoCamera(opt->getValue("camera"));
         rectify_images = true;
     }
 
@@ -490,7 +490,7 @@ int main(int argc, char* argv[]) {
         calibration_offset_x = atoi(opt->getValue("offsetx"));
     }
 
-    int calibration_offset_y = camera_calibration.v_shift;
+    int calibration_offset_y = camera_calibration->v_shift;
     if( opt->getValue( 'y' ) != NULL  || opt->getValue( "offsety" ) != NULL  ) {
         calibration_offset_y = atoi(opt->getValue("offsety"));
     }
@@ -596,7 +596,7 @@ int main(int argc, char* argv[]) {
     calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
 
     if( opt->getValue( "intleft" ) != NULL ) {
-        if (camera_calibration.ParseIntrinsic(opt->getValue("intleft"),0)==0) {
+        if (camera_calibration->ParseIntrinsic(opt->getValue("intleft"),0)==0) {
             std::cout << "9 intrinsic calibration values are ";
             std::cout << "needed for the left camera\n";
             delete opt;
@@ -605,7 +605,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue( "intright" ) != NULL ) {
-        if (camera_calibration.ParseIntrinsic(opt->getValue("intright"),1) == 0) {
+        if (camera_calibration->ParseIntrinsic(opt->getValue("intright"),1) == 0) {
             std::cout << "9 intrinsic calibration values are ";
             std::cout << "needed for the right camera\n";
             delete opt;
@@ -614,7 +614,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue( "rectleft" ) != NULL ) {
-        if (camera_calibration.ParseRectification(opt->getValue("rectleft"),0)==0) {
+        if (camera_calibration->ParseRectification(opt->getValue("rectleft"),0)==0) {
             std::cout << "9 rectification matrix values are ";
             std::cout << "needed for the left camera\n";
             delete opt;
@@ -624,7 +624,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue( "rectright" ) != NULL ) {
-        if (camera_calibration.ParseRectification(opt->getValue("rectright"),1)==0) {
+        if (camera_calibration->ParseRectification(opt->getValue("rectright"),1)==0) {
             std::cout << "9 rectification matrix values are ";
             std::cout << "needed for the right camera\n";
             delete opt;
@@ -634,7 +634,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue( "translation" ) != NULL ) {
-        if (camera_calibration.ParseExtrinsicTranslation(opt->getValue("translation"))==0) {
+        if (camera_calibration->ParseExtrinsicTranslation(opt->getValue("translation"))==0) {
             std::cout << "3 extrinsic translation calibration values are ";
             std::cout << "needed\n";
             delete opt;
@@ -643,7 +643,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue( "rotation" ) != NULL ) {
-        if (camera_calibration.ParseExtrinsicRotation(opt->getValue("rotation"))==0) {
+        if (camera_calibration->ParseExtrinsicRotation(opt->getValue("rotation"))==0) {
             std::cout << "9 extrinsic rotation calibration values are ";
             std::cout << "needed\n";
             delete opt;
@@ -653,14 +653,14 @@ int main(int argc, char* argv[]) {
 
     if( opt->getValue("calibrate") != NULL ) {
         int pattern_squares_x=9,pattern_squares_y=6,square_size_mm=24;
-        if (camera_calibration.ParseCalibrationParameters(
+        if (camera_calibration->ParseCalibrationParameters(
             opt->getValue("calibrate"),
             pattern_squares_x, pattern_squares_y, square_size_mm)==0) {
             std::cout << "3 Calibration parameters are needed: ";
             std::cout << "squares across, squares down, square size (mm)\n";
         }
         else {
-            camera_calibration.stereo_camera_calibrate(
+            camera_calibration->stereo_camera_calibrate(
                 ww, hh,
                 pattern_squares_x, pattern_squares_y,
                 square_size_mm,
@@ -858,10 +858,10 @@ int main(int argc, char* argv[]) {
             #pragma omp parallel for
             for (int cam = 0; cam <= 1; cam++) {
                 if (cam == 0) {
-                    camera_calibration.RectifyImage(0, ww, hh, l_, -calibration_offset_y);
+                    camera_calibration->RectifyImage(0, ww, hh, l_, -calibration_offset_y);
                 }
                 else {
-                    camera_calibration.RectifyImage(1, ww, hh, r_, +calibration_offset_y);
+                    camera_calibration->RectifyImage(1, ww, hh, r_, +calibration_offset_y);
                 }
             }
         }
@@ -1515,6 +1515,7 @@ int main(int argc, char* argv[]) {
         delete [] left_disparities;
         delete [] right_disparities;
     }
+    delete camera_calibration;
 
     return 0;
 }
