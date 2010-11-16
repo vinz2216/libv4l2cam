@@ -35,13 +35,16 @@
 #include "stereocam/densestereo_params.h"
 #include "stereocam/featurestereo_params.h"
 #include "libcam.h"
-#include "libcam.cpp"
 #include "polynomial.h"
-#include "polynomial.cpp"
 #include "stereo.h"
-#include "stereo.cpp"
-#include "stereodense.h"
-#include "stereodense.cpp"
+//#include "stereodense.h"
+#include "camcalib.h"
+
+#include "elas/elimination.h"
+#include "elas/triangle.h"
+#include "elas/image.h"
+#include "elas/descriptor.h"
+#include "elas/elas.h"
 
 // if you wish the cameras to begin broadcasting immediately
 // instead of waiting for subscribers then set this flag
@@ -65,14 +68,8 @@ bool cam_active_request = false;
 // dense stereo parameters
 int offset_x = 0;
 int offset_y = 0;
-int vertical_sampling = 2;
 int max_disparity_percent = 50;
-int correlation_radius = 1;
-int smoothing_radius = 2;
-int disparity_step = 8;
 int disparity_threshold_percent = 0;
-bool despeckle = true;
-int cross_checking_threshold = 50;
 
 float baseline_mm = 60;
 float focal_length_pixels = 150;
@@ -204,14 +201,8 @@ bool request_dense_stereo_params(
 {
     offset_x = (int)req.offset_x;
     offset_y = (int)req.offset_y;
-    vertical_sampling = (int)req.vertical_sampling;
     max_disparity_percent = (int)max_disparity_percent;
-    correlation_radius = (int)req.correlation_radius;
-    smoothing_radius = (int)req.smoothing_radius;
-    disparity_step = (int)req.disparity_step;
     disparity_threshold_percent = (int)req.disparity_threshold_percent;
-    despeckle = (bool)req.despeckle;
-    cross_checking_threshold = (int)req.cross_checking_threshold;
     res.ack = 1;
     publish_disparity_map = true;
     return(true);
@@ -232,43 +223,6 @@ bool request_feature_stereo_params(
     res.ack = 1;
     publish_feature_matches = true;
     return(true);
-}
-
-/*!
- * \brief convert the disparity map to stereo_msgs::Image
- * \param disparity_map disparity map data
- * \param disp_image Image to be updated
- * \param vertical_sampling vertical sampling rate
- * \param smoothing_radius radius used to smooth the disparity space
- * \param max_disparity_percent maximum disparity as a percent of image width
- * \param sub_pixel_multiplier multiplier used to convert floating point disparity to an integer value
- */
-void disparity_map_to_Image(
-    unsigned int* disparity_map,
-    sensor_msgs::Image &disp_image,
-    int vertical_sampling,
-    int smoothing_radius,
-    int max_disparity_percent,
-    int sub_pixel_multiplier,
-    float baseline_mm,
-    float focal_length_pixels)
-{
-    int smooth_vert = 2;
-    int img_width = disp_image.width;
-    int img_height = disp_image.height;
-    int max_disparity_pixels = max_disparity_percent * disp_image.width * sub_pixel_multiplier / 100;
-    int width2 = img_width / smoothing_radius;
-
-    unsigned char* data = (unsigned char*)(&disp_image.data[0]);
-
-    for (int y = 0; y < img_height; y++) {
-        int n2 = ((y / vertical_sampling) / smooth_vert) * width2;
-        for (int x = 0; x < img_width; x++) {
-            int n = y*img_width + x;
-            int n2b = (n2 + (x / smoothing_radius)) * 2;
-            data[n] = (unsigned char)(disparity_map[n2b + 1] * 255 / max_disparity_pixels);
-        }
-    }
 }
 
 /*!
@@ -386,138 +340,55 @@ bool intersection(
     return (insideLine);
 }
 
-/*!
- * \brief turns the disparity map into a point cloud.  Multiple points are generated per disparity in order to try to represent the uncertainty
- * \param disparity_map disparity map
- * \param img_left left colour image
- * \param img_width width of the image
- * \param img_height height of the image
- * \param vertical_sampling vertical sampling rate
- * \param smoothing_radius radius used to smooth the disparity space
- * \param max_disparity_percent maximum disparity as a percent of image width
- * \param sub_pixel_multiplier multiplier used to convert floating point disparity to an integer value
- * \param baseline_mm stereo camera baseline
- * \param focal_length_pixels focal length in pixels
- * \param uncertainty_pixels position uncertainty for each observed disparity
- * \param stereo_camera_index an index number for the stereo camera
- * \param point_cloud returned point cloud
- */
 void disparity_map_to_PointCloud(
-    unsigned int* disparity_map,
-    unsigned char* img_left,
+    float * disparity_map,
+    unsigned char * img_left,
     int img_width,
     int img_height,
-    int vertical_sampling,
-    int smoothing_radius,
     int max_disparity_percent,
-    int sub_pixel_multiplier,
-    float baseline_mm,
-    float focal_length_pixels,
-    float uncertainty_pixels,
+    CvMat* disparity_to_depth,
+    IplImage * &disparity_image,
+    IplImage * &reprojected_image,
     std::string stereo_camera_index_str,
     sensor_msgs::PointCloud &point_cloud)
 {
-    // each disparity is represented by this number of points in the cloud
-    const int points_per_disparity = 4*4;
-
-    // dimensions of the disparity map
-    int disparity_map_width = img_width / smoothing_radius;
-    int disparity_map_height = (img_height / vertical_sampling) / STEREO_DENSE_SMOOTH_VERTICAL;
-
-    // find the number of non-zero disparity entries
-    int no_of_points = 0;
-    for (int i = disparity_map_width * disparity_map_height - 1; i >= 0; i--) {
-        int n = i*2 + 1;
-        if (disparity_map[n] > 0) {
-            no_of_points += points_per_disparity;
+    if (disparity_to_depth != NULL) {
+        if (reprojected_image == NULL) {
+            reprojected_image = cvCreateImage(cvSize(img_width, img_height), IPL_DEPTH_32F, 3);
+            disparity_image = cvCreateImage(cvSize(img_width, img_height), IPL_DEPTH_32F, 1);
         }
-    }
-
-    point_cloud.points.resize (no_of_points);
-    point_cloud.channels.resize (3);
-    point_cloud.channels[0].name = "r";
-    point_cloud.channels[0].values.resize(no_of_points);
-    point_cloud.channels[1].name = "g";
-    point_cloud.channels[1].values.resize(no_of_points);
-    point_cloud.channels[2].name = "b";
-    point_cloud.channels[2].values.resize(no_of_points);
-
-    // multiplier used to convert to metres
-    float mult = 1.0f / 1000.0f;
-
-    int baseline_x = baseline_mm / 2.0;
-    float cx = img_width / 2.0f;
-    float cy = img_height / 2.0f;
-    float uncertainty = uncertainty_pixels * 2.0f / 4.0f;
-    float uncertainty2 = uncertainty_pixels * 2.0f / 64.0f;
-    no_of_points = 0;
-    srand(0);
-    for (int y = 0; y < disparity_map_height; y++)
-    {
-
-        int n = y*disparity_map_width*2 + 1;
-        int img_y = y * (img_height-1) / disparity_map_height;
-        float dz = cy - (img_y / (float)img_height);
-
-        for (int x = 0; x < disparity_map_width; x++, n += 2)
-        {
-            int disparity = disparity_map[n];
-            if (disparity > 0) {
-                float disp = disparity / (float)sub_pixel_multiplier;
-                int img_x = x * (img_width-1) / disparity_map_width;
-                int n2 = (img_y*img_width + img_x)*3;
-
-                int r = img_left[n2+2];
-                int g = img_left[n2+1];
-                int b = img_left[n2];
-
-                // horizontal uncertainty
-                for (int i = 0; i < 4; i++) {
-
-                    float left_x = img_x - uncertainty_pixels + (i * uncertainty) - cx;
-                    float x0 = -baseline_x;
-                    float y0 = 0;
-                    float x1 = left_x + x0;
-                    float y1 = focal_length_pixels;
-
-                    // vertical uncertainty
-                    for (int j = 0; j < 4; j++) {
-
-                        float right_x = img_x - disp - uncertainty_pixels + (j * uncertainty) - cx;
-                        float x2 = baseline_x;
-                        float y2 = 0;
-                        float x3 = right_x + x2;
-                        float y3 = focal_length_pixels;
-
-                        float point_x = 0, point_y = 0;
-                        intersection(x0,y0,x1,y1, x2,y2,x3,y3, point_x,point_y);
-                        if (point_x != 9999) {
-
-                            float fraction = point_y / focal_length_pixels;
-                            // randomly adjust the z pixel position, to avoid generating too many points
-                            float point_z = (dz - uncertainty_pixels + (((rand() % 128)-64)*uncertainty2)) * fraction;
-
-                            // set the point position
-                            point_cloud.points[no_of_points].x = point_x * mult;
-                            point_cloud.points[no_of_points].y = point_y * mult;
-                            point_cloud.points[no_of_points].z = point_z * mult;
-
-                            // set the colour
-                            point_cloud.channels[0].values[no_of_points] = r;
-                            point_cloud.channels[1].values[no_of_points] = g;
-                            point_cloud.channels[2].values[no_of_points] = b;
-
-                        }
-
-                        no_of_points++;
-                    }
-                }
-            }
+        float * disparity_image_data = (float*)disparity_image->imageData;
+        int pixels = img_width*img_height;
+        for (int i = 0; i < pixels; i++) {
+            disparity_image_data[i] = disparity_map[i];
         }
-    }
 
-    point_cloud.header.stamp = ros::Time::now();
-    point_cloud.header.frame_id = "stereo_cloud" + stereo_camera_index_str;
+        cvReprojectImageTo3D(disparity_image, reprojected_image, disparity_to_depth,1);
+
+        point_cloud.points.resize (pixels);
+        point_cloud.channels.resize (3);
+        point_cloud.channels[0].name = "r";
+        point_cloud.channels[0].values.resize(pixels);
+        point_cloud.channels[1].name = "g";
+        point_cloud.channels[1].values.resize(pixels);
+        point_cloud.channels[2].name = "b";
+        point_cloud.channels[2].values.resize(pixels);
+
+        for (int i = 0; i < pixels; i++) {
+            // set the point position
+            point_cloud.points[i].x = (float)reprojected_image->imageData[i*3];
+            point_cloud.points[i].y = (float)reprojected_image->imageData[i*3+1];
+            point_cloud.points[i].z = (float)reprojected_image->imageData[i*3+2];
+
+            // set the colour
+            point_cloud.channels[0].values[i] = img_left[i*3+2];
+            point_cloud.channels[1].values[i] = img_left[i*3+1];
+            point_cloud.channels[2].values[i] = img_left[i*3];
+        }
+
+        point_cloud.header.stamp = ros::Time::now();
+        point_cloud.header.frame_id = "stereo_cloud" + stereo_camera_index_str;
+    }
 }
 
 /*!
@@ -688,13 +559,56 @@ int update_feature_matches(
     return(matches);
 }
 
+void elas_disparity_map(
+    unsigned char * left_image,
+    unsigned char * right_image,
+    int image_width,
+    int image_height,
+    uint8_t * &I1,
+    uint8_t * &I2,
+    float * &left_disparities,
+    float * &right_disparities,
+    Elas * &elas)
+{
+    if (elas==NULL) {
+        Elas::parameters param;
+        elas = new Elas(param);
+        I1 = new uint8_t[image_width*image_height];
+        I2 = new uint8_t[image_width*image_height];
+        left_disparities = new float[image_width*image_height];
+        right_disparities = new float[image_width*image_height];
+    }
+
+    // convert to single byte format
+    for (int i = 0; i < image_width*image_height; i++) {
+        I1[i] = (uint8_t)left_image[i*3+2];
+        I2[i] = (uint8_t)right_image[i*3+2];
+    }
+
+    const int32_t dims[2] = {image_width, image_height};
+    elas->process(I1,I2,left_disparities,right_disparities,dims);
+}
+
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "stereocam_broadcast");
     ros::NodeHandle n;
+    ros::NodeHandle nh("~");
+
+    IplImage * disparity_image = NULL;
+    IplImage * reprojected_image = NULL;
+
+    uint8_t * I1 = NULL;
+    uint8_t * I2 = NULL;
+    float * left_disparities = NULL;
+    float * right_disparities = NULL;
+    Elas * elas = NULL;
+
+    camcalib * camera_calibration = new camcalib();
+    camera_calibration->ParseCalibrationFile("calibration.txt");
+    bool rectify_images = camera_calibration->rectification_loaded;
 
     // get the index number of the stereo camera
-    ros::NodeHandle nh("~");
     nh.getParam("index", stereo_camera_index);
     char stereo_camera_index2[20];
     sprintf(stereo_camera_index2,"%d", stereo_camera_index);
@@ -771,17 +685,8 @@ int main(int argc, char** argv)
         cam_active_request = true;
     }
 
-    const int MAX_IMAGE_WIDTH = 640;
-    const int MAX_IMAGE_HEIGHT = 480;
-    const int VERTICAL_SAMPLING = 2;
-    const int sub_pixel_multiplier = 16;
-    int max_disparity_pixels = MAX_IMAGE_WIDTH * max_disparity_percent / 100;
-    int disparity_space_length = (max_disparity_pixels / disparity_step) * MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
-    int disparity_map_length = MAX_IMAGE_WIDTH * ((MAX_IMAGE_HEIGHT/VERTICAL_SAMPLING)/smoothing_radius) * 2;
-    unsigned int* disparity_space = new unsigned int[disparity_space_length];
-    unsigned int* disparity_map = new unsigned int[disparity_map_length];
-
-    unsigned char* rectification_buffer = NULL;
+    int max_disparity_pixels = left_image.width * max_disparity_percent / 100;
+    unsigned char* buffer = NULL;
 
     int no_matches = 0;
     bool restart_cameras = false;
@@ -839,16 +744,28 @@ int main(int argc, char** argv)
 
             // flip images
             if (flip_left_image) {
-                if (rectification_buffer == NULL) {
-                    rectification_buffer = new unsigned char[left_image.width * left_image.height * 3];
+                if (buffer == NULL) {
+                    buffer = new unsigned char[left_image.width * left_image.height * 3];
                 }
-                lcam->flip(l_, rectification_buffer);
+                lcam->flip(l_, buffer);
             }
             if (flip_right_image) {
-                if (rectification_buffer == NULL) {
-                    rectification_buffer = new unsigned char[left_image.width * left_image.height * 3];
+                if (buffer == NULL) {
+                    buffer = new unsigned char[left_image.width * left_image.height * 3];
                 }
-                rcam->flip(r_, rectification_buffer);
+                rcam->flip(r_, buffer);
+            }
+
+            if (rectify_images) {
+                #pragma omp parallel for
+                for (int cam = 0; cam <= 1; cam++) {
+                    if (cam == 0) {
+                        camera_calibration->RectifyImage(0, left_image.width, left_image.height, l_, -offset_y);
+                    }
+                    else {
+                        camera_calibration->RectifyImage(1, left_image.width, left_image.height, r_, +offset_y);
+                    }
+                }
             }
 
             if (publish_feature_matches) {
@@ -876,45 +793,26 @@ int main(int argc, char** argv)
             }
 
             if (publish_disparity_map) {
-                // create disparity map
-                stereodense::update_disparity_map(
-                    l_,r_,left_image.width,left_image.height,
-                    offset_x, offset_y,
-                    vertical_sampling,
-                    max_disparity_percent,
-                    correlation_radius,
-                    smoothing_radius,
-                    disparity_step,
-                    disparity_threshold_percent,
-                    despeckle,
-                    cross_checking_threshold,
-                    disparity_space,
-                    disparity_map);
+                elas_disparity_map(
+                    l_, r_, left_image.width, left_image.height,
+                    I1, I2, left_disparities, right_disparities,
+                    elas);
+                max_disparity_pixels = left_image.width * max_disparity_percent / 100;
+                unsigned char* data = (unsigned char*)(&disparity.data[0]);
+                for (int i = 0; i < (int)(left_image.width*left_image.height); i++) {
+                    l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+                    l_[i*3+1] = l_[i*3];
+                    l_[i*3+2] = l_[i*3];
+                    data[i] = l_[i*3];
+                }
 
-                // convert to stereo_msgs::Image format
-                disparity_map_to_Image(
-                    disparity_map,
-                    disparity,
-                    vertical_sampling,
-                    smoothing_radius,
-                    max_disparity_percent,
-                    sub_pixel_multiplier,
-                    baseline_mm,
-                    focal_length_pixels);
-
-                // create a point cloud from the disparity map
-                float uncertainty_pixels = 1;
                 sensor_msgs::PointCloud point_cloud;
                 disparity_map_to_PointCloud(
-                    disparity_map,
+                    left_disparities,
                     l_, left_image.width, left_image.height,
-                    vertical_sampling,
-                    smoothing_radius,
                     max_disparity_percent,
-                    sub_pixel_multiplier,
-                    baseline_mm,
-                    focal_length_pixels,
-                    uncertainty_pixels,
+                    camera_calibration->disparityToDepth,
+                    disparity_image, reprojected_image,
                     stereo_camera_index_str,
                     point_cloud);
 
@@ -942,15 +840,27 @@ int main(int argc, char** argv)
         cvReleaseImage(&r);
     }
 
+    if (disparity_image != NULL) {
+        cvReleaseImage(&disparity_image);
+        cvReleaseImage(&reprojected_image);
+    }
+
     if (lcam != NULL) {
         delete lcam;
         delete rcam;
     }
-    if (rectification_buffer != NULL) delete[] rectification_buffer;
-    if (disparity_space != NULL) delete[] disparity_space;
-    if (disparity_map != NULL) delete[] disparity_map;
+    if (buffer != NULL) delete[] buffer;
+
+    if (elas!=NULL) {
+        delete elas;
+        delete [] I1;
+        delete [] I2;
+        delete [] left_disparities;
+        delete [] right_disparities;
+    }
 
     stop_cameras(c1,c2);
+    delete camera_calibration;
     ROS_INFO("Exit Success");
 }
 
