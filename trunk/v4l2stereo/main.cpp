@@ -1266,8 +1266,14 @@ int main(int argc, char* argv[]) {
 	if (show_disparity_map_elas) {
             elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
             int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+            int min_disparity = disparity_threshold_percent*255/100;
             for (int i = 0; i < ww*hh; i++) {
-                l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+                if (left_disparities[i] > min_disparity) {
+                    l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+                }
+                else {
+                    l_[i*3]=0;
+                }
                 l_[i*3+1] = l_[i*3];
                 l_[i*3+2] = l_[i*3];
             }
