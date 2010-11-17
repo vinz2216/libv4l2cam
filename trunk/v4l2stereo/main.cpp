@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-#define GSTREAMER
+//#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
