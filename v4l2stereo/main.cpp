@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-//#define GSTREAMER
+#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -674,6 +674,11 @@ int main(int argc, char* argv[]) {
     }
 
     delete opt;
+
+    if ((show_disparity_map_elas) && (!rectify_images)) {
+        std::cout << "Images need to be rectified before using ELAS.  You may need to recalibrate using --calibrate.\n";
+        return 0;
+    }
 
     Camera c(dev0.c_str(), ww, hh, fps);
     Camera c2(dev1.c_str(), ww, hh, fps);
