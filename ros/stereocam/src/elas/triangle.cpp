@@ -1787,9 +1787,11 @@ void traversalinit(struct memorypool *pool)
   /* Find the first item in the block.  Increment by the size of (int *). */
   alignptr = (unsigned long) (pool->pathblock + 1);
   /* Align with item on an `alignbytes'-byte boundary. */
-  pool->pathitem = (int *)
-    (alignptr + (unsigned long) pool->alignbytes -
-     (alignptr % (unsigned long) pool->alignbytes));
+  if (pool->alignbytes!=0) {
+    pool->pathitem = (int *)
+      (alignptr + (unsigned long) pool->alignbytes -
+       (alignptr % (unsigned long) pool->alignbytes));
+  }
   /* Set the number of items left in the current block. */
   pool->pathitemsleft = pool->itemsfirstblock;
 }
@@ -6174,49 +6176,54 @@ long divconqdelaunay(struct mesh *m, struct behavior *b)
   /* Allocate an array of pointers to vertices for sorting. */
   sortarray = (vertex *) trimalloc(m->invertices * (int) sizeof(vertex));
   traversalinit(&m->vertices);
-  for (i = 0; i < m->invertices; i++) {
-    sortarray[i] = vertextraverse(m);
-  }
-  /* Sort the vertices. */
-  vertexsort(sortarray, m->invertices);
-  /* Discard duplicate vertices, which can really mess up the algorithm. */
-  i = 0;
-  for (j = 1; j < m->invertices; j++) {
-    if ((sortarray[i][0] == sortarray[j][0])
-        && (sortarray[i][1] == sortarray[j][1])) {
-      if (!b->quiet) {
-        printf(
+  if (m->invertices > 2) {
+    for (i = 0; i < m->invertices; i++) {
+      sortarray[i] = vertextraverse(m);
+    }
+    /* Sort the vertices. */
+    vertexsort(sortarray, m->invertices);
+    /* Discard duplicate vertices, which can really mess up the algorithm. */
+    i = 0;
+    for (j = 1; j < m->invertices; j++) {
+      if ((sortarray[i][0] == sortarray[j][0])
+          && (sortarray[i][1] == sortarray[j][1])) {
+        if (!b->quiet) {
+          printf(
 "Warning:  A duplicate vertex at (%.12g, %.12g) appeared and was ignored.\n",
                sortarray[j][0], sortarray[j][1]);
+        }
+        setvertextype(sortarray[j], UNDEADVERTEX);
+        m->undeads++;
+      } else {
+        i++;
+        sortarray[i] = sortarray[j];
       }
-      setvertextype(sortarray[j], UNDEADVERTEX);
-      m->undeads++;
-    } else {
-      i++;
-      sortarray[i] = sortarray[j];
     }
-  }
-  i++;
-  if (b->dwyer) {
-    /* Re-sort the array of vertices to accommodate alternating cuts. */
-    divider = i >> 1;
-    if (i - divider >= 2) {
-      if (divider >= 2) {
-        alternateaxes(sortarray, divider, 1);
+    i++;
+    if (b->dwyer) {
+      /* Re-sort the array of vertices to accommodate alternating cuts. */
+      divider = i >> 1;
+      if (i - divider >= 2) {
+        if (divider >= 2) {
+          alternateaxes(sortarray, divider, 1);
+        }
+        alternateaxes(&sortarray[divider], i - divider, 1);
       }
-      alternateaxes(&sortarray[divider], i - divider, 1);
     }
+
+    if (b->verbose) {
+      printf("  Forming triangulation.\n");
+    }
+
+    /* Form the Delaunay triangulation. */
+    divconqrecurse(m, b, sortarray, i, 0, &hullleft, &hullright);
+    trifree((int *) sortarray);
+
+    return removeghosts(m, b, &hullleft);
   }
-
-  if (b->verbose) {
-    printf("  Forming triangulation.\n");
+  else {
+    return 0;
   }
-
-  /* Form the Delaunay triangulation. */
-  divconqrecurse(m, b, sortarray, i, 0, &hullleft, &hullright);
-  trifree((int *) sortarray);
-
-  return removeghosts(m, b, &hullleft);
 }
 
 /**                                                                         **/
