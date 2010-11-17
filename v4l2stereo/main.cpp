@@ -153,7 +153,8 @@ int main(int argc, char* argv[]) {
     opt->addUsage( " -x  --offsetx             Calibration x offset in pixels");
     opt->addUsage( " -y  --offsety             Calibration y offset in pixels");
     opt->addUsage( " -d  --disparity           Max disparity as a percent of image width");
-    opt->addUsage( "     --calibrate           Enables you to calibrate a stereo camera");
+    opt->addUsage( "     --calibrate           Calibrate a stereo camera (squares across, squares down, square size in mm)");
+    opt->addUsage( "     --calibrationfile     Load a given calibration file");
     opt->addUsage( "     --intleft             Intrinsic calibration parameters for the left camera");
     opt->addUsage( "     --intright            Intrinsic calibration parameters for the left camera");
     opt->addUsage( "     --rectleft            Rectification matrix parameters for the left camera");
@@ -200,6 +201,7 @@ int main(int argc, char* argv[]) {
 
     opt->setOption( "camera" );
     opt->setOption( "calibrate" );
+    opt->setOption( "calibrationfile" );
     opt->setOption( "intleft" );
     opt->setOption( "intright" );
     opt->setOption( "rectleft" );
@@ -465,6 +467,12 @@ int main(int argc, char* argv[]) {
 
     if( opt->getValue( "fov" ) != NULL  ) {
         FOV_degrees = atoi(opt->getValue("fov"));
+    }
+
+    if( opt->getValue( "calibrationfile" ) != NULL ) {
+        std::string calibration_file = opt->getValue("calibrationfile");
+        camera_calibration->ParseCalibrationFile(calibration_file.c_str());
+        rectify_images = camera_calibration->rectification_loaded;
     }
 
     std::string dev0 = "/dev/video1";
