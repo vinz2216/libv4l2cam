@@ -35,6 +35,7 @@ rosbuild_gensrv()
 rosbuild_add_library(stereocam_broadcast
     ${V4l2STEREO_PATH}/rectify.cpp
     ${V4l2STEREO_PATH}/camcalib.cpp
+    ${V4l2STEREO_PATH}/pointcloud.cpp
     ${V4l2STEREO_PATH}/libcam.cpp
     ${V4l2STEREO_PATH}/stereo.cpp
     ${V4l2STEREO_PATH}/polynomial.cpp

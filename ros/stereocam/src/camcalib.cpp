@@ -55,6 +55,14 @@ camcalib::camcalib()
     fundamentalMatrix = cvCreateMat(3,3,CV_64F);
     essentialMatrix = cvCreateMat(3,3,CV_64F);
 
+    double initPose[] = {
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 0
+    };
+    pose = cvCreateMat(4,4,CV_64F);
+    matSet(pose, initPose);
 }
 
 camcalib::~camcalib()
@@ -66,6 +74,7 @@ camcalib::~camcalib()
     cvReleaseMat(&disparityToDepth);
     cvReleaseMat(&fundamentalMatrix);
     cvReleaseMat(&essentialMatrix);
+    cvReleaseMat(&pose);
     delete rectification[0];
     delete rectification[1];
     delete [] rectification;
@@ -594,6 +603,66 @@ int camcalib::ParseIntrinsic(
     return success;
 }
 
+int camcalib::ParsePoseRotation(
+    char * pose_str)
+{
+    char str[256];
+    double params[3];
+    int i=0,index=0,p=0,success=0;
+    while (pose_str[i]!=0) {
+        if ((index > 0) &&
+            (pose_str[i]==' ')) {
+            str[index]=0;
+            params[p++] = atof(str);
+            index=0;   
+        }
+        else {
+            str[index++] = pose_str[i];
+        }
+        if (i==255) break;
+        i++;
+    }
+    if (index > 0) {
+        str[index]=0;
+        params[p++] = atof(str);
+    }
+    if (p==3) {
+        SetPoseRotation(params);
+        success=1;
+    }
+    return success;
+}
+
+int camcalib::ParsePose(
+    char * pose_str)
+{
+    char str[256];
+    double params[4*4];
+    int i=0,index=0,p=0,success=0;
+    while (pose_str[i]!=0) {
+        if ((index > 0) &&
+            (pose_str[i]==' ')) {
+            str[index]=0;
+            params[p++] = atof(str);
+            index=0;   
+        }
+        else {
+            str[index++] = pose_str[i];
+        }
+        if (i==255) break;
+        i++;
+    }
+    if (index > 0) {
+        str[index]=0;
+        params[p++] = atof(str);
+    }
+    if (p==16) {
+        SetPose(params);
+        success=1;
+    }
+    return success;
+}
+
 int camcalib::ParseExtrinsicRotation(
     char * extrinsic_str)
 {
@@ -719,6 +788,31 @@ void camcalib::SetIntrinsic(
     else {
         matSet(intrinsicCalibration_right,intrinsic);
     }
+}
+
+void camcalib::SetPose(
+    double * pose_matrix)
+{
+    matSet(pose,pose_matrix);
+}
+
+void camcalib::SetPoseRotation(
+    double * pose_matrix)
+{
+    CvMat * rot = cvCreateMat(3, 1, CV_64F);
+    CvMat * rotmat = cvCreateMat(3, 3, CV_64F);
+    for (int i = 0; i < 3; i++) {
+        cvmSet(rot, i, 0, pose_matrix[i]*3.1415927f/180);
+    }
+    // convert from 3x1 vector to 3x3 rotation matrix
+    cvRodrigues2(rot, rotmat);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            cvmSet(pose, i, j, cvmGet(rotmat,i,j));
+        }
+    }
+    cvReleaseMat(&rot);
+    cvReleaseMat(&rotmat);
 }
 
 void camcalib::SetFundamentalMatrix(

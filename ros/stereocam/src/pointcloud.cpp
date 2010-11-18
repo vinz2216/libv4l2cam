@@ -1,0 +1,119 @@
+/*
+    Point cloud functions
+    Copyright (C) 2010 Bob Mottram and Giacomo Spigler
+    fuzzgun@gmail.com
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include "pointcloud.h"
+
+/*
+  Format: floating point array with 4 float values per point
+  The first array value is the number of subsequent points,
+  followed by 16 floats containing the 4x4 pose matrix.
+  For each point the first three floats are the point coordinates,
+  and the subsequent three bytes are the RGB values
+*/
+void pointcloud::save(
+    unsigned char * img_left,
+    IplImage * points_image, 
+    int max_range_mm,
+    CvMat * pose,
+    std::string point_cloud_filename)
+{
+    FILE * fp = fopen(point_cloud_filename.c_str(),"w");
+    if (fp != NULL) {
+        float * points_image_data = (float*)points_image->imageData;
+        int pixels = points_image->width*points_image->height;
+        int n = 0, ctr = 0;
+        for (int i = 0; i < pixels; i++, n += 3) {
+            if ((fabs(points_image_data[n]) < max_range_mm) &&
+                (fabs(points_image_data[n+1]) < max_range_mm) &&
+                (fabs(points_image_data[n+2]) < max_range_mm)) {
+                ctr++;
+            }
+        }
+        if (ctr > 0) {
+            float * data = new float[1+16+(ctr*4)];
+            unsigned char * data_bytes = (unsigned char*)data;
+            data[0] = ctr;
+            ctr = 1;
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++, ctr++) {
+                   data[ctr] = cvmGet(pose,i,j); 
+                }
+            }
+            n = 0;
+            for (int i = 0; i < pixels; i++, n += 3) {
+                if ((fabs(points_image_data[n]) < max_range_mm) &&
+                    (fabs(points_image_data[n+1]) < max_range_mm) &&
+                    (fabs(points_image_data[n+2]) < max_range_mm)) {
+                    data[ctr] = points_image_data[n];
+                    data[ctr+1] = points_image_data[n+1];
+                    data[ctr+2] = points_image_data[n+2];
+                    int n2 = (ctr*sizeof(float)) + (3*sizeof(float));
+                    data_bytes[n2] = img_left[n];
+                    data_bytes[n2+1] = img_left[n+1];
+                    data_bytes[n2+2] = img_left[n+2];
+                    ctr+=4;
+                }
+            }
+            fwrite(data,sizeof(float),ctr,fp);
+            printf("%d points saved\n", (int)data[0]);
+            delete [] data;
+        }
+        fclose(fp);
+    }
+}
+
+void pointcloud::disparity_map_to_3d_points(
+    float * disparity_map,
+    unsigned char * img_left,
+    int img_width,
+    int img_height,
+    CvMat * disparity_to_depth,
+    CvMat * pose,
+    IplImage * &disparity_image,
+    IplImage * &points_image)
+{
+    if (disparity_to_depth != NULL) {
+        // create image objects
+        if (points_image == NULL) {
+            points_image = cvCreateImage(cvSize(img_width, img_height), IPL_DEPTH_32F, 3);
+            disparity_image = cvCreateImage(cvSize(img_width, img_height), IPL_DEPTH_32F, 1);
+        }
+
+        // insert disparities into the image object
+        float * disparity_image_data = (float*)disparity_image->imageData;
+        for (int i = 0; i < img_width*img_height; i++) {
+            disparity_image_data[i] = disparity_map[i];
+        }
+
+        // reproject the points in an egocentric coordinate frame
+        cvReprojectImageTo3D(disparity_image, points_image, disparity_to_depth);
+
+        // reposition the points according to the camera pose
+        float * points_image_data = (float*)points_image->imageData;
+        int n = 0;
+        for (int i = 0; i < img_width*img_height; i++, n += 3) {
+            float px = (cvmGet(pose, 0, 0) * points_image_data[n] + cvmGet(pose, 0, 1) * points_image_data[n+1] + cvmGet(pose, 0, 2) * points_image_data[n+2]);
+            float py = (cvmGet(pose, 1, 0) * points_image_data[n] + cvmGet(pose, 1, 1) * points_image_data[n+1] + cvmGet(pose, 1, 2) * points_image_data[n+2]);
+            float pz = (cvmGet(pose, 2, 0) * points_image_data[n] + cvmGet(pose, 2, 1) * points_image_data[n+1] + cvmGet(pose, 2, 2) * points_image_data[n+2]);
+            points_image_data[n] = cvmGet(pose,0,3) + px;
+            points_image_data[n+1] = cvmGet(pose,1,3) + py;
+            points_image_data[n+2] = cvmGet(pose,2,3) + pz;
+        }
+    }
+}

@@ -39,6 +39,7 @@
 #include "stereo.h"
 //#include "stereodense.h"
 #include "camcalib.h"
+#include "pointcloud.h"
 
 #include "elas/elimination.h"
 #include "elas/triangle.h"

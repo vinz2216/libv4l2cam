@@ -62,6 +62,7 @@
 
 #include "camcalib.h"
 #include "elas/elas.h"
+#include "pointcloud.h"
 
 #define VERSION 1.05
 
@@ -96,6 +97,7 @@ void elas_disparity_map(
     const int32_t dims[2] = {image_width, image_height};
     elas->process(I1,I2,left_disparities,right_disparities,dims);
 }
+
 
 
 int main(int argc, char* argv[]) {
@@ -161,12 +163,15 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --rectright           Rectification matrix parameters for the right camera");
     opt->addUsage( "     --translation         Extrinsic translation calibration parameters");
     opt->addUsage( "     --rotation            Extrinsic rotation calibration parameters");
+    opt->addUsage( "     --pose                Camera pose 4x4 matrix");
+    opt->addUsage( "     --poserotation        Three values specifying camera rotation in degrees");
     opt->addUsage( "     --baseline            Baseline distance in millimetres");
     opt->addUsage( "     --equal               Perform histogram equalisation");
     opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
     opt->addUsage( "     --features            Show stereo features");
     opt->addUsage( "     --disparitymapelas    Show dense disparity map using ELAS");
     opt->addUsage( "     --disparitymap        Show dense disparity map");
+    opt->addUsage( "     --pointcloud          Filename in which to save point cloud data");
     opt->addUsage( "     --disparitystep       Disparity step size in pixels for dense stereo");
     opt->addUsage( "     --disparitythreshold  Threshold applied to the disparity map as a percentage of max disparity");
     opt->addUsage( "     --smoothing           Smoothing radius in pixels for dense stereo");
@@ -199,6 +204,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --help                Show help");
     opt->addUsage( "" );
 
+    opt->setOption( "pose" );
     opt->setOption( "camera" );
     opt->setOption( "calibrate" );
     opt->setOption( "calibrationfile" );
@@ -233,6 +239,8 @@ int main(int argc, char* argv[]) {
     opt->setOption( "crosscheck" );
     opt->setOption( "zoom" );
     opt->setOption( "baseline" );
+    opt->setOption( "poserotation" );
+    opt->setOption( "pointcloud" );
     opt->setFlag( "help" );
     opt->setFlag( "flipleft" );
     opt->setFlag( "flipright" );
@@ -260,6 +268,13 @@ int main(int argc, char* argv[]) {
         opt->printUsage();
         delete opt;
         return(0);
+    }
+
+    IplImage * disparity_image = NULL;
+    IplImage * points_image = NULL;
+    std::string point_cloud_filename = "";
+    if( opt->getValue( "pointcloud" ) != NULL ) {
+        point_cloud_filename = opt->getValue("pointcloud");
     }
 
     if( opt->getFlag( "version" ) || opt->getFlag( 'V' ) )
@@ -657,6 +672,14 @@ int main(int argc, char* argv[]) {
             delete opt;
             return 0;
         }
+    }
+
+    if( opt->getValue("pose") != NULL ) {
+        camera_calibration->ParsePose(opt->getValue("pose"));
+    }
+
+    if( opt->getValue("poserotation") != NULL ) {
+        camera_calibration->ParsePoseRotation(opt->getValue("poserotation"));
     }
 
     if( opt->getValue("calibrate") != NULL ) {
@@ -1265,6 +1288,19 @@ int main(int argc, char* argv[]) {
 
 	if (show_disparity_map_elas) {
             elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
+
+            // convert disparity map to 3D points
+            if (point_cloud_filename != "") {
+                pointcloud::disparity_map_to_3d_points(
+                    left_disparities, l_,ww,hh,
+                    camera_calibration->disparityToDepth,
+                    camera_calibration->pose,
+                    disparity_image, points_image);
+                int max_range_mm = 10000;
+                pointcloud::save(l_,points_image,max_range_mm,camera_calibration->pose,point_cloud_filename);
+                break;
+            }
+
             int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
             int min_disparity = disparity_threshold_percent*255/100;
             for (int i = 0; i < ww*hh; i++) {
@@ -1513,10 +1549,13 @@ int main(int argc, char* argv[]) {
             cvDestroyWindow(right_image_title.c_str());
         }
     }
+
     cvReleaseImage(&l);
     cvReleaseImage(&r);
     if (hist_image0 != NULL) cvReleaseImage(&hist_image0);
     if (hist_image1 != NULL) cvReleaseImage(&hist_image1);
+    if (disparity_image != NULL) cvReleaseImage(&disparity_image);
+    if (points_image != NULL) cvReleaseImage(&points_image);
 
     delete lcam;
     delete rcam;
