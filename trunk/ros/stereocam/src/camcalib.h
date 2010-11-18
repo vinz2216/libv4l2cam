@@ -119,6 +119,7 @@ public:
     CvMat * disparityToDepth;
     CvMat * fundamentalMatrix;
     CvMat * essentialMatrix;
+    CvMat * pose;
     int v_shift;
     bool rectification_loaded;
 
@@ -164,6 +165,18 @@ public:
     int ParseRectification(
         char * rectification_str,
         int camera_right);
+
+    void SetPose(
+        double * pose_matrix);
+
+    void SetPoseRotation(
+        double * pose_matrix);
+
+    int ParsePose(
+        char * pose_str);
+
+    int ParsePoseRotation(
+        char * pose_str);
 
     void RectifyImage(
         int right_image,
