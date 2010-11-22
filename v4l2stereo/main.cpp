@@ -63,6 +63,7 @@
 #include "camcalib.h"
 #include "elas/elas.h"
 #include "pointcloud.h"
+//#include "gridmap3d.h"
 
 #define VERSION 1.05
 
@@ -101,8 +102,8 @@ void elas_disparity_map(
 
 
 int main(int argc, char* argv[]) {
-    int ww = 320;
-    int hh = 240;
+    int ww = 640;
+    int hh = 480;
     int skip_frames = 1;
     int prev_matches = 0;
     int image_index = 0;
@@ -525,7 +526,7 @@ int main(int argc, char* argv[]) {
         if (max_disparity_percent > 90) max_disparity_percent = 90;
     }
 
-    int fps = 30;
+    int fps = 15;
     if( opt->getValue( 'f' ) != NULL  || opt->getValue( "fps" ) != NULL  ) {
         fps = atoi(opt->getValue("fps"));
     }
@@ -683,7 +684,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue("calibrate") != NULL ) {
-        int pattern_squares_x=9,pattern_squares_y=6,square_size_mm=24;
+        int pattern_squares_x=6,pattern_squares_y=9,square_size_mm=24;
         if (camera_calibration->ParseCalibrationParameters(
             opt->getValue("calibrate"),
             pattern_squares_x, pattern_squares_y, square_size_mm)==0) {
@@ -691,8 +692,11 @@ int main(int argc, char* argv[]) {
             std::cout << "squares across, squares down, square size (mm)\n";
         }
         else {
+            //ww=320;
+            //hh=240;
+            //fps=30;
             camera_calibration->stereo_camera_calibrate(
-                ww, hh,
+                ww, hh, fps,
                 pattern_squares_x, pattern_squares_y,
                 square_size_mm,
                 dev0, dev1,
@@ -868,6 +872,13 @@ int main(int argc, char* argv[]) {
 
     IplImage* hist_image0 = NULL;
     IplImage* hist_image1 = NULL;
+
+/*
+    gridmap3d * grid = NULL;
+    if (point_cloud_filename != "") {
+        grid = new gridmap3d(256,256,10);
+    }
+*/
 
     while(1){
 
@@ -1299,19 +1310,25 @@ int main(int argc, char* argv[]) {
                 int max_range_mm = 10000;
                 pointcloud::save(l_,points_image,max_range_mm,camera_calibration->pose,point_cloud_filename);
                 break;
+/*
+                grid->insert(0,0,0,
+                    (float*)points_image->imageData,ww,hh,l_);
+                grid->show(ww,hh,l_,1);
+*/
             }
-
-            int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
-            int min_disparity = disparity_threshold_percent*255/100;
-            for (int i = 0; i < ww*hh; i++) {
-                if (left_disparities[i] > min_disparity) {
-                    l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+            else {
+                int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+                int min_disparity = disparity_threshold_percent*255/100;
+                for (int i = 0; i < ww*hh; i++) {
+                    if (left_disparities[i] > min_disparity) {
+                        l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+                    }
+                    else {
+                        l_[i*3]=0;
+                    }
+                    l_[i*3+1] = l_[i*3];
+                    l_[i*3+2] = l_[i*3];
                 }
-                else {
-                    l_[i*3]=0;
-                }
-                l_[i*3+1] = l_[i*3];
-                l_[i*3+2] = l_[i*3];
             }
         }
 
@@ -1574,6 +1591,7 @@ int main(int argc, char* argv[]) {
         delete [] right_disparities;
     }
     delete camera_calibration;
+    //if (grid!=NULL) delete grid;
 
     return 0;
 }
