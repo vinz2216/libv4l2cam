@@ -96,7 +96,7 @@ void Rectify::update(
         img = (unsigned char *)l->imageData;
         memcpy((void*)img, (void*)image_data, image_width*image_height*3);
         cvWarpPerspective(l, temp_img, homography);
-        WarpShift(temp_img, l, v_shift, 0);
+        WarpShift(temp_img, l, 0, v_shift);
         memcpy((void*)image_data, (void*)img, image_width*image_height*3);
     }
 }
@@ -126,7 +126,7 @@ void Rectify::update(
         }
 
         cvWarpPerspective(l, temp_img, homography);
-        WarpShift(temp_img, l, v_shift, 0);
+        WarpShift(temp_img, l, 0, v_shift);
 
         for (i = 0; i < image_width*image_height; i++) {
             image_data[i] = img[i*3]+img[i*3+1]+img[i*3+2];
