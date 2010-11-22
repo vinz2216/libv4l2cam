@@ -132,6 +132,7 @@ public:
     void stereo_camera_calibrate(
         int image_width,
         int image_height,
+        int fps,
         int pattern_squares_x,
         int pattern_squares_y,
         int square_size_mm,

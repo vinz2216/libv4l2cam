@@ -32,14 +32,14 @@ using namespace std;
 
 class Rectify {
 private:
-    CvMat * homography;
-    IplImage * l;
-    IplImage * temp_img;
+    CvMat *homography;
+    IplImage *l;
+    IplImage *temp_img;
     bool rectify;
 
     void WarpShift(
-        IplImage * src,
-        IplImage * dest,
+        IplImage* src,
+        IplImage* dest,
         int shiftx,
         int shifty);
 

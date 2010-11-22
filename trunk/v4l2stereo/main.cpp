@@ -616,8 +616,10 @@ int main(int argc, char* argv[]) {
     int zoom_by = hh - zoom_ty;
 
     // adjust offsets to compensate for the zoom
+/*
     calibration_offset_x = calibration_offset_x * ww / (zoom_bx - zoom_tx);
     calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
+*/
 
     if( opt->getValue( "intleft" ) != NULL ) {
         if (camera_calibration->ParseIntrinsic(opt->getValue("intleft"),0)==0) {
@@ -946,6 +948,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            if ((show_features) || (show_matches)) {
         #pragma omp parallel for
             for (int cam = 1; cam >= 0; cam--) {
 
@@ -1075,21 +1078,25 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
+            }
 
             /* set ground plane parameters */
             lcam->enable_ground_priors = enable_ground_priors;
             lcam->ground_y_percent = ground_y_percent;
 
-            matches = lcam->match(
-                rcam,
-                ideal_no_of_matches,
-                max_disparity_percent,
-                learnDesc,
-                learnLuma,
-                learnDisp,
-                learnGrad,
-                groundPrior,
-                use_priors);
+            matches = 0;
+            if (show_matches) {
+                matches = lcam->match(
+                    rcam,
+                    ideal_no_of_matches,
+                    max_disparity_percent,
+                    learnDesc,
+                    learnLuma,
+                    learnDisp,
+                    learnGrad,
+                    groundPrior,
+                    use_priors);
+            }
 
             if (show_regions) {
                 lcam->enable_segmentation = 1;
