@@ -289,6 +289,7 @@ void camcalib::flip(
 void camcalib::stereo_camera_calibrate(
     int image_width,
     int image_height,
+    int fps,
     int pattern_squares_x,
     int pattern_squares_y,
     int square_size_mm,
@@ -314,8 +315,8 @@ void camcalib::stereo_camera_calibrate(
 
     int w = image_width, h = image_height;
 
-    Camera leftcam(dev0.c_str(), w, h, 30);
-    Camera rightcam(dev1.c_str(), w, h, 30);
+    Camera leftcam(dev0.c_str(), w, h, fps);
+    Camera rightcam(dev1.c_str(), w, h, fps);
 
     IplImage *l=cvCreateImage(cvSize(w, h), 8, 3);
     unsigned char *l_=(unsigned char *)l->imageData;

@@ -202,7 +202,7 @@ void Camera::Init() {
 struct v4l2_standard s;
 s.name[0]='A';
 s.frameperiod.numerator=1;
-s.frameperiod.denominator=15;
+s.frameperiod.denominator=fps;
 
 if(-1==xioctl(fd, VIDIOC_S_STD, &s))
   errno_exit("VIDIOC_S_STD");
@@ -212,9 +212,12 @@ if(-1==xioctl(fd, VIDIOC_S_STD, &s))
 struct v4l2_streamparm p;
 p.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;
 //p.parm.capture.capability=V4L2_CAP_TIMEPERFRAME;
-////p.parm.capture.capturemode=V4L2_MODE_HIGHQUALITY;
+//p.parm.capture.capturemode=V4L2_MODE_HIGHQUALITY;
 p.parm.capture.timeperframe.numerator=1;
 p.parm.capture.timeperframe.denominator=fps;
+p.parm.output.timeperframe.numerator=1;
+p.parm.output.timeperframe.denominator=fps;
+//p.parm.output.outputmode=V4L2_MODE_HIGHQUALITY;
 //p.parm.capture.extendedmode=0;
 //p.parm.capture.readbuffers=n_buffers;
 

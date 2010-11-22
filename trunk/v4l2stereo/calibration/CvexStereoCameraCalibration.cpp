@@ -313,10 +313,12 @@ void CvexStereoCameraCalibration::solveStereoParameter()
             }
         }
     }
+
     cvInitMatHeader(
         &image_points1,
         image_count*PATTERN_SIZE, 1,
         CV_32FC2, corners1);
+
     cvCalibrateCamera2(
         &object_points,
         &image_points1,
@@ -337,10 +339,12 @@ void CvexStereoCameraCalibration::solveStereoParameter()
             }
         }
     }
+
     cvInitMatHeader(
         &image_points2,
         image_count*PATTERN_SIZE, 1,
         CV_32FC2, corners2);
+
     cvCalibrateCamera2(
         &object_points,
         &image_points2,
@@ -355,8 +359,8 @@ void CvexStereoCameraCalibration::solveStereoParameter()
         rightCamera.intrinsic,rightCamera.distortion,
         image_size,relate_rot,relate_trans,E,F);
 
-    delete[]objects;
-    delete[]corners1;
-    delete[]corners2;
+    delete [] objects;
+    delete [] corners1;
+    delete [] corners2;
 }
 
