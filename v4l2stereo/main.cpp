@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-//#define GSTREAMER
+#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -56,7 +56,6 @@
 #include "anyoption.h"
 #include "drawing.h"
 #include "stereo.h"
-#include "stereodense.h"
 #include "fast.h"
 #include "libcam.h"
 
@@ -65,9 +64,63 @@
 #include "pointcloud.h"
 //#include "gridmap3d.h"
 
-#define VERSION 1.05
+#define VERSION 1.051
 
 using namespace std;
+
+/*!
+ * \brief expands a subregion of the given image with pixel interpolation.  It is assumed that the subregion has the same aspect as the original.
+ * \param img colour image data
+ * \param img_width width of the image
+ * \param img_height height of the image
+ * \param tx subregion top left x coordinate
+ * \param ty subregion top left y coordinate
+ * \param bx subregion bottom right x coordinate
+ * \param by subregion bottom right y coordinate
+ * \param expanded returned expanded image
+ */
+void expand(
+	unsigned char *img,
+	int img_width,
+	int img_height,
+	int tx,
+	int ty,
+	int bx,
+	int by,
+	unsigned char *expanded)
+{
+	const int mult = 128;
+	const int mult2 = mult*2;
+	int w = (bx - tx) * mult;
+	int h = (by - ty) * mult;
+	int stride = img_width*3;
+    #pragma omp parallel for
+	for (int y = 0; y < img_height; y++) {
+		int n_expanded = y*img_width*3;
+		int yy = h*y/img_height;
+		int fraction_y = yy % mult;
+		yy = ty + (yy/mult);
+		for (int x = 0; x < img_width; x++, n_expanded += 3) {
+			int xx = w*x/img_width;
+			int fraction_x = xx % mult;
+			xx = tx + (xx/mult);
+            int n = (yy*img_width + xx)*3;
+
+            expanded[n_expanded] =
+            		((img[n] * fraction_x) + (img[n+3] * (mult-fraction_x)) +
+            		(img[n] * fraction_y) + (img[n+stride] * (mult-fraction_y))) /
+            		mult2;
+            expanded[n_expanded+1] =
+            		((img[n+1] * fraction_x) + (img[n+1+3] * (mult-fraction_x)) +
+            		(img[n+1] * fraction_y) + (img[n+1+stride] * (mult-fraction_y))) /
+            		mult2;
+            expanded[n_expanded+2] =
+            		((img[n+2] * fraction_x) + (img[n+2+3] * (mult-fraction_x)) +
+            		(img[n+2] * fraction_y) + (img[n+2+stride] * (mult-fraction_y))) /
+            		mult2;
+		}
+	}
+}
 
 void elas_disparity_map(
     unsigned char * left_image,
@@ -99,11 +152,10 @@ void elas_disparity_map(
     elas->process(I1,I2,left_disparities,right_disparities,dims);
 }
 
-
-
 int main(int argc, char* argv[]) {
-    int ww = 640;
-    int hh = 480;
+    int ww = 320;
+    int hh = 240;
+    int fps = 30;
     int skip_frames = 1;
     int prev_matches = 0;
     int image_index = 0;
@@ -115,7 +167,6 @@ int main(int argc, char* argv[]) {
     bool show_histogram = false;
     bool show_lines = false;
     bool show_disparity_map = false;
-    bool show_disparity_map_elas = false;
     bool rectify_images = false;
     bool show_FAST = false;
     int use_priors = 1;
@@ -170,14 +221,9 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --equal               Perform histogram equalisation");
     opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
     opt->addUsage( "     --features            Show stereo features");
-    opt->addUsage( "     --disparitymapelas    Show dense disparity map using ELAS");
     opt->addUsage( "     --disparitymap        Show dense disparity map");
     opt->addUsage( "     --pointcloud          Filename in which to save point cloud data");
-    opt->addUsage( "     --disparitystep       Disparity step size in pixels for dense stereo");
     opt->addUsage( "     --disparitythreshold  Threshold applied to the disparity map as a percentage of max disparity");
-    opt->addUsage( "     --smoothing           Smoothing radius in pixels for dense stereo");
-    opt->addUsage( "     --patchsize           Correlation patch radius in pixels for dense stereo");
-    opt->addUsage( "     --crosscheck          Threshold used for dense stereo pixel cross checking");
     opt->addUsage( "     --zoom                Zoom level given as a percentage");
     opt->addUsage( "     --matches             Show stereo matches");
     opt->addUsage( "     --regions             Show regions");
@@ -233,11 +279,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "log" );
     opt->setOption( "skip", 's' );
     opt->setOption( "fov" );
-    opt->setOption( "disparitystep" );
-    opt->setOption( "smoothing" );
-    opt->setOption( "patchsize" );
     opt->setOption( "disparitythreshold" );
-    opt->setOption( "crosscheck" );
     opt->setOption( "zoom" );
     opt->setOption( "baseline" );
     opt->setOption( "poserotation" );
@@ -255,7 +297,6 @@ int main(int argc, char* argv[]) {
     opt->setFlag( "version", 'V' );
     opt->setFlag( "headless"  );
     opt->setFlag( "disparitymap"  );
-    opt->setFlag( "disparitymapelas"  );
     opt->setFlag( "equal"  );
 #ifdef GSTREAMER
     opt->setFlag( "stream"  );
@@ -344,20 +385,6 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = true;
-	show_disparity_map_elas = false;
-    }
-
-    if( opt->getFlag( "disparitymapelas" ) ) {
-        show_regions = false;
-        show_features = false;
-        show_matches = false;
-        show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = false;
-	show_lines = false;
-	show_FAST = false;
-	show_disparity_map = false;
-	show_disparity_map_elas = true;
     }
 
     if (opt->getFlag("features")) {
@@ -370,7 +397,6 @@ int main(int argc, char* argv[]) {
         show_lines = false;
         show_FAST = false;
         show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     if( opt->getFlag( "histogram" ) ) {
@@ -383,7 +409,6 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     if( opt->getFlag( "matches" ) ) {
@@ -396,7 +421,6 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     if(opt->getFlag("regions")) {
@@ -409,7 +433,6 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     if( opt->getFlag( "depth" ) ) {
@@ -422,7 +445,6 @@ int main(int argc, char* argv[]) {
         show_lines = false;
         show_FAST = false;
         show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     if(opt->getFlag("lines")) {
@@ -435,7 +457,6 @@ int main(int argc, char* argv[]) {
         show_lines = true;
         show_FAST = false;
         show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     if (opt->getFlag("anaglyph")) {
@@ -448,7 +469,6 @@ int main(int argc, char* argv[]) {
         show_lines = false;
         show_FAST = false;
         show_disparity_map = false;
-	show_disparity_map_elas = false;
     }
 
     int save_period_sec = 0;
@@ -468,7 +488,6 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = true;
 	show_disparity_map = false;
-	show_disparity_map_elas = false;
 	desired_corner_features = atoi(opt->getValue("fast"));
 	if (desired_corner_features > 150) desired_corner_features=150;
 	if (desired_corner_features < 50) desired_corner_features=50;
@@ -526,7 +545,6 @@ int main(int argc, char* argv[]) {
         if (max_disparity_percent > 90) max_disparity_percent = 90;
     }
 
-    int fps = 15;
     if( opt->getValue( 'f' ) != NULL  || opt->getValue( "fps" ) != NULL  ) {
         fps = atoi(opt->getValue("fps"));
     }
@@ -556,44 +574,12 @@ int main(int argc, char* argv[]) {
         skip_frames = atoi(opt->getValue("skip"));
     }
 
-    // disparity step size in pixels for dense stereo
-    int disparity_step = 8;
-    if( opt->getValue( "disparitystep" ) != NULL  ) {
-        disparity_step = atoi(opt->getValue("disparitystep"));
-        if (disparity_step < 1) disparity_step = 1;
-        if (disparity_step > 20) disparity_step = 20;
-    }
-
-    // radius used for patch matching in dense stereo
-    int disparity_map_correlation_radius = 1;
-    if( opt->getValue( "patchsize" ) != NULL  ) {
-        disparity_map_correlation_radius = atoi(opt->getValue("patchsize"));
-        if (disparity_map_correlation_radius < 1) disparity_map_correlation_radius = 1;
-        if (disparity_map_correlation_radius > 10) disparity_map_correlation_radius = 10;
-    }
-
-    // radius for disparity space smoothing in dense stereo
-    int disparity_map_smoothing_radius = 2;
-    if( opt->getValue( "smoothing" ) != NULL  ) {
-        disparity_map_smoothing_radius = atoi(opt->getValue("smoothing"));
-        if (disparity_map_smoothing_radius < 1) disparity_map_smoothing_radius = 1;
-        if (disparity_map_smoothing_radius > 10) disparity_map_smoothing_radius = 10;
-    }
-
     // disparity map threshold as a percentage
     int disparity_threshold_percent = 0;
     if( opt->getValue( "disparitythreshold" ) != NULL  ) {
         disparity_threshold_percent = atoi(opt->getValue("disparitythreshold"));
         if (disparity_threshold_percent < 0) disparity_threshold_percent = 0;
         if (disparity_threshold_percent > 100) disparity_threshold_percent = 100;
-    }
-
-    // cross checking threshold
-    int cross_checking_threshold = 50;
-    if( opt->getValue( "crosscheck" ) != NULL  ) {
-        cross_checking_threshold = atoi(opt->getValue("crosscheck"));
-        if (cross_checking_threshold < 2) cross_checking_threshold = 2;
-        if (cross_checking_threshold > 100) cross_checking_threshold = 100;
     }
 
     // baseline distance
@@ -712,7 +698,7 @@ int main(int argc, char* argv[]) {
 
     delete opt;
 
-    if ((show_disparity_map_elas) && (!rectify_images)) {
+    if ((show_disparity_map) && (!rectify_images)) {
         std::cout << "Images need to be rectified before using ELAS.  You may need to recalibrate using --calibrate.\n";
         return 0;
     }
@@ -736,9 +722,8 @@ int main(int argc, char* argv[]) {
     if (show_depthmap) left_image_title = "Depth map";
     if (show_histogram) right_image_title = "Disparity histograms (L/R/All)";
     if (show_anaglyph) left_image_title = "Anaglyph";
-    if (show_disparity_map) left_image_title = "Disparity map";
-    if (show_disparity_map_elas) left_image_title = "Disparity map (ELAS)";
-
+    if (show_disparity_map) left_image_title = "Disparity map (ELAS)";
+ 
     //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
     if ((!save_images) &&
@@ -750,8 +735,7 @@ int main(int argc, char* argv[]) {
             (!show_FAST) &&
             (!show_depthmap) &&
             (!show_anaglyph) &&
-            (!show_disparity_map) &&
-            (!show_disparity_map_elas)) {
+            (!show_disparity_map)) {
             cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
         }
     }
@@ -830,8 +814,7 @@ int main(int argc, char* argv[]) {
 		(!show_FAST) &&
 		(!show_depthmap) &&
 		(!show_anaglyph) &&
-		(!show_disparity_map) &&
-		(!show_disparity_map_elas)) {
+		(!show_disparity_map)) {
 	    r_pipeline = gst_parse_launch( r_pipetext.c_str(), &r_error );
 	}
 
@@ -852,8 +835,7 @@ int main(int argc, char* argv[]) {
             (!show_FAST) &&
             (!show_depthmap) &&
             (!show_anaglyph) &&
-            (!show_disparity_map) &&
-            (!show_disparity_map_elas)) {
+            (!show_disparity_map)) {
 	    if( r_error == NULL ) {
 		r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
 		gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
@@ -921,8 +903,8 @@ int main(int argc, char* argv[]) {
             memcpy((void*)l2_,l_,ww*hh*3);
             memcpy((void*)r2_,r_,ww*hh*3);
 
-            stereodense::expand(l2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,l_);
-            stereodense::expand(r2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,r_);
+            expand(l2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,l_);
+            expand(r2_,ww,hh,zoom_tx,zoom_ty,zoom_bx,zoom_by,r_);
             delete[] l2_;
             delete[] r2_;
         }
@@ -1304,7 +1286,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	if (show_disparity_map_elas) {
+	if (show_disparity_map) {
             elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
 
             // convert disparity map to 3D points
@@ -1338,40 +1320,6 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-
-	if (show_disparity_map) {
-
-		if (disparity_space == NULL) {
-			int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
-			int disparity_space_length = (max_disparity_pixels / disparity_step) * SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius) * 2;
-			int disparity_map_length = SVS_MAX_IMAGE_WIDTH * ((SVS_MAX_IMAGE_HEIGHT/SVS_VERTICAL_SAMPLING)/disparity_map_smoothing_radius) * 2;
-		    disparity_space = new unsigned int[disparity_space_length];
-		    disparity_map = new unsigned int[disparity_map_length];
-		}
-
-        stereodense::update_disparity_map(
-                l_,r_,ww,hh,
-                calibration_offset_x, calibration_offset_y,
-                SVS_VERTICAL_SAMPLING,
-                max_disparity_percent,
-                disparity_map_correlation_radius,
-                disparity_map_smoothing_radius,
-                disparity_step,
-                disparity_threshold_percent,
-                true,
-                cross_checking_threshold,
-                disparity_space,
-                disparity_map);
-
-        stereodense::show(
-                l_,ww,hh,
-                SVS_VERTICAL_SAMPLING,
-                disparity_map_smoothing_radius,
-                max_disparity_percent,
-                disparity_map);
-
-        //cvSmooth( l, l, CV_GAUSSIAN, 9, 9 );
-	}
 
 	/* show depth map */
 	if (show_depthmap) {
@@ -1435,7 +1383,6 @@ int main(int argc, char* argv[]) {
 				(!show_FAST) &&
 				(!show_depthmap) &&
 				(!show_anaglyph) &&
-				(!show_disparity_map_elas) &&
 				(!show_disparity_map))
 				cvSaveImage(filename, r);
 			image_index++;
@@ -1451,7 +1398,6 @@ int main(int argc, char* argv[]) {
 				(!show_FAST) &&
 				(!show_depthmap) &&
 				(!show_anaglyph) &&
-				(!show_disparity_map_elas) &&
 				(!show_disparity_map))
 				cvSaveImage(filename.c_str(), r);
 
@@ -1528,8 +1474,7 @@ int main(int argc, char* argv[]) {
 	    	(!show_FAST) &&
 	    	(!show_depthmap) &&
 	    	(!show_anaglyph) &&
-		(!show_disparity_map_elas) &&
-	    	(!show_disparity_map)) {
+		(!show_disparity_map)) {
 		    CvMat* r_buf;
 		    r_buf = cvEncodeImage(".jpg", r);
 
@@ -1546,8 +1491,7 @@ int main(int argc, char* argv[]) {
 	    	(!show_FAST) &&
 	    	(!show_depthmap) &&
 	    	(!show_anaglyph) &&
-		(!show_disparity_map_elas) &&
-	    	(!show_disparity_map)) {
+		(!show_disparity_map)) {
 		    cvShowImage(right_image_title.c_str(), r);
 	    }
 	}
@@ -1568,7 +1512,6 @@ int main(int argc, char* argv[]) {
             (!show_FAST) &&
             (!show_depthmap) &&
             (!show_anaglyph) &&
-            (!show_disparity_map_elas) &&
             (!show_disparity_map)) {
             cvDestroyWindow(right_image_title.c_str());
         }
