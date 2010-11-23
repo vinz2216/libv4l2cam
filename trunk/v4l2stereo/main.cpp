@@ -175,10 +175,13 @@ int main(int argc, char* argv[]) {
     int matches;
     int FOV_degrees = 50;
     int no_of_calibration_images = 20;
+    int max_background_update_frames = 30;
+    int background_update_frames = max_background_update_frames;
 
     IplImage * background_image = NULL;
     IplImage * original_left_image = NULL;
     float * background_disparity_map = NULL;
+    int * background_disparity_map_hits = NULL;
 
     uint8_t * I1 = NULL;
     uint8_t * I2 = NULL;
@@ -399,6 +402,12 @@ int main(int argc, char* argv[]) {
 
     if( opt->getValue("learnbackground") ) {
         learn_background_filename = opt->getValue("learnbackground");
+        if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
+        if (background_disparity_map==NULL) background_disparity_map = new float[ww*hh];
+        if (background_disparity_map_hits==NULL) background_disparity_map_hits = new int[ww*hh];
+        memset((void*)background_disparity_map,'\0',ww*hh*sizeof(float));
+        memset((void*)background_disparity_map_hits,'\0',ww*hh*sizeof(int));
+        background_update_frames = max_background_update_frames;
     }
 
     if( (opt->getFlag( "disparitymap" )) ||
@@ -717,7 +726,7 @@ int main(int argc, char* argv[]) {
         std::string background_model_filename = opt->getValue("backgroundmodel");
         FILE * fp = fopen(background_model_filename.c_str(),"rb");
         if (fp != NULL) {
-            background_disparity_map = new float[ww*hh];
+            if (background_disparity_map==NULL) background_disparity_map = new float[ww*hh];
             if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
             retval = fread((void*)background_disparity_map,sizeof(float),ww*hh,fp);
             fclose(fp);
@@ -1349,13 +1358,27 @@ int main(int argc, char* argv[]) {
 	if (show_disparity_map) {
             elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
 
-            if ((skip_frames == 0) && (learn_background_filename != "")) {
-                FILE * fp = fopen(learn_background_filename.c_str(),"wb");
-                if (fp != NULL) {
-                    fwrite(left_disparities,sizeof(float),ww*hh,fp);
-                    fclose(fp);
+            if (learn_background_filename != "") {
+                for (int i = 0; i < ww*hh; i++) {
+                    if (left_disparities[i] > 1) {
+                        background_disparity_map[i] += left_disparities[i];
+                        background_disparity_map_hits[i]++;
+                    }
                 }
-                break;
+                if (background_update_frames <= 0) {
+                    for (int i = 0; i < ww*hh; i++) {
+                        if (background_disparity_map_hits[i] > 0) {
+                            background_disparity_map[i] /= background_disparity_map_hits[i];
+                        }
+                    }
+                    FILE * fp = fopen(learn_background_filename.c_str(),"wb");
+                    if (fp != NULL) {
+                        fwrite(background_disparity_map,sizeof(float),ww*hh,fp);
+                        fclose(fp);
+                    }
+                    break;
+                }
+                background_update_frames--;
             }
 
             // convert disparity map to 3D points
@@ -1389,7 +1412,7 @@ int main(int argc, char* argv[]) {
                     for (int y = 0; y < hh; y++) {
                         for (int x = 0; x < ww; x++, i++) {
                             if ((left_disparities[i] < 1) || (background_disparity_map[i] < 1) ||
-                                (left_disparities[i] < background_disparity_map[i] + min_disparity)) {
+                                (left_disparities[i] < background_disparity_map[i] * (100+min_disparity) / 100)) {
                                 if (background_image != NULL) {
                                     int yy = y * background_image->height / hh;
                                     int xx = x * background_image->width / ww;
@@ -1687,6 +1710,7 @@ int main(int argc, char* argv[]) {
     delete corners_left;
     delete lines;
     if (background_disparity_map != NULL) delete [] background_disparity_map;
+    if (background_disparity_map_hits != NULL) delete [] background_disparity_map_hits;
     if (buffer != NULL) delete[] buffer;
     if (depthmap_buffer != NULL) delete[] depthmap_buffer;
     if (disparity_space != NULL) delete[] disparity_space;
