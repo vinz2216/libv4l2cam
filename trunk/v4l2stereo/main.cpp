@@ -170,13 +170,15 @@ int main(int argc, char* argv[]) {
     bool rectify_images = false;
     bool show_FAST = false;
     bool colour_disparity_map = true;
-    int use_priors = 1;
+    std::string learn_background_filename = "";
+    int retval = 0, use_priors = 1;
     int matches;
     int FOV_degrees = 50;
     int no_of_calibration_images = 20;
 
     IplImage * background_image = NULL;
     IplImage * original_left_image = NULL;
+    float * background_disparity_map = NULL;
 
     uint8_t * I1 = NULL;
     uint8_t * I2 = NULL;
@@ -230,6 +232,8 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --disparitymap        Show dense disparity map (colour)");
     opt->addUsage( "     --disparitymapmono    Show dense disparity map (monochrome)");
     opt->addUsage( "     --background          Background image filename");
+    opt->addUsage( "     --learnbackground     Filename to save background disparity map");
+    opt->addUsage( "     --backgroundmodel     Loads a background disparity map");
     opt->addUsage( "     --pointcloud          Filename in which to save point cloud data");
     opt->addUsage( "     --disparitythreshold  Threshold applied to the disparity map as a percentage of max disparity");
     opt->addUsage( "     --zoom                Zoom level given as a percentage");
@@ -260,6 +264,8 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "" );
 
     opt->setOption( "background" );
+    opt->setOption( "learnbackground" );
+    opt->setOption( "backgroundmodel" );
     opt->setOption( "pose" );
     opt->setOption( "camera" );
     opt->setOption( "calibrate" );
@@ -391,7 +397,13 @@ int main(int argc, char* argv[]) {
         if (no_of_calibration_images<10) no_of_calibration_images=10;
     }
 
-    if( (opt->getFlag( "disparitymap" )) || (opt->getValue("background")) ) {
+    if( opt->getValue("learnbackground") ) {
+        learn_background_filename = opt->getValue("learnbackground");
+    }
+
+    if( (opt->getFlag( "disparitymap" )) ||
+        (opt->getValue("background")) ||
+        (opt->getValue("learnbackground")) ) {
         show_regions = false;
         show_features = false;
         show_matches = false;
@@ -401,7 +413,7 @@ int main(int argc, char* argv[]) {
 	show_lines = false;
 	show_FAST = false;
 	show_disparity_map = true;
-        colour_disparity_map = true;
+        colour_disparity_map = true;        
     }
 
     if( opt->getFlag( "disparitymapmono" ) ) {
@@ -701,6 +713,17 @@ int main(int argc, char* argv[]) {
         camera_calibration->ParsePoseRotation(opt->getValue("poserotation"));
     }
 
+    if( opt->getValue("backgroundmodel") ) {
+        std::string background_model_filename = opt->getValue("backgroundmodel");
+        FILE * fp = fopen(background_model_filename.c_str(),"rb");
+        if (fp != NULL) {
+            background_disparity_map = new float[ww*hh];
+            if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
+            retval = fread((void*)background_disparity_map,sizeof(float),ww*hh,fp);
+            fclose(fp);
+        }
+    }
+
     if( opt->getValue("calibrate") != NULL ) {
         int pattern_squares_x=6,pattern_squares_y=9,square_size_mm=24;
         if (camera_calibration->ParseCalibrationParameters(
@@ -725,7 +748,7 @@ int main(int argc, char* argv[]) {
 
     if( opt->getValue("background") != NULL ) {
         background_image = cvLoadImage(opt->getValue("background"));
-        original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
+        if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
     }
 
     delete opt;
@@ -957,7 +980,8 @@ int main(int argc, char* argv[]) {
                     img = r_;
                     hist_image = hist_image1;
                 }
-                if (background_image!=NULL) {
+                if ((background_image!=NULL) ||
+                    (background_disparity_map!=NULL)) {
                     memcpy((void*)(original_left_image->imageData),l_,ww*hh*3);
                 }
                 svs::histogram_equalise(
@@ -1325,6 +1349,15 @@ int main(int argc, char* argv[]) {
 	if (show_disparity_map) {
             elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
 
+            if ((skip_frames == 0) && (learn_background_filename != "")) {
+                FILE * fp = fopen(learn_background_filename.c_str(),"wb");
+                if (fp != NULL) {
+                    fwrite(left_disparities,sizeof(float),ww*hh,fp);
+                    fclose(fp);
+                }
+                break;
+            }
+
             // convert disparity map to 3D points
             if (point_cloud_filename != "") {
                 pointcloud::disparity_map_to_3d_points(
@@ -1345,68 +1378,100 @@ int main(int argc, char* argv[]) {
                 int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
                 int min_disparity = disparity_threshold_percent*255/100;
 
-                if (background_image != NULL) {
-                    unsigned char * background_image_ = (unsigned char*)background_image->imageData;
-
+                if (background_disparity_map != NULL) {
+                    // subtract a background disparity map
                     if (histogram_equalisation) {
                         memcpy((void*)l_,(void*)(original_left_image->imageData),ww*hh*3);
                     }
-
+                    unsigned char * background_image_ = NULL;
+                    if (background_image != NULL) background_image_ = (unsigned char*)background_image->imageData;
                     int i = 0, n;
                     for (int y = 0; y < hh; y++) {
-                        int yy = y * background_image->height / hh;
                         for (int x = 0; x < ww; x++, i++) {
-                            if (left_disparities[i] <= min_disparity) {
-                                int xx = x * background_image->width / ww;
-                                n = ((yy*background_image->width) + xx)*3;
-                                l_[i*3] = background_image_[n];
-                                l_[i*3+1] = background_image_[n+1];
-                                l_[i*3+2] = background_image_[n+2];
+                            if ((left_disparities[i] < 1) || (background_disparity_map[i] < 1) ||
+                                (left_disparities[i] < background_disparity_map[i] + min_disparity)) {
+                                if (background_image != NULL) {
+                                    int yy = y * background_image->height / hh;
+                                    int xx = x * background_image->width / ww;
+                                    n = ((yy*background_image->width) + xx)*3;
+                                    l_[i*3] = background_image_[n];
+                                    l_[i*3+1] = background_image_[n+1];
+                                    l_[i*3+2] = background_image_[n+2];
+                                }
+                                else {
+                                    l_[i*3] = 0;
+                                    l_[i*3+1] = 0;
+                                    l_[i*3+2] = 0;
+                                }
                             }
-
                         }
-                    }
+                    }                    
                 }
                 else {
-                    if (!colour_disparity_map) {
-                        // monochrome disparities
-                        for (int i = 0; i < ww*hh; i++) {
-                            if (left_disparities[i] > min_disparity) {
-                                l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
+                    if (background_image != NULL) {
+                        // use a background image with a disparity threshold
+                        unsigned char * background_image_ = (unsigned char*)background_image->imageData;
+
+                        if (histogram_equalisation) {
+                            memcpy((void*)l_,(void*)(original_left_image->imageData),ww*hh*3);
+                        }
+
+                        int i = 0, n;
+                        for (int y = 0; y < hh; y++) {
+                            int yy = y * background_image->height / hh;
+                            for (int x = 0; x < ww; x++, i++) {
+                                if (left_disparities[i] <= min_disparity) {
+                                    int xx = x * background_image->width / ww;
+                                    n = ((yy*background_image->width) + xx)*3;
+                                    l_[i*3] = background_image_[n];
+                                    l_[i*3+1] = background_image_[n+1];
+                                    l_[i*3+2] = background_image_[n+2];
+                                }
                             }
-                            else {
-                                l_[i*3]=0;
-                            }
-                            l_[i*3+1] = l_[i*3];
-                            l_[i*3+2] = l_[i*3];
                         }
                     }
                     else {
-                        // colour coded disparities
-                        for (int i = 0; i < ww*hh; i++) {
-                            if (left_disparities[i] > min_disparity) {
-                                float val = min(( *(((float*)left_disparities)+i) )/100.0,1.0);
-                                if (val <= 0) {
-                                    l_[3*i+0] = 0; l_[3*i+1] = 0; l_[3*i+2] = 0;
-                                } else {
-                                    float h2 = 6.0 * (1.0 - val);
-                                    unsigned char x  = (unsigned char)((1.0f - fabs(fmod(h2, 2.0f) - 1.0f))*255);
-                                    if (0 <= h2&&h2<1) {
-                                        l_[3*i+0] = 255;
-                                        l_[3*i+1] = x;
-                                        l_[3*i+2] = 0;
-                                    }
-                                    else if (1<=h2&&h2<2)  { l_[3*i+0] = x; l_[3*i+1] = 255; l_[3*i+2] = 0; }
-                                    else if (2<=h2&&h2<3)  { l_[3*i+0] = 0; l_[3*i+1] = 255; l_[3*i+2] = x; }
-                                    else if (3<=h2&&h2<4)  { l_[3*i+0] = 0; l_[3*i+1] = x; l_[3*i+2] = 255; }
-                                    else if (4<=h2&&h2<5)  { l_[3*i+0] = x; l_[3*i+1] = 0; l_[3*i+2] = 255; }
-                                    else if (5<=h2&&h2<=6) { l_[3*i+0] = 255; l_[3*i+1] = 0; l_[3*i+2] = x; }
+                        // show disparity map
+                        if (!colour_disparity_map) {
+                            // monochrome disparities
+                            for (int i = 0; i < ww*hh; i++) {
+                                if (left_disparities[i] > min_disparity) {
+                                    l_[i*3] = (unsigned char)(left_disparities[i]*255/max_disparity_pixels);
                                 }
+                                else {
+                                    l_[i*3]=0;
+                                }
+                                l_[i*3+1] = l_[i*3];
+                                l_[i*3+2] = l_[i*3];
                             }
-                            else {
-                                l_[3*i+0] = 0;
-                                l_[3*i+1] = 0;
-                                l_[3*i+2] = 0;
+                        }
+                        else {
+                            // colour coded disparities
+                            for (int i = 0; i < ww*hh; i++) {
+                                if (left_disparities[i] > min_disparity) {
+                                    float val = min(( *(((float*)left_disparities)+i) )/100.0,1.0);
+                                    if (val <= 0) {
+                                        l_[3*i+0] = 0; l_[3*i+1] = 0; l_[3*i+2] = 0;
+                                    } else {
+                                        float h2 = 6.0 * (1.0 - val);
+                                        unsigned char x  = (unsigned char)((1.0f - fabs(fmod(h2, 2.0f) - 1.0f))*255);
+                                        if (0 <= h2&&h2<1) {
+                                            l_[3*i+0] = 255;
+                                            l_[3*i+1] = x;
+                                            l_[3*i+2] = 0;
+                                        }
+                                        else if (1<=h2&&h2<2)  { l_[3*i+0] = x; l_[3*i+1] = 255; l_[3*i+2] = 0; }
+                                        else if (2<=h2&&h2<3)  { l_[3*i+0] = 0; l_[3*i+1] = 255; l_[3*i+2] = x; }
+                                        else if (3<=h2&&h2<4)  { l_[3*i+0] = 0; l_[3*i+1] = x; l_[3*i+2] = 255; }
+                                        else if (4<=h2&&h2<5)  { l_[3*i+0] = x; l_[3*i+1] = 0; l_[3*i+2] = 255; }
+                                        else if (5<=h2&&h2<=6) { l_[3*i+0] = 255; l_[3*i+1] = 0; l_[3*i+2] = x; }
+                                    }
+                                }
+                                else {
+                                    l_[3*i+0] = 0;
+                                    l_[3*i+1] = 0;
+                                    l_[3*i+2] = 0;
+                                }
                             }
                         }
                     }
@@ -1621,6 +1686,7 @@ int main(int argc, char* argv[]) {
     delete rcam;
     delete corners_left;
     delete lines;
+    if (background_disparity_map != NULL) delete [] background_disparity_map;
     if (buffer != NULL) delete[] buffer;
     if (depthmap_buffer != NULL) delete[] depthmap_buffer;
     if (disparity_space != NULL) delete[] disparity_space;
