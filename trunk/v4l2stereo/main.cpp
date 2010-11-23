@@ -173,6 +173,7 @@ int main(int argc, char* argv[]) {
     int use_priors = 1;
     int matches;
     int FOV_degrees = 50;
+    int no_of_calibration_images = 20;
 
     uint8_t * I1 = NULL;
     uint8_t * I2 = NULL;
@@ -209,6 +210,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( " -y  --offsety             Calibration y offset in pixels");
     opt->addUsage( " -d  --disparity           Max disparity as a percent of image width");
     opt->addUsage( "     --calibrate           Calibrate a stereo camera (squares across, squares down, square size in mm)");
+    opt->addUsage( "     --calibrationimages   Set the number of images gathered during camera calibration");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
     opt->addUsage( "     --intleft             Intrinsic calibration parameters for the left camera");
     opt->addUsage( "     --intright            Intrinsic calibration parameters for the left camera");
@@ -256,6 +258,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "pose" );
     opt->setOption( "camera" );
     opt->setOption( "calibrate" );
+    opt->setOption( "calibrationimages" );
     opt->setOption( "calibrationfile" );
     opt->setOption( "intleft" );
     opt->setOption( "intright" );
@@ -688,6 +691,11 @@ int main(int argc, char* argv[]) {
         camera_calibration->ParsePoseRotation(opt->getValue("poserotation"));
     }
 
+    if( opt->getValue("calibrationimages") != NULL ) {
+        no_of_calibration_images = atoi(opt->getValue("calibrationimages"));
+        if (no_of_calibration_images<10) no_of_calibration_images=10;
+    }
+
     if( opt->getValue("calibrate") != NULL ) {
         int pattern_squares_x=6,pattern_squares_y=9,square_size_mm=24;
         if (camera_calibration->ParseCalibrationParameters(
@@ -707,7 +715,7 @@ int main(int argc, char* argv[]) {
                 dev0, dev1,
                 flip_left_image,
                 flip_right_image,
-                20, headless);
+                no_of_calibration_images, headless);
         }
         delete opt;
         return 0;
