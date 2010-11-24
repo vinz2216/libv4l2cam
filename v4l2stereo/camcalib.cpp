@@ -63,6 +63,9 @@ camcalib::camcalib()
     };
     pose = cvCreateMat(4,4,CV_64F);
     matSet(pose, initPose);
+
+    double initPoseRot[] = { 90, 0, 0 };
+    SetPoseRotation(initPoseRot);
 }
 
 camcalib::~camcalib()
