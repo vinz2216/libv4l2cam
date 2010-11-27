@@ -945,6 +945,13 @@ int main(int argc, char* argv[]) {
     IplImage* hist_image0 = NULL;
     IplImage* hist_image1 = NULL;
 
+    float * virtual_camera_depth=NULL;
+    CvMat * virtual_camera_rotation_matrix=NULL;
+    CvMat * virtual_camera_translation=NULL;
+    CvMat * virtual_camera_rotation_vector=NULL;
+    CvMat * virtual_camera_points=NULL;
+    CvMat * virtual_camera_image_points=NULL;
+
 /*
     gridmap3d * grid = NULL;
     if (point_cloud_filename != "") {
@@ -1425,12 +1432,19 @@ int main(int argc, char* argv[]) {
                     memcpy((void*)buffer,(void*)l_,ww*hh*3);
                 }
 
-                pointcloud::view_from_pose(
+                pointcloud::virtual_camera(
                     buffer, points_image,
                     camera_calibration->pose,
                     camera_calibration->intrinsicCalibration_left,
                     camera_calibration->distortion_left,
-                    max_range_mm, l_);
+                    max_range_mm,
+                    virtual_camera_depth,
+                    virtual_camera_rotation_matrix,
+                    virtual_camera_translation,
+                    virtual_camera_rotation_vector,
+                    virtual_camera_points,
+                    virtual_camera_image_points,
+                    l_);
             }
             else {
                 if (overhead_view) {
@@ -1818,6 +1832,15 @@ int main(int argc, char* argv[]) {
     if (background_image != NULL) cvReleaseImage(&background_image);
     if (original_left_image != NULL) cvReleaseImage(&original_left_image);
     //if (grid!=NULL) delete grid;
+
+    if (virtual_camera_depth!=NULL) {
+        delete [] virtual_camera_depth;
+        cvReleaseMat(&virtual_camera_rotation_matrix);
+        cvReleaseMat(&virtual_camera_translation);
+        cvReleaseMat(&virtual_camera_rotation_vector);
+        cvReleaseMat(&virtual_camera_points);
+        cvReleaseMat(&virtual_camera_image_points);
+    }
 
     return 0;
 }
