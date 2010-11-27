@@ -46,6 +46,14 @@ camcalib::camcalib()
     intrinsicCalibration_left = cvCreateMat(3,3,CV_64F);
     matSet(intrinsicCalibration_left,intCalib);
 
+    double distortion[] = {
+        -0.38407,  0.13186,  0.00349,  -0.00392
+    };
+    distortion_left = cvCreateMat(1,4,CV_64F);
+    matSet(distortion_left, distortion);
+    distortion_right = cvCreateMat(1,4,CV_64F);
+    matSet(distortion_right, distortion);
+
     double trans[] = { -0.575, 0, 0 };
     extrinsicTranslation = cvCreateMat(3,1,CV_64F);
     matSet(extrinsicTranslation, trans);
@@ -78,6 +86,8 @@ camcalib::~camcalib()
     cvReleaseMat(&fundamentalMatrix);
     cvReleaseMat(&essentialMatrix);
     cvReleaseMat(&pose);
+    cvReleaseMat(&distortion_left);
+    cvReleaseMat(&distortion_right);
     delete rectification[0];
     delete rectification[1];
     delete [] rectification;
@@ -637,6 +647,38 @@ int camcalib::ParsePoseRotation(
     return success;
 }
 
+int camcalib::ParseDistortion(
+    char * distortion_str,
+    int camera_right)
+{
+    char str[256];
+    double params[4];
+    int i=0,index=0,p=0,success=0;
+    while (distortion_str[i]!=0) {
+        if ((index > 0) &&
+            (distortion_str[i]==' ')) {
+            str[index]=0;
+            params[p++] = atof(str);
+            index=0;
+        }
+        else {
+            str[index++] = distortion_str[i];
+        }
+        if (i==255) break;
+        i++;
+    }
+    if (index > 0) {
+        str[index]=0;
+        params[p++] = atof(str);
+    }
+    if (p==4) {
+        SetDistortion(params,camera_right);
+        success=1;
+    }
+    return success;
+}
+
+
 int camcalib::ParsePose(
     char * pose_str)
 {
@@ -798,6 +840,18 @@ void camcalib::SetPose(
     double * pose_matrix)
 {
     matSet(pose,pose_matrix);
+}
+
+void camcalib::SetDistortion(
+    double * distortion_vector,
+    int camera_right)
+{
+    if (camera_right==0) {
+        matSet(distortion_left, distortion_vector);
+    }
+    else {
+        matSet(distortion_right, distortion_vector);
+    }
 }
 
 void camcalib::SetPoseRotation(
@@ -1091,6 +1145,40 @@ int camcalib::ParseCalibrationFileMatrix(
     return matrix_index;
 }
 
+void camcalib::translate_pose(double distance_mm, int axis)
+{
+    cvmSet(pose,axis,3,cvmGet(pose,axis,3)+distance_mm);
+}
+
+void camcalib::rotate_pose(double angle_degrees, int axis)
+{
+    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix,y,x,cvmGet(pose,y,x));
+        }
+    }
+    // convert from 3x3 to 3x1
+    cvRodrigues2(rotation_matrix, rotation_vector);
+
+    cvmSet(rotation_vector,axis,0,cvmGet(rotation_vector,axis,0)+(angle_degrees*3.1415927/180.0));
+
+    // convert from 3x1 to 3x3
+    cvRodrigues2(rotation_vector, rotation_matrix);
+
+    // update pose rotation
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(pose,y,x,cvmGet(rotation_matrix,y,x));
+        }
+    }
+
+    cvReleaseMat(&rotation_matrix);
+    cvReleaseMat(&rotation_vector);
+}
+
 void camcalib::ParseCalibrationFile(
     std::string calibration_filename)
 {
@@ -1099,6 +1187,20 @@ void camcalib::ParseCalibrationFile(
     FILE * fp = fopen(calibration_filename.c_str(),"r");
     if (fp==NULL) return;
     fclose(fp);
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Left Distortion Parameters:",
+        (double*)matrix_data, 1) == 4) {
+        SetDistortion(matrix_data, 0);
+    }
+
+    if (ParseCalibrationFileMatrix(
+        calibration_filename,
+        "Right Distortion Parameters:",
+        (double*)matrix_data, 1) == 4) {
+        SetDistortion(matrix_data, 1);
+    }
 
     if (ParseCalibrationFileMatrix(
         calibration_filename,

@@ -112,8 +112,10 @@ private:
     void matSet(CvMat * m, double * data);
 
 public:
-    CvMat * intrinsicCalibration_right;
     CvMat * intrinsicCalibration_left;
+    CvMat * intrinsicCalibration_right;
+    CvMat * distortion_left;
+    CvMat * distortion_right;
     CvMat * extrinsicRotation;
     CvMat * extrinsicTranslation;
     CvMat * disparityToDepth;
@@ -179,6 +181,10 @@ public:
     int ParsePoseRotation(
         char * pose_str);
 
+    int ParseDistortion(
+        char * distortion_str,
+        int camera_right);
+
     void RectifyImage(
         int right_image,
         int image_width,
@@ -196,8 +202,15 @@ public:
     void SetStereoCamera(
         std::string camera_type);
 
+    void SetDistortion(
+        double * distortion_vector,
+        int camera_right);
+
     void ParseCalibrationFile(
         std::string calibration_filename);
+
+    void translate_pose(double distance_mm, int axis);
+    void rotate_pose(double angle_degrees, int axis);
 
     camcalib();
     ~camcalib();

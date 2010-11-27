@@ -62,6 +62,16 @@ public:
         int output_image_width,
         int output_image_height,
         unsigned char * img_output);
+
+    static void view_from_pose(
+        unsigned char * img,
+        IplImage * points_image,
+        CvMat * pose,
+        CvMat * intrinsic_matrix,
+        CvMat * distortion_coeffs,
+        float max_range_mm,
+        unsigned char * img_output);
+
 };
 
 #endif

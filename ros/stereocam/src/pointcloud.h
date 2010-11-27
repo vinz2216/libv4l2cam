@@ -44,13 +44,34 @@ public:
 
     static void disparity_map_to_3d_points(
         float * disparity_map,
-        unsigned char * img_left,
         int img_width,
         int img_height,
         CvMat * disparity_to_depth,
         CvMat * pose,
         IplImage * &disparity_image,
         IplImage * &points_image);
+
+    static void show(
+        IplImage * points_image,
+        float * disparity_map,
+        unsigned char * img_left,
+        CvMat * pose,
+        float max_range_mm,
+        float max_height_mm,
+        int view_type,
+        int output_image_width,
+        int output_image_height,
+        unsigned char * img_output);
+
+    static void view_from_pose(
+        unsigned char * img,
+        IplImage * points_image,
+        CvMat * pose,
+        CvMat * intrinsic_matrix,
+        CvMat * distortion_coeffs,
+        float max_range_mm,
+        unsigned char * img_output);
+
 };
 
 #endif
