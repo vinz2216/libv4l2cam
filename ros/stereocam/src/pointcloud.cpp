@@ -199,7 +199,8 @@ void pointcloud::show(
     }
 }
 
-void pointcloud::view_from_pose(
+
+void pointcloud::virtual_camera(
     unsigned char * img,
     IplImage * points_image,
     CvMat * pose,
@@ -215,7 +216,51 @@ void pointcloud::view_from_pose(
     CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
     CvMat * points = cvCreateMat(pixels, 3, CV_32F);
     CvMat * image_points = cvCreateMat(pixels, 2, CV_32F);
+
+    virtual_camera(
+        img, points_image, pose,
+        intrinsic_matrix, distortion_coeffs,
+        max_range_mm, depth,
+        rotation_matrix, translation, rotation_vector,
+        points, image_points,
+        img_output);
+
+    cvReleaseMat(&rotation_matrix);
+    cvReleaseMat(&translation);
+    cvReleaseMat(&rotation_vector);
+    cvReleaseMat(&points);
+    cvReleaseMat(&image_points);
+    delete [] depth;
+}
+
+
+
+void pointcloud::virtual_camera(
+    unsigned char * img,
+    IplImage * points_image,
+    CvMat * pose,
+    CvMat * intrinsic_matrix,
+    CvMat * distortion_coeffs,
+    float max_range_mm,
+    float * &depth,
+    CvMat * &rotation_matrix,
+    CvMat * &translation,
+    CvMat * &rotation_vector,
+    CvMat * &points,
+    CvMat * &image_points,
+    unsigned char * img_output)
+{
+    int pixels = points_image->width*points_image->height;
     max_range_mm *= max_range_mm;
+
+    if (depth == NULL) {
+        depth = new float[pixels];
+        rotation_matrix = cvCreateMat(3, 3, CV_32F);
+        translation = cvCreateMat(3, 1, CV_32F);
+        rotation_vector = cvCreateMat(3, 1, CV_32F);
+        points = cvCreateMat(pixels, 3, CV_32F);
+        image_points = cvCreateMat(pixels, 2, CV_32F);
+    }
 
     // view rotation
     for (int y = 0; y < 3; y++) {
@@ -340,13 +385,6 @@ void pointcloud::view_from_pose(
             }
         }
     }
-
-    cvReleaseMat(&rotation_matrix);
-    cvReleaseMat(&translation);
-    cvReleaseMat(&rotation_vector);
-    cvReleaseMat(&points);
-    cvReleaseMat(&image_points);
-    delete [] depth;
 }
 
 

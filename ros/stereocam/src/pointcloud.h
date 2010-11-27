@@ -63,13 +63,28 @@ public:
         int output_image_height,
         unsigned char * img_output);
 
-    static void view_from_pose(
+    static void virtual_camera(
         unsigned char * img,
         IplImage * points_image,
         CvMat * pose,
         CvMat * intrinsic_matrix,
         CvMat * distortion_coeffs,
         float max_range_mm,
+        unsigned char * img_output);
+
+    static void virtual_camera(
+        unsigned char * img,
+        IplImage * points_image,
+        CvMat * pose,
+        CvMat * intrinsic_matrix,
+        CvMat * distortion_coeffs,
+        float max_range_mm,
+        float * &depth,
+        CvMat * &rotation_matrix,
+        CvMat * &translation,
+        CvMat * &rotation_vector,
+        CvMat * &points,
+        CvMat * &image_points,
         unsigned char * img_output);
 
 };
