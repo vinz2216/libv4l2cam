@@ -185,6 +185,9 @@ public:
         char * distortion_str,
         int camera_right);
 
+    int ParsePoseTranslation(
+        char * pose_str);
+
     void RectifyImage(
         int right_image,
         int image_width,
@@ -205,6 +208,9 @@ public:
     void SetDistortion(
         double * distortion_vector,
         int camera_right);
+
+    void SetPoseTranslation(
+        double * pose_matrix);
 
     void ParseCalibrationFile(
         std::string calibration_filename);
