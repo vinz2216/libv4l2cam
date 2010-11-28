@@ -647,6 +647,36 @@ int camcalib::ParsePoseRotation(
     return success;
 }
 
+int camcalib::ParsePoseTranslation(
+    char * pose_str)
+{
+    char str[256];
+    double params[3];
+    int i=0,index=0,p=0,success=0;
+    while (pose_str[i]!=0) {
+        if ((index > 0) &&
+            (pose_str[i]==' ')) {
+            str[index]=0;
+            params[p++] = atof(str);
+            index=0;   
+        }
+        else {
+            str[index++] = pose_str[i];
+        }
+        if (i==255) break;
+        i++;
+    }
+    if (index > 0) {
+        str[index]=0;
+        params[p++] = atof(str);
+    }
+    if (p==3) {
+        SetPoseTranslation(params);
+        success=1;
+    }
+    return success;
+}
+
 int camcalib::ParseDistortion(
     char * distortion_str,
     int camera_right)
@@ -871,6 +901,14 @@ void camcalib::SetPoseRotation(
     }
     cvReleaseMat(&rot);
     cvReleaseMat(&rotmat);
+}
+
+void camcalib::SetPoseTranslation(
+    double * pose_matrix)
+{
+    for (int i = 0;i < 3; i++) {
+        cvmSet(pose,i,3,pose_matrix[i]);
+    }
 }
 
 void camcalib::SetFundamentalMatrix(

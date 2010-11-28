@@ -231,6 +231,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --rotation            Extrinsic rotation calibration parameters");
     opt->addUsage( "     --pose                Camera pose 4x4 matrix");
     opt->addUsage( "     --poserotation        Three values specifying camera rotation in degrees");
+    opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --baseline            Baseline distance in millimetres");
     opt->addUsage( "     --equal               Perform histogram equalisation");
     opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
@@ -307,6 +308,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "zoom" );
     opt->setOption( "baseline" );
     opt->setOption( "poserotation" );
+    opt->setOption( "posetranslation" );
     opt->setOption( "pointcloud" );
     opt->setFlag( "help" );
     opt->setFlag( "flipleft" );
@@ -726,6 +728,10 @@ int main(int argc, char* argv[]) {
 
     if( opt->getValue("poserotation") != NULL ) {
         camera_calibration->ParsePoseRotation(opt->getValue("poserotation"));
+    }
+
+    if( opt->getValue("posetranslation") != NULL ) {
+        camera_calibration->ParsePoseTranslation(opt->getValue("posetranslation"));
     }
 
     if( opt->getValue("backgroundmodel") ) {
@@ -1414,7 +1420,20 @@ int main(int argc, char* argv[]) {
                 background_update_frames--;
             }
 
+            // remove background model if necessary
+            int min_disparity = disparity_threshold_percent*255/100;
+            if (background_disparity_map != NULL) {
+                for (int i = 1; i < ww*(hh-1); i++) {
+                    if ((left_disparities[i] < 1) || (background_disparity_map[i] < 1) ||
+                        (left_disparities[i]+left_disparities[i+1]+left_disparities[i+ww] < 
+                         (background_disparity_map[i]) * 3 *(100+min_disparity) / 100)) {
+                        left_disparities[i]=0;
+                    }
+                }
+            }
+
             if (virtual_camera_view) {
+
                 // convert disparity map to 3D points
                 pointcloud::disparity_map_to_3d_points(
                     left_disparities,ww,hh,
@@ -1485,7 +1504,6 @@ int main(int argc, char* argv[]) {
                 }
                 else {
                     int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
-                    int min_disparity = disparity_threshold_percent*255/100;
 
                     if (background_disparity_map != NULL) {
                         // subtract a background disparity map
@@ -1497,8 +1515,7 @@ int main(int argc, char* argv[]) {
                         int i = 0, n;
                         for (int y = 0; y < hh; y++) {
                             for (int x = 0; x < ww; x++, i++) {
-                                if ((left_disparities[i] < 1) || (background_disparity_map[i] < 1) ||
-                                    (left_disparities[i] < background_disparity_map[i] * (100+min_disparity) / 100)) {
+                                if (left_disparities[i] == 0) {
                                     if (background_image != NULL) {
                                         int yy = y * background_image->height / hh;
                                         int xx = x * background_image->width / ww;
