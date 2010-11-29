@@ -91,6 +91,8 @@ void pointcloud::disparity_map_to_3d_points(
         // create image objects
         if (points_image == NULL) {
             points_image = cvCreateImage(cvSize(img_width, img_height), IPL_DEPTH_32F, 3);
+        }
+        if (disparity_image == NULL) {
             disparity_image = cvCreateImage(cvSize(img_width, img_height), IPL_DEPTH_32F, 1);
         }
 
@@ -297,12 +299,13 @@ void pointcloud::virtual_camera(
     memset((void*)depth,'\0',pixels*sizeof(float));
     int prev_i=-1,prev_x=-1,prev_y=-1,length;
     float prev_dist=0;
+    int w = points_image->width;
     for (int i = 0; i < pixels; i++) {
         int x = (int)cvmGet(image_points,i,0);
-        if ((x >=0) && (x < points_image->width)) {
+        if ((x >=0) && (x < w)) {
             int y = (int)cvmGet(image_points,i,1);
             if ((y >=0) && (y < points_image->height-2)) {
-                int n = y*points_image->width + x;
+                int n = y*w + (w-1-x);
 
                 float dx = points_image_data[i*3] - cvmGet(translation,0,0);
                 float dy = points_image_data[i*3+1] - cvmGet(translation,1,0);
@@ -329,7 +332,7 @@ void pointcloud::virtual_camera(
                                 for (int l = 0; l <= length; l++) {
                                     int xx = prev_x + (l*dx2/length);
                                     int yy = prev_y + (l*dy2/length);
-                                    int n2 = yy*points_image->width + xx;
+                                    int n2 = yy*w + (w-1-xx);
                                     int i2 = prev_i + (l*(i-prev_i)/length);
                                     img_output[n2*3] = img[i2*3];
                                     img_output[n2*3+1] = img[i2*3+1];
@@ -365,7 +368,7 @@ void pointcloud::virtual_camera(
                                 for (int l = 0; l < length; l++) {
                                     int xx = prev_x + (l*dx2/length);
                                     int yy = prev_y + (l*dy2/length);
-                                    int n2 = yy*points_image->width + xx;
+                                    int n2 = yy*w + (w-1-xx);
                                     int i2 = prev_i + (l*(i-prev_i)/length);
                                     img_output[n2*3] = img[i2*3];
                                     img_output[n2*3+1] = img[i2*3+1];
@@ -387,6 +390,258 @@ void pointcloud::virtual_camera(
     }
 }
 
+void pointcloud::fill(
+    int id,
+    int * map,
+    int map_dimension,
+    int x,
+    int y,
+    int depth,
+    int &ctr,
+    int threshold)
+{
+    map[y*map_dimension + x] = id;
+    if (depth > 90000) return;
+    ctr++;
+    if (y > 0) {
+        // N
+        if (map[(y-1)*map_dimension + x] >= threshold) {
+            fill(id,map,map_dimension,x,y-1,depth+1,ctr,threshold);
+        }
+        // NE
+        if (x < map_dimension-1) {
+            if (map[(y-1)*map_dimension + x + 1] >= threshold) {
+                fill(id,map,map_dimension,x+1,y-1,depth+1,ctr,threshold);
+            }
+        }
+    }
+    if (x < map_dimension-1) {
+        // E
+        if (map[y*map_dimension + x + 1] >= threshold) {
+            fill(id,map,map_dimension,x+1,y,depth+1,ctr,threshold);
+        }
+        // SE
+        if (y < map_dimension-1) {
+            if (map[(y+1)*map_dimension + x + 1] >= threshold) {
+                fill(id,map,map_dimension,x+1,y+1,depth+1,ctr,threshold);
+            }
+        }
+    }
+    if (y < map_dimension-1) {
+        // S
+        if (map[(y+1)*map_dimension + x] >= threshold) {
+            fill(id,map,map_dimension,x,y+1,depth+1,ctr,threshold);
+        }
+        // SW
+        if (x > 0) {
+            if (map[(y+1)*map_dimension + x - 1] >= threshold) {
+                fill(id,map,map_dimension,x-1,y+1,depth+1,ctr,threshold);
+            }
+        }
+    }
+    if (x > 0) {
+        // W
+        if (map[y*map_dimension + x - 1] >= threshold) {
+            fill(id,map,map_dimension,x-1,y,depth+1,ctr,threshold);
+        }
+        // NW
+        if (y > 0) {
+            if (map[(y-1)*map_dimension + x - 1] >= threshold) {
+                fill(id,map,map_dimension,x-1,y-1,depth+1,ctr,threshold);
+            }
+        }
+    }
+}
+
+
+void pointcloud::find_objects(
+    unsigned char * img,
+    IplImage * points_image,
+    int map_dimension,
+    int map_cell_size_mm,
+    CvMat * pose,
+    float relative_x_mm,
+    float relative_y_mm,
+    int threshold,
+    float tilt_degrees,
+    int * map,
+    int min_area_mm2,
+    int max_area_mm2,
+    std::vector<std::vector<float> > &objects)
+{
+    const int x_axis = 0;
+    const int y_axis = 2;
+    const int z_axis = 1;
+    for (int i = 0; i < map_dimension*map_dimension; i++) {
+        if (map[i] < threshold) map[i]=0;
+    }
+    int id=1;
+    int min_area = min_area_mm2 / map_cell_size_mm;
+    int max_area = max_area_mm2 / map_cell_size_mm;
+    int n=0;
+    for (int map_y = 0; map_y < map_dimension; map_y++) {
+        for (int map_x = 0; map_x < map_dimension; map_x++, n++) {
+            if (map[n] >= threshold) {
+                int ctr = 0;
+                int depth=0;               
+                fill(id,map,map_dimension,map_x,map_y,depth,ctr,threshold);
+                if ((ctr < min_area) || (ctr > max_area)) {
+                    for (int i = 0; i < map_dimension*map_dimension; i++) {
+                        if (map[i] == id) map[i] = 0;
+                    }  
+                }
+                else {
+                    id++;
+                }
+            }
+        }
+    }
+    if (id == 1) return;
+
+    for (int i = 0; i < id-1; i++) {
+        std::vector<float> points;
+        objects.push_back(points);
+    }
+
+    float * points_image_data = (float*)points_image->imageData;
+    float pose_x = (float)cvmGet(pose,x_axis,3);
+    float pose_y = (float)cvmGet(pose,y_axis,3);
+    float pose_z = (float)cvmGet(pose,z_axis,3);
+    float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
+    float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
+    int centre = map_dimension/2;
+    int w = points_image->width;
+    int max_range_mm = map_dimension * map_cell_size_mm;
+    float mult = map_dimension / (float)max_range_mm;
+    for (int y = 1; y < points_image->height-1; y++) {
+        for (int x = 1; x < w-1; x++) {
+            int i = y*w + x;
+
+            float dx = points_image_data[i*3+x_axis] - pose_x;
+            float dy = points_image_data[i*3+y_axis] - pose_y;
+            float dz = points_image_data[i*3+z_axis] - pose_z;
+            
+            float x2 = dx;
+            float y2 = cos_tilt*dy - sin_tilt*dz;
+            float z2 = sin_tilt*dy + cos_tilt*dz;
+
+            id=0;
+            int mx = centre + (int)((x2 + relative_x_mm) * mult);
+            if ((mx >= 0) && (mx < map_dimension)) {
+                int my = centre + (int)((y2 + relative_y_mm) * mult);
+                if ((my >= 0) && (my < map_dimension)) {
+                    int n = my*map_dimension + mx;
+                    if ((map[n] > 0) && (map[n] < threshold)) {
+                        id = map[n];
+                    }
+                }
+            }
+            if (id > 0) {
+                objects[id-1].push_back(x2);
+                objects[id-1].push_back(y2);
+                objects[id-1].push_back(z2);
+                objects[id-1].push_back((float)img[i*3]);
+                objects[id-1].push_back((float)img[i*3+1]);
+                objects[id-1].push_back((float)img[i*3+2]);
+
+                img[i*3+((id-1)%3)]=255;
+            }
+        }
+    }
+
+    //for (int i = 0; i < (int)objects.size(); i++) {
+    //    printf("%d - %d\n", i, (int)objects[i].size()/6);
+    //}
+
+}
+
+void pointcloud::obstacle_map(
+    IplImage * points_image,
+    int map_dimension,
+    int map_cell_size_mm,
+    CvMat * pose,
+    float relative_x_mm,
+    float relative_y_mm,
+    int threshold,
+    float tilt_degrees,
+    int * map)
+{
+    const int x_axis = 0;
+    const int y_axis = 2;
+    const int z_axis = 1;
+    int max_range_mm = map_dimension * map_cell_size_mm;
+    int centre = map_dimension/2;
+    float * points_image_data = (float*)points_image->imageData;
+    memset((void*)map,'\0',map_dimension*map_dimension*sizeof(int));
+    float pose_x = (float)cvmGet(pose,x_axis,3);
+    float pose_y = (float)cvmGet(pose,y_axis,3);
+    float pose_z = (float)cvmGet(pose,z_axis,3);
+    float mult = map_dimension / (float)max_range_mm;
+    float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
+    float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
+    int w = points_image->width;
+    #pragma omp parallel for
+    for (int y = 1; y < points_image->height-1; y++) {
+        for (int x = 1; x < w-1; x++) {            
+            int i = y*w + x;
+
+            float dx = points_image_data[i*3+x_axis] - pose_x;
+            float dy = points_image_data[i*3+y_axis] - pose_y;
+            float dz = points_image_data[i*3+z_axis] - pose_z;
+            
+            float x2 = dx;
+            float y2 = cos_tilt*dy - sin_tilt*dz;
+
+            int mx = centre + (int)((x2 + relative_x_mm) * mult);
+            if ((mx > 0) && (mx < map_dimension-1)) {
+                int my = centre + (int)((y2 + relative_y_mm) * mult);
+                if ((my > 0) && (my < map_dimension-1)) {
+                    for (int my2 = my-1; my2 <= my+1; my2++) {
+                        for (int mx2 = mx-1; mx2 <= mx+1; mx2++) {
+                            int n = my2*map_dimension + mx2;
+                            if (!((mx2 == mx) && (my2 == my))) {
+                                map[n] += 1;
+                            }
+                            else {
+                                map[n] += 4;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #pragma omp parallel for
+    for (int y = 1; y < points_image->height-1; y++) {
+        for (int x = 1; x < w-1; x++) {
+            int i = y*w + x;
+
+            float dx = points_image_data[i*3+x_axis] - pose_x;
+            float dy = points_image_data[i*3+y_axis] - pose_y;
+            float dz = points_image_data[i*3+z_axis] - pose_z;
+            
+            float x2 = dx;
+            float y2 = cos_tilt*dy - sin_tilt*dz;
+
+            bool found = false;
+            int mx = centre + (int)((x2 + relative_x_mm) * mult);
+            if ((mx >= 0) && (mx < map_dimension)) {
+                int my = centre + (int)((y2 + relative_y_mm) * mult);
+                if ((my >= 0) && (my < map_dimension)) {
+                    if (map[my*map_dimension + mx] > threshold) {
+                        found = true;
+                    }
+                }
+            }
+            if (!found) {
+                points_image_data[i*3] = 0;
+                points_image_data[i*3+1] = 0;
+                points_image_data[i*3+2] = 0;
+            }
+        }
+    }
+}
 
 
 

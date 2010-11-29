@@ -209,6 +209,9 @@ public:
         double * distortion_vector,
         int camera_right);
 
+    void GetPoseRotation(
+        double * rotation_vector);
+
     void SetPoseTranslation(
         double * pose_matrix);
 

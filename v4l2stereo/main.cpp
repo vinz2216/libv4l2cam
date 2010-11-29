@@ -175,6 +175,8 @@ int main(int argc, char* argv[]) {
     std::string learn_background_filename = "";
     int retval = 0, use_priors = 1;
     int matches;
+    bool detect_obstacles = false;
+    bool detect_objects = false;
     int FOV_degrees = 50;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
@@ -197,6 +199,17 @@ int main(int argc, char* argv[]) {
     rectify_images = camera_calibration->rectification_loaded;
 
     int disparity_histogram[3][SVS_MAX_IMAGE_WIDTH];
+
+    int obstacle_map_dimension = 128;
+    int obstacle_map_cell_size_mm = 20;
+    float obstacle_map_relative_x_mm = 0;
+    float obstacle_map_relative_y_mm = 0;
+    int obstacle_map_threshold = 3000;
+    int * obstacle_map = NULL;
+    float tilt_angle_degrees = 40;
+
+    int object_min_area_mm2 = 20;
+    int object_max_area_mm2 = 500;
 
 #ifdef GSTREAMER
     // Port to start streaming from - second video will be on this + 1
@@ -232,6 +245,12 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --pose                Camera pose 4x4 matrix");
     opt->addUsage( "     --poserotation        Three values specifying camera rotation in degrees");
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
+    opt->addUsage( "     --obstaclethreshold   Obstacle threshold value");
+    opt->addUsage( "     --obstaclecellsize    Obstacle map cell size in millimetres");
+    opt->addUsage( "     --obstacles           Detect obstacles");
+    opt->addUsage( "     --objects             Detect objects");
+    opt->addUsage( "     --minarea             Minimum area for object detection in mm2");
+    opt->addUsage( "     --maxarea             Maximum area for object detection in mm2");
     opt->addUsage( "     --baseline            Baseline distance in millimetres");
     opt->addUsage( "     --equal               Perform histogram equalisation");
     opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
@@ -310,6 +329,10 @@ int main(int argc, char* argv[]) {
     opt->setOption( "poserotation" );
     opt->setOption( "posetranslation" );
     opt->setOption( "pointcloud" );
+    opt->setOption( "obstaclethreshold" );
+    opt->setOption( "obstaclecellsize" );
+    opt->setOption( "minarea" );
+    opt->setOption( "maxarea" );
     opt->setFlag( "help" );
     opt->setFlag( "flipleft" );
     opt->setFlag( "flipright" );
@@ -327,6 +350,8 @@ int main(int argc, char* argv[]) {
     opt->setFlag( "equal" );
     opt->setFlag( "overhead" );
     opt->setFlag( "vcamera" );
+    opt->setFlag( "obstacles" );
+    opt->setFlag( "objects" );
 #ifdef GSTREAMER
     opt->setFlag( "stream"  );
 #endif
@@ -387,6 +412,20 @@ int main(int argc, char* argv[]) {
         histogram_equalisation = true;
     }
 
+    if( opt->getFlag( "obstacles" ) )
+    {
+        detect_obstacles = true;
+        show_disparity_map = true;
+        if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
+    }
+
+    if( opt->getFlag( "objects" ) )
+    {
+        detect_objects = true;
+        show_disparity_map = true;
+        if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
+    }
+
     bool save_images = false;
     std::string save_filename = "";
     if( opt->getValue( "save" ) != NULL  ) {
@@ -404,6 +443,22 @@ int main(int argc, char* argv[]) {
     if( opt->getValue("calibrationimages") != NULL ) {
         no_of_calibration_images = atoi(opt->getValue("calibrationimages"));
         if (no_of_calibration_images<10) no_of_calibration_images=10;
+    }
+
+    if( opt->getValue("obstaclethreshold") ) {
+        obstacle_map_threshold = atoi(opt->getValue("obstaclethreshold"));
+    }
+
+    if( opt->getValue("obstaclecellsize") ) {
+        obstacle_map_cell_size_mm = atoi(opt->getValue("obstaclecellsize"));
+    }
+
+    if( opt->getValue("minarea") ) {
+        object_min_area_mm2 = atoi(opt->getValue("minarea"));
+    }
+
+    if( opt->getValue("maxarea") ) {
+        object_max_area_mm2 = atoi(opt->getValue("maxarea"));
     }
 
     if( opt->getValue("learnbackground") ) {
@@ -787,6 +842,15 @@ int main(int argc, char* argv[]) {
         if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
     }
 
+    if (((detect_obstacles) || (detect_objects)) && (opt->getValue("poserotation")!=NULL)) {
+        // obtain the tilt angle from the pose rotation
+        double rotation_vector[3];
+        camera_calibration->GetPoseRotation(rotation_vector);
+        tilt_angle_degrees = 90 - rotation_vector[0];
+        rotation_vector[0] = 90;
+        camera_calibration->SetPoseRotation(rotation_vector);
+    }
+
     delete opt;
 
     if ((show_disparity_map) && (!rectify_images)) {
@@ -817,6 +881,8 @@ int main(int argc, char* argv[]) {
     if (background_image!=NULL) left_image_title = "Background substitution";
     if (overhead_view) left_image_title = "Overhead";
     if (virtual_camera_view) left_image_title = "Virtual Camera";
+    if (detect_obstacles) left_image_title = "Obstacles";
+    if (detect_objects) left_image_title = "objects";
  
     //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
@@ -1029,6 +1095,8 @@ int main(int argc, char* argv[]) {
                     (background_disparity_map!=NULL) ||
                     (overhead_view) ||
                     (virtual_camera_view) ||
+                    (detect_obstacles) ||
+                    (detect_objects) ||
                     (point_cloud_filename!="")) {
                     memcpy((void*)(original_left_image->imageData),l_,ww*hh*3);
                 }
@@ -1432,8 +1500,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            if (virtual_camera_view) {
-
+            if ((virtual_camera_view) || (detect_obstacles) || (detect_objects)) {
                 // convert disparity map to 3D points
                 pointcloud::disparity_map_to_3d_points(
                     left_disparities,ww,hh,
@@ -1449,6 +1516,41 @@ int main(int argc, char* argv[]) {
                 }
                 else {
                     memcpy((void*)buffer,(void*)l_,ww*hh*3);
+                }
+
+                if ((detect_obstacles) || (detect_objects)) {
+                    if (obstacle_map == NULL) {
+                        obstacle_map = new int[obstacle_map_dimension*obstacle_map_dimension];
+                    }
+                    pointcloud::obstacle_map(
+                        points_image,
+                        obstacle_map_dimension,
+                        obstacle_map_cell_size_mm,
+                        camera_calibration->pose,
+                        obstacle_map_relative_x_mm,
+                        obstacle_map_relative_y_mm,
+                        obstacle_map_threshold,
+                        tilt_angle_degrees,
+                        obstacle_map);
+
+                    if (detect_objects) {
+
+                        std::vector<std::vector<float> > objects;
+
+                        pointcloud::find_objects(
+                            buffer, points_image,
+                            obstacle_map_dimension,
+                            obstacle_map_cell_size_mm,
+                            camera_calibration->pose,
+                            obstacle_map_relative_x_mm, obstacle_map_relative_y_mm,
+                            obstacle_map_threshold,
+                            tilt_angle_degrees,
+                            obstacle_map,
+                            object_min_area_mm2,
+                            object_max_area_mm2,
+                            objects);
+                        //printf("Objects %d\n",(int)objects.size());
+                    }
                 }
 
                 pointcloud::virtual_camera(
@@ -1786,7 +1888,7 @@ int main(int argc, char* argv[]) {
         if (skip_frames < 0) skip_frames = 0;
 
         int wait = cvWaitKey(10) & 255;
-        if (virtual_camera_view) {
+        if ((virtual_camera_view) || (detect_obstacles) || (detect_objects)) {
             double displacement_mm = 5;
             double rotation_step_degrees = 0.5;
             if (wait=='.') camera_calibration->translate_pose(-displacement_mm,0);
@@ -1833,10 +1935,10 @@ int main(int argc, char* argv[]) {
     delete lines;
     if (background_disparity_map != NULL) delete [] background_disparity_map;
     if (background_disparity_map_hits != NULL) delete [] background_disparity_map_hits;
-    if (buffer != NULL) delete[] buffer;
-    if (depthmap_buffer != NULL) delete[] depthmap_buffer;
-    if (disparity_space != NULL) delete[] disparity_space;
-    if (disparity_map != NULL) delete[] disparity_map;
+    if (buffer != NULL) delete [] buffer;
+    if (depthmap_buffer != NULL) delete [] depthmap_buffer;
+    if (disparity_space != NULL) delete [] disparity_space;
+    if (disparity_map != NULL) delete [] disparity_map;
 
     if (elas!=NULL) {
         delete elas;
@@ -1858,6 +1960,7 @@ int main(int argc, char* argv[]) {
         cvReleaseMat(&virtual_camera_points);
         cvReleaseMat(&virtual_camera_image_points);
     }
+    if (obstacle_map!=NULL) delete [] obstacle_map;
 
     return 0;
 }
