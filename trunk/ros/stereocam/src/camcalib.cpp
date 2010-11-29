@@ -903,6 +903,26 @@ void camcalib::SetPoseRotation(
     cvReleaseMat(&rotmat);
 }
 
+void camcalib::GetPoseRotation(
+    double * rotation_vector)
+{
+    CvMat * rot = cvCreateMat(3, 1, CV_64F);
+    CvMat * rotmat = cvCreateMat(3, 3, CV_64F);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            cvmSet(rotmat, i, j, cvmGet(pose,i,j));
+        }
+    }
+    // convert from 3x3 matrix to 3x1 rotation vector
+    cvRodrigues2(rotmat, rot);
+    for (int i = 0; i < 3; i++) {
+        rotation_vector[i] = cvmGet(rot, i, 0)*180.0/3.1415927;
+    }
+    cvReleaseMat(&rot);
+    cvReleaseMat(&rotmat);
+}
+
+
 void camcalib::SetPoseTranslation(
     double * pose_matrix)
 {

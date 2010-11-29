@@ -32,6 +32,9 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <math.h>
+
+using namespace std;
 
 class pointcloud {
 public:
@@ -87,6 +90,41 @@ public:
         CvMat * &image_points,
         unsigned char * img_output);
 
+    static void obstacle_map(
+        IplImage * points_image,
+        int map_dimension,
+        int map_cell_size_mm,
+        CvMat * pose,
+        float relative_x_mm,
+        float relative_y_mm,
+        int threshold,
+        float tilt_degrees,
+        int * map);
+
+    static void fill(
+        int id,
+        int * map,
+        int map_dimension,
+        int x,
+        int y,
+        int depth,
+        int &ctr,
+        int threshold);
+
+    static void find_objects(
+        unsigned char * img,
+        IplImage * points_image,
+        int map_dimension,
+        int map_cell_size_mm,
+        CvMat * pose,
+        float relative_x_mm,
+        float relative_y_mm,
+        int threshold,
+        float tilt_degrees,
+        int * map,
+        int min_area_mm2,
+        int max_area_mm2,
+        std::vector<std::vector<float> > &objects);
 };
 
 #endif
