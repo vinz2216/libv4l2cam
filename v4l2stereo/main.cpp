@@ -177,6 +177,7 @@ int main(int argc, char* argv[]) {
     int matches;
     bool detect_obstacles = false;
     bool detect_objects = false;
+    bool view_point_cloud = false;
     int FOV_degrees = 50;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
@@ -249,6 +250,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --obstaclecellsize    Obstacle map cell size in millimetres");
     opt->addUsage( "     --obstacles           Detect obstacles");
     opt->addUsage( "     --objects             Detect objects");
+    opt->addUsage( "     --points              Show point cloud");
     opt->addUsage( "     --minarea             Minimum area for object detection in mm2");
     opt->addUsage( "     --maxarea             Maximum area for object detection in mm2");
     opt->addUsage( "     --baseline            Baseline distance in millimetres");
@@ -352,6 +354,7 @@ int main(int argc, char* argv[]) {
     opt->setFlag( "vcamera" );
     opt->setFlag( "obstacles" );
     opt->setFlag( "objects" );
+    opt->setFlag( "points" );
 #ifdef GSTREAMER
     opt->setFlag( "stream"  );
 #endif
@@ -401,26 +404,26 @@ int main(int argc, char* argv[]) {
     }
 
     bool flip_right_image = false;
-    if( opt->getFlag( "flipright" ) )
-    {
+    if( opt->getFlag( "flipright" ) ) {
         flip_right_image = true;
     }
 
     bool histogram_equalisation = false;
-    if( opt->getFlag( "equal" ) )
-    {
+    if( opt->getFlag( "equal" ) ) {
         histogram_equalisation = true;
     }
 
-    if( opt->getFlag( "obstacles" ) )
-    {
+    if( opt->getFlag( "obstacles" ) ) {
         detect_obstacles = true;
         show_disparity_map = true;
         if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
     }
 
-    if( opt->getFlag( "objects" ) )
-    {
+    if( opt->getFlag( "points" ) ) {
+        view_point_cloud = true;
+    }
+
+    if( opt->getFlag( "objects" ) ) {
         detect_objects = true;
         show_disparity_map = true;
         if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
@@ -1565,6 +1568,7 @@ int main(int argc, char* argv[]) {
                     virtual_camera_rotation_vector,
                     virtual_camera_points,
                     virtual_camera_image_points,
+                    view_point_cloud,
                     l_);
             }
             else {
