@@ -209,6 +209,7 @@ void pointcloud::virtual_camera(
     CvMat * intrinsic_matrix,
     CvMat * distortion_coeffs,
     float max_range_mm,
+    bool view_point_cloud,
     unsigned char * img_output)
 {
     int pixels = points_image->width*points_image->height;
@@ -225,6 +226,7 @@ void pointcloud::virtual_camera(
         max_range_mm, depth,
         rotation_matrix, translation, rotation_vector,
         points, image_points,
+        view_point_cloud,
         img_output);
 
     cvReleaseMat(&rotation_matrix);
@@ -250,6 +252,7 @@ void pointcloud::virtual_camera(
     CvMat * &rotation_vector,
     CvMat * &points,
     CvMat * &image_points,
+    bool view_point_cloud,
     unsigned char * img_output)
 {
     int pixels = points_image->width*points_image->height;
@@ -300,64 +303,39 @@ void pointcloud::virtual_camera(
     int prev_i=-1,prev_x=-1,prev_y=-1,length;
     float prev_dist=0;
     int w = points_image->width;
-    for (int i = 0; i < pixels; i++) {
-        int x = (int)cvmGet(image_points,i,0);
-        if ((x >=0) && (x < w)) {
-            int y = (int)cvmGet(image_points,i,1);
-            if ((y >=0) && (y < points_image->height-2)) {
-                int n = y*w + (w-1-x);
+    int h = points_image->height;
+    int step = 1;
+    if (view_point_cloud) step = 2;
+    for (int py = 0; py < h; py += step) {
+        for (int px = 0; px < w; px += step) {
+            int i = py*w + px;
+            int x = (int)cvmGet(image_points,i,0);
+            if ((x >=0) && (x < w)) {
+                int y = (int)cvmGet(image_points,i,1);
+                if ((y >=0) && (y < points_image->height-2)) {
+                    int n = y*w + (w-1-x);
 
-                float dx = points_image_data[i*3] - cvmGet(translation,0,0);
-                float dy = points_image_data[i*3+1] - cvmGet(translation,1,0);
-                float dz = points_image_data[i*3+2] - cvmGet(translation,2,0);
-                float dist = dx*dx + dy*dy + dz*dz;
-                if ((dist > 0) && (dist < max_range_mm)) {
-                    if (depth[n] == 0) {
-                        depth[n] = dist;
-
-                        img_output[n*3] = img[i*3];
-                        img_output[n*3+1] = img[i*3+1];
-                        img_output[n*3+2] = img[i*3+2];
-                        img_output[(n+points_image->width)*3] = img[i*3];
-                        img_output[(n+points_image->width)*3+1] = img[i*3+1];
-                        img_output[(n+points_image->width)*3+2] = img[i*3+2];
-
-                        dist = (float)sqrt(dist);
-
-                        if ((prev_x>-1) && (i-prev_i>0) && (i-prev_i<5) && (fabs(dist-prev_dist)<100)) {
-                            int dx2 = x - prev_x;
-                            int dy2 = y - prev_y;
-                            length = (int)sqrt(dx2*dx2+dy2*dy2);
-                            if (length>0) {
-                                for (int l = 0; l <= length; l++) {
-                                    int xx = prev_x + (l*dx2/length);
-                                    int yy = prev_y + (l*dy2/length);
-                                    int n2 = yy*w + (w-1-xx);
-                                    int i2 = prev_i + (l*(i-prev_i)/length);
-                                    img_output[n2*3] = img[i2*3];
-                                    img_output[n2*3+1] = img[i2*3+1];
-                                    img_output[n2*3+2] = img[i2*3+2];
-                                    img_output[(n2+points_image->width)*3] = img[i2*3];
-                                    img_output[(n2+points_image->width)*3+1] = img[i2*3+1];
-                                    img_output[(n2+points_image->width)*3+2] = img[i2*3+2];
-                                }
-                            }
-                        }
-                        prev_i = i;
-                        prev_x = x;
-                        prev_y = y;
-                        prev_dist = dist;
-                    }
-                    else {
-                        if (dist < depth[n]) {
+                    float dx = points_image_data[i*3] - cvmGet(translation,0,0);
+                    float dy = points_image_data[i*3+1] - cvmGet(translation,1,0);
+                    float dz = points_image_data[i*3+2] - cvmGet(translation,2,0);
+                    float dist = dx*dx + dy*dy + dz*dz;
+                    if ((dist > 0) && (dist < max_range_mm)) {
+                        if (depth[n] == 0) {
                             depth[n] = dist;
 
-                            img_output[n*3] = img[i*3];
-                            img_output[n*3+1] = img[i*3+1];
-                            img_output[n*3+2] = img[i*3+2];
-                            img_output[(n+points_image->width)*3] = img[i*3];
-                            img_output[(n+points_image->width)*3+1] = img[i*3+1];
-                            img_output[(n+points_image->width)*3+2] = img[i*3+2];
+                            if (!view_point_cloud) {
+                                img_output[n*3] = img[i*3];
+                                img_output[n*3+1] = img[i*3+1];
+                                img_output[n*3+2] = img[i*3+2];
+                                img_output[(n+points_image->width)*3] = img[i*3];
+                                img_output[(n+points_image->width)*3+1] = img[i*3+1];
+                                img_output[(n+points_image->width)*3+2] = img[i*3+2];
+                            }
+                            else {
+                                img_output[n*3] = 255;
+                                img_output[n*3+1] = 255;
+                                img_output[n*3+2] = 255;
+                            }
 
                             dist = (float)sqrt(dist);
 
@@ -365,23 +343,72 @@ void pointcloud::virtual_camera(
                                 int dx2 = x - prev_x;
                                 int dy2 = y - prev_y;
                                 length = (int)sqrt(dx2*dx2+dy2*dy2);
-                                for (int l = 0; l < length; l++) {
-                                    int xx = prev_x + (l*dx2/length);
-                                    int yy = prev_y + (l*dy2/length);
-                                    int n2 = yy*w + (w-1-xx);
-                                    int i2 = prev_i + (l*(i-prev_i)/length);
-                                    img_output[n2*3] = img[i2*3];
-                                    img_output[n2*3+1] = img[i2*3+1];
-                                    img_output[n2*3+2] = img[i2*3+2];
-                                    img_output[(n2+points_image->width)*3] = img[i2*3];
-                                    img_output[(n2+points_image->width)*3+1] = img[i2*3+1];
-                                    img_output[(n2+points_image->width)*3+2] = img[i2*3+2];
+                                if (length>0) {
+                                    for (int l = 0; l <= length; l++) {
+                                        int xx = prev_x + (l*dx2/length);
+                                        int yy = prev_y + (l*dy2/length);
+                                        int n2 = yy*w + (w-1-xx);
+                                        int i2 = prev_i + (l*(i-prev_i)/length);
+                                        if (!view_point_cloud) {
+                                            img_output[n2*3] = img[i2*3];
+                                            img_output[n2*3+1] = img[i2*3+1];
+                                            img_output[n2*3+2] = img[i2*3+2];
+                                            img_output[(n2+points_image->width)*3] = img[i2*3];
+                                            img_output[(n2+points_image->width)*3+1] = img[i2*3+1];
+                                            img_output[(n2+points_image->width)*3+2] = img[i2*3+2];
+                                        }
+                                    }
                                 }
                             }
                             prev_i = i;
                             prev_x = x;
                             prev_y = y;
                             prev_dist = dist;
+                        }
+                        else {
+                            if (dist < depth[n]) {
+                                depth[n] = dist;
+
+                                if (!view_point_cloud) {
+                                    img_output[n*3] = img[i*3];
+                                    img_output[n*3+1] = img[i*3+1];
+                                    img_output[n*3+2] = img[i*3+2];
+                                    img_output[(n+points_image->width)*3] = img[i*3];
+                                    img_output[(n+points_image->width)*3+1] = img[i*3+1];
+                                    img_output[(n+points_image->width)*3+2] = img[i*3+2];
+                                }
+                                else {
+                                    img_output[n*3] = 255;
+                                    img_output[n*3+1] = 255;
+                                    img_output[n*3+2] = 255;
+                                }
+
+                                dist = (float)sqrt(dist);
+
+                                if ((prev_x>-1) && (i-prev_i>0) && (i-prev_i<5) && (fabs(dist-prev_dist)<100)) {
+                                    int dx2 = x - prev_x;
+                                    int dy2 = y - prev_y;
+                                    length = (int)sqrt(dx2*dx2+dy2*dy2);
+                                    for (int l = 0; l < length; l++) {
+                                        int xx = prev_x + (l*dx2/length);
+                                        int yy = prev_y + (l*dy2/length);
+                                        int n2 = yy*w + (w-1-xx);
+                                        int i2 = prev_i + (l*(i-prev_i)/length);
+                                        if (!view_point_cloud) {
+                                            img_output[n2*3] = img[i2*3];
+                                            img_output[n2*3+1] = img[i2*3+1];
+                                            img_output[n2*3+2] = img[i2*3+2];
+                                            img_output[(n2+points_image->width)*3] = img[i2*3];
+                                            img_output[(n2+points_image->width)*3+1] = img[i2*3+1];
+                                            img_output[(n2+points_image->width)*3+2] = img[i2*3+2];
+                                        }
+                                    }
+                                }
+                                prev_i = i;
+                                prev_x = x;
+                                prev_y = y;
+                                prev_dist = dist;
+                            }
                         }
                     }
                 }

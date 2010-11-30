@@ -73,6 +73,7 @@ public:
         CvMat * intrinsic_matrix,
         CvMat * distortion_coeffs,
         float max_range_mm,
+        bool view_point_cloud,
         unsigned char * img_output);
 
     static void virtual_camera(
@@ -88,6 +89,7 @@ public:
         CvMat * &rotation_vector,
         CvMat * &points,
         CvMat * &image_points,
+        bool view_point_cloud,
         unsigned char * img_output);
 
     static void obstacle_map(
