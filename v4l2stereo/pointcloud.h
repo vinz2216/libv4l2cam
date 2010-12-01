@@ -36,6 +36,11 @@
 
 using namespace std;
 
+#define POINT_CLOUD_FORMAT_POINTS	0
+#define POINT_CLOUD_FORMAT_STL		1
+
+#define rgb15(r,g,b)			((b>>4)|((g>>4)<<4)|((r>>4)<<8))
+
 class pointcloud {
 public:
     static void save(
@@ -114,6 +119,7 @@ public:
         int threshold);
 
     static void find_objects(
+        int format,
         unsigned char * img,
         IplImage * points_image,
         int map_dimension,
@@ -126,7 +132,60 @@ public:
         int * map,
         int min_area_mm2,
         int max_area_mm2,
+        bool BGR,
         std::vector<std::vector<float> > &objects);
+
+    static int get_object_id(
+        int x,
+        int y,
+        int width,
+        float cos_tilt,
+        float sin_tilt,
+        int centre,
+        float mult,
+        float relative_x_mm,
+        float relative_y_mm,
+        int map_dimension,
+        int threshold,
+        int * map,
+        float * points_image_data,
+        float pose_x,
+        float pose_y,
+        float pose_z,
+        float &x2,
+        float &y2,
+        float &z2);
+
+    static void surface_normal(
+        float x0, float y0, float z0,
+        float x1, float y1, float z1,
+        float x2, float y2, float z2,
+        float &nx, float &ny, float &nz);
+
+    static void save_stl_binary(
+        std::string filename,
+        std::string header,
+        std::vector<float> &facets);
+
+    static void save_stl_ascii(
+        std::string filename,
+        std::string header,
+        std::vector<float> &facets);
+
+    static void save_largest_object(
+        std::string filename,
+        bool binary,
+        std::vector<std::vector<float> > &objects);
+
+    static void export_points(
+        int format,
+        unsigned char * img,
+        IplImage * points_image,
+        CvMat * pose,
+        float tilt_degrees,
+        bool BGR,
+        std::vector<float> &points);
+
 };
 
 #endif
