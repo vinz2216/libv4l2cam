@@ -178,6 +178,8 @@ int main(int argc, char* argv[]) {
     bool detect_obstacles = false;
     bool detect_objects = false;
     bool view_point_cloud = false;
+    bool BGR = true;
+    int object_format = POINT_CLOUD_FORMAT_POINTS;
     int FOV_degrees = 50;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
@@ -250,6 +252,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --obstaclecellsize    Obstacle map cell size in millimetres");
     opt->addUsage( "     --obstacles           Detect obstacles");
     opt->addUsage( "     --objects             Detect objects");
+    opt->addUsage( "     --savestl             Save object model in STL format");
     opt->addUsage( "     --points              Show point cloud");
     opt->addUsage( "     --minarea             Minimum area for object detection in mm2");
     opt->addUsage( "     --maxarea             Maximum area for object detection in mm2");
@@ -335,6 +338,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "obstaclecellsize" );
     opt->setOption( "minarea" );
     opt->setOption( "maxarea" );
+    opt->setOption( "savestl" );
     opt->setFlag( "help" );
     opt->setFlag( "flipleft" );
     opt->setFlag( "flipright" );
@@ -448,23 +452,30 @@ int main(int argc, char* argv[]) {
         if (no_of_calibration_images<10) no_of_calibration_images=10;
     }
 
-    if( opt->getValue("obstaclethreshold") ) {
+    if( opt->getValue("obstaclethreshold") != NULL ) {
         obstacle_map_threshold = atoi(opt->getValue("obstaclethreshold"));
     }
 
-    if( opt->getValue("obstaclecellsize") ) {
+    if( opt->getValue("obstaclecellsize") != NULL ) {
         obstacle_map_cell_size_mm = atoi(opt->getValue("obstaclecellsize"));
     }
 
-    if( opt->getValue("minarea") ) {
+    if( opt->getValue("minarea") != NULL ) {
         object_min_area_mm2 = atoi(opt->getValue("minarea"));
     }
 
-    if( opt->getValue("maxarea") ) {
+    if( opt->getValue("maxarea") != NULL ) {
         object_max_area_mm2 = atoi(opt->getValue("maxarea"));
     }
 
-    if( opt->getValue("learnbackground") ) {
+    std::string save_mesh_filename = "";
+    if( opt->getValue("savestl") != NULL ) {
+        save_mesh_filename = opt->getValue("savestl");
+        object_format = POINT_CLOUD_FORMAT_STL;
+        background_update_frames = max_background_update_frames;
+    }
+
+    if( opt->getValue("learnbackground") != NULL ) {
         learn_background_filename = opt->getValue("learnbackground");
         if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
         if (background_disparity_map==NULL) background_disparity_map = new float[ww*hh];
@@ -1541,6 +1552,7 @@ int main(int argc, char* argv[]) {
                         std::vector<std::vector<float> > objects;
 
                         pointcloud::find_objects(
+                            object_format,
                             buffer, points_image,
                             obstacle_map_dimension,
                             obstacle_map_cell_size_mm,
@@ -1551,8 +1563,38 @@ int main(int argc, char* argv[]) {
                             obstacle_map,
                             object_min_area_mm2,
                             object_max_area_mm2,
+                            BGR,
                             objects);
+
+                        if (save_mesh_filename!="") {
+                            if (background_update_frames <= 0) {
+                                // save the object as a mesh model
+                                pointcloud::save_largest_object(save_mesh_filename,false,objects);
+                                printf("Saved %s\n", save_mesh_filename.c_str());
+                                break;
+                            }
+                            background_update_frames--;
+                        }
                         //printf("Objects %d\n",(int)objects.size());
+                    }
+                }
+                else {
+                    if (save_mesh_filename!="") {
+                        if (background_update_frames <= 0) {
+                            // save all points as a mesh model
+                            std::vector<float> points;
+                            pointcloud::export_points(
+                                object_format,
+                                buffer, points_image,
+                                camera_calibration->pose,
+                                tilt_angle_degrees,
+                                BGR, points);
+
+                            pointcloud::save_stl_ascii(save_mesh_filename, save_mesh_filename, points);
+                            printf("Saved %s\n", save_mesh_filename.c_str());
+                            break;
+                        }
+                        background_update_frames--;
                     }
                 }
 
@@ -1895,8 +1937,8 @@ int main(int argc, char* argv[]) {
         if ((virtual_camera_view) || (detect_obstacles) || (detect_objects)) {
             double displacement_mm = 5;
             double rotation_step_degrees = 0.5;
-            if (wait=='.') camera_calibration->translate_pose(-displacement_mm,0);
-            if (wait==',') camera_calibration->translate_pose(displacement_mm,0);
+            if (wait==',') camera_calibration->translate_pose(-displacement_mm,0);
+            if (wait=='.') camera_calibration->translate_pose(displacement_mm,0);
             if ((wait=='a') || (wait=='A')) camera_calibration->translate_pose(displacement_mm,1);
             if ((wait=='z') || (wait=='Z')) camera_calibration->translate_pose(-displacement_mm,1);
             if ((wait=='s') || (wait=='S')) camera_calibration->translate_pose(displacement_mm,2);

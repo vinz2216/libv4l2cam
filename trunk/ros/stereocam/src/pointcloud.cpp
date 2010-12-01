@@ -480,8 +480,64 @@ void pointcloud::fill(
     }
 }
 
+int pointcloud::get_object_id(
+    int x,
+    int y,
+    int width,
+    float cos_tilt,
+    float sin_tilt,
+    int centre,
+    float mult,
+    float relative_x_mm,
+    float relative_y_mm,
+    int map_dimension,
+    int threshold,
+    int * map,
+    float * points_image_data,
+    float pose_x,
+    float pose_y,
+    float pose_z,
+    float &x2,
+    float &y2,
+    float &z2)
+{
+    const int x_axis = 0;
+    const int y_axis = 2;
+    const int z_axis = 1;
+    int id = 0;
+    int i = y*width + x;
+
+    if ((points_image_data[i*3+x_axis]==0) &&
+        (points_image_data[i*3+y_axis]==0) &&
+        (points_image_data[i*3+z_axis]==0)) return 0;
+
+    if ((std::isnan(points_image_data[i*3+x_axis])) ||
+        (std::isnan(points_image_data[i*3+y_axis])) ||
+        (std::isnan(points_image_data[i*3+z_axis]))) return 0;
+
+    float dx = points_image_data[i*3+x_axis] - pose_x;
+    float dy = points_image_data[i*3+y_axis] - pose_y;
+    float dz = points_image_data[i*3+z_axis] - pose_z;
+            
+    x2 = dx;
+    y2 = cos_tilt*dy - sin_tilt*dz;
+    z2 = sin_tilt*dy + cos_tilt*dz;
+
+    int mx = centre + (int)((x2 + relative_x_mm) * mult);
+    if ((mx >= 0) && (mx < map_dimension)) {
+        int my = centre + (int)((y2 + relative_y_mm) * mult);
+        if ((my >= 0) && (my < map_dimension)) {
+            int n = my*map_dimension + mx;
+            if ((map[n] > 0) && (map[n] < threshold)) {
+                id = map[n];
+            }
+        }
+    }
+    return id;
+}
 
 void pointcloud::find_objects(
+    int format,
     unsigned char * img,
     IplImage * points_image,
     int map_dimension,
@@ -494,6 +550,7 @@ void pointcloud::find_objects(
     int * map,
     int min_area_mm2,
     int max_area_mm2,
+    bool BGR,
     std::vector<std::vector<float> > &objects)
 {
     const int x_axis = 0;
@@ -540,38 +597,87 @@ void pointcloud::find_objects(
     int w = points_image->width;
     int max_range_mm = map_dimension * map_cell_size_mm;
     float mult = map_dimension / (float)max_range_mm;
+    int prev_x=0,prev_id=0;
+    float x2=0,y2=0,z2=0,x3=0,y3=0,z3=0,x4=0,y4=0,z4=0,x5=0,y5=0,z5=0;
     for (int y = 1; y < points_image->height-1; y++) {
         for (int x = 1; x < w-1; x++) {
             int i = y*w + x;
 
-            float dx = points_image_data[i*3+x_axis] - pose_x;
-            float dy = points_image_data[i*3+y_axis] - pose_y;
-            float dz = points_image_data[i*3+z_axis] - pose_z;
-            
-            float x2 = dx;
-            float y2 = cos_tilt*dy - sin_tilt*dz;
-            float z2 = sin_tilt*dy + cos_tilt*dz;
+            id = get_object_id(
+                x,y,w,
+                cos_tilt, sin_tilt,
+                centre, mult,
+                relative_x_mm, relative_y_mm,
+                map_dimension, threshold, map,
+                points_image_data,
+                pose_x, pose_y, pose_z,
+                x2, y2, z2);
 
-            id=0;
-            int mx = centre + (int)((x2 + relative_x_mm) * mult);
-            if ((mx >= 0) && (mx < map_dimension)) {
-                int my = centre + (int)((y2 + relative_y_mm) * mult);
-                if ((my >= 0) && (my < map_dimension)) {
-                    int n = my*map_dimension + mx;
-                    if ((map[n] > 0) && (map[n] < threshold)) {
-                        id = map[n];
+            if (id > 0) {
+                if (format == POINT_CLOUD_FORMAT_POINTS) {
+                    objects[id-1].push_back(x2);
+                    objects[id-1].push_back(y2);
+                    objects[id-1].push_back(z2);
+                    objects[id-1].push_back((float)img[i*3]);
+                    objects[id-1].push_back((float)img[i*3+1]);
+                    objects[id-1].push_back((float)img[i*3+2]);
+                }
+                if (format == POINT_CLOUD_FORMAT_STL) {
+                    if ((prev_x == x-1) && (prev_id == id)) {
+                        if (get_object_id(
+                            x,y-1,w,
+                            cos_tilt, sin_tilt,
+                            centre, mult,
+                            relative_x_mm, relative_y_mm,
+                            map_dimension, threshold, map,
+                            points_image_data,
+                            pose_x, pose_y, pose_z,
+                            x5, y5, z5) == id) {
+                            if (get_object_id(
+                                x-1,y-1,w,
+                                cos_tilt, sin_tilt,
+                                centre, mult,
+                                relative_x_mm, relative_y_mm,
+                                map_dimension, threshold, map,
+                                points_image_data,
+                                pose_x, pose_y, pose_z,
+                                x4, y4, z4) == id) {
+
+                                objects[id-1].push_back(x2);
+                                objects[id-1].push_back(y2);
+                                objects[id-1].push_back(z2);
+
+                                objects[id-1].push_back(x3);
+                                objects[id-1].push_back(y3);
+                                objects[id-1].push_back(z3);
+
+                                objects[id-1].push_back(x4);
+                                objects[id-1].push_back(y4);
+                                objects[id-1].push_back(z4);
+
+                                objects[id-1].push_back(x5);
+                                objects[id-1].push_back(y5);
+                                objects[id-1].push_back(z5);
+
+                                if (BGR) {
+                                    objects[id-1].push_back((float)rgb15(img[i*3+2],img[i*3+1],img[i*3]));
+                                }
+                                else {
+                                    objects[id-1].push_back((float)rgb15(img[i*3],img[i*3+1],img[i*3+2]));
+                                }
+                            }
+                        }
                     }
                 }
-            }
-            if (id > 0) {
-                objects[id-1].push_back(x2);
-                objects[id-1].push_back(y2);
-                objects[id-1].push_back(z2);
-                objects[id-1].push_back((float)img[i*3]);
-                objects[id-1].push_back((float)img[i*3+1]);
-                objects[id-1].push_back((float)img[i*3+2]);
 
-                img[i*3+((id-1)%3)]=255;
+                prev_x = x;
+                prev_id = id;
+                x3 = x2;
+                y3 = y2;
+                z3 = z2;
+                if (format != POINT_CLOUD_FORMAT_STL) {
+                    img[i*3+((id-1)%3)]=255;
+                }
             }
         }
     }
@@ -580,6 +686,113 @@ void pointcloud::find_objects(
     //    printf("%d - %d\n", i, (int)objects[i].size()/6);
     //}
 
+}
+
+void pointcloud::export_points(
+    int format,
+    unsigned char * img,
+    IplImage * points_image,
+    CvMat * pose,
+    float tilt_degrees,
+    bool BGR,
+    std::vector<float> &points)
+{
+    const int x_axis = 0;
+    const int y_axis = 2;
+    const int z_axis = 1;
+
+    float * points_image_data = (float*)points_image->imageData;
+    float pose_x = (float)cvmGet(pose,x_axis,3);
+    float pose_y = (float)cvmGet(pose,y_axis,3);
+    float pose_z = (float)cvmGet(pose,z_axis,3);
+    float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
+    float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
+    int w = points_image->width;
+    int prev_x=0;
+    float dx,dy,dz,x2=0,y2=0,z2=0,x3=0,y3=0,z3=0,x4=0,y4=0,z4=0,x5=0,y5=0,z5=0;
+    for (int y = 1; y < points_image->height-1; y++) {
+        for (int x = 1; x < w-1; x++) {
+            int i = y*w + x;
+
+            if (points_image_data[i*3+x_axis] +
+                points_image_data[i*3+y_axis] +
+                points_image_data[i*3+z_axis] != 0) {
+
+                dx = points_image_data[i*3+x_axis] - pose_x;
+                dy = points_image_data[i*3+y_axis] - pose_y;
+                dz = points_image_data[i*3+z_axis] - pose_z;
+            
+                x2 = dx + pose_x;
+                y2 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                z2 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+
+                if (format == POINT_CLOUD_FORMAT_POINTS) {
+                    points.push_back(x2);
+                    points.push_back(y2);
+                    points.push_back(z2);
+                    points.push_back((float)img[i*3]);
+                    points.push_back((float)img[i*3+1]);
+                    points.push_back((float)img[i*3+2]);
+                }
+                if (format == POINT_CLOUD_FORMAT_STL) {
+                    if (prev_x == x-1) {
+
+                        int i2 = (y-1)*w + x;
+                        if (points_image_data[i2*3+x_axis] +
+                            points_image_data[i2*3+y_axis] +
+                            points_image_data[i2*3+z_axis] != 0) {
+                            dx = points_image_data[i2*3+x_axis] - pose_x;
+                            dy = points_image_data[i2*3+y_axis] - pose_y;
+                            dz = points_image_data[i2*3+z_axis] - pose_z;
+                            x5 = dx + pose_x;
+                            y5 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                            z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+
+                            int i3 = ((y-1)*w) + x - 1;
+                            if (points_image_data[i3*3+x_axis] +
+                                points_image_data[i3*3+y_axis] +
+                                points_image_data[i3*3+z_axis] != 0) {
+                                dx = points_image_data[i3*3+x_axis] - pose_x;
+                                dy = points_image_data[i3*3+y_axis] - pose_y;
+                                dz = points_image_data[i3*3+z_axis] - pose_z;
+                                x4 = dx + pose_x;
+                                y4 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                                z4 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+
+                                points.push_back(x2);
+                                points.push_back(y2);
+                                points.push_back(z2);
+
+                                points.push_back(x3);
+                                points.push_back(y3);
+                                points.push_back(z3);
+
+                                points.push_back(x4);
+                                points.push_back(y4);
+                                points.push_back(z4);
+
+                                points.push_back(x5);
+                                points.push_back(y5);
+                                points.push_back(z5);
+
+                                if (BGR) {
+                                    points.push_back((float)rgb15(img[i*3+2],img[i*3+1],img[i*3]));
+                                }
+                                else {
+                                    points.push_back((float)rgb15(img[i*3],img[i*3+1],img[i*3+2]));
+                                }
+                            }
+                        }
+                    }
+
+                    prev_x = x;
+                    x3 = x2;
+                    y3 = y2;
+                    z3 = z2;
+                }
+            }
+        }
+    }
 }
 
 void pointcloud::obstacle_map(
@@ -667,6 +880,230 @@ void pointcloud::obstacle_map(
                 points_image_data[i*3+2] = 0;
             }
         }
+    }
+}
+
+void pointcloud::surface_normal(
+    float x0, float y0, float z0,
+    float x1, float y1, float z1,
+    float x2, float y2, float z2,
+    float &nx, float &ny, float &nz)
+{
+    /* Compute edge vectors */
+    float x10 = x1 - x0;
+    float y10 = y1 - y0;
+    float z10 = z1 - z0;
+    float x12 = x1 - x2;
+    float y12 = y1 - y2;
+    float z12 = z1 - z2;
+
+    /* Compute the cross product */
+    float cpx = (z10 * y12) - (y10 * z12);
+    float cpy = (x10 * z12) - (z10 * x12);
+    float cpz = (y10 * x12) - (x10 * y12);
+
+    /* Normalize the result to get the unit-length facet normal */
+    float r = (float)sqrt(cpx * cpx + cpy * cpy + cpz * cpz);
+    if (r != 0.0f) {
+        nx = cpx / r;
+        ny = cpy / r;
+        nz = cpz / r;
+    }
+}
+
+
+
+void pointcloud::save_stl_binary(
+    std::string filename,
+    std::string header,
+    std::vector<float> &facets)
+{
+    const int elements = 13;
+    FILE * fp = fopen(filename.c_str(),"wb");
+    if (fp==NULL) return;
+    unsigned int max = (unsigned int)(facets.size()/elements);
+
+    char buffer[80];
+    sprintf((char*)buffer,"%s\n",header.c_str());
+    fwrite(buffer,1,80,fp);
+
+    fwrite((const void*)&max,sizeof(unsigned int),1,fp);
+
+    float nx=0,ny=0,nz=0;
+    float facet[12];
+    for (int f = 0; f < (int)max; f++) {
+        float x0 = facets[f*elements];
+        float y0 = facets[f*elements+1];
+        float z0 = facets[f*elements+2];
+
+        float x1 = facets[f*elements+3];
+        float y1 = facets[f*elements+4];
+        float z1 = facets[f*elements+5];
+
+        float x2 = facets[f*elements+6];
+        float y2 = facets[f*elements+7];
+        float z2 = facets[f*elements+8];
+
+        float x3 = facets[f*elements+9];
+        float y3 = facets[f*elements+10];
+        float z3 = facets[f*elements+11];
+
+        unsigned short attribute = (unsigned short)facets[f*elements+12];
+
+        // first triangle
+        surface_normal(
+            x0, y0, z0,
+            x1, y1, z1,
+            x2, y2, z2,
+            nx, ny, nz);
+
+        if ((!((nx==0) && (ny==0) && (nz==0))) &&
+            (!std::isnan(nx)) && (!std::isnan(ny)) && (!std::isnan(nz))) {
+
+            facet[0] = nx;
+            facet[1] = ny;
+            facet[2] = nz;
+        
+            for (int i = 0; i < 9; i++) {
+                facet[i+3] = facets[f*elements+i];
+            }
+            fwrite((const void*)facet,sizeof(float),12,fp);
+            fwrite((const void*)&attribute,sizeof(unsigned short),1,fp);
+        }
+
+        // second triangle
+        surface_normal(
+            x2, y2, z2,
+            x3, y3, z3,
+            x0, y0, z0,
+            nx, ny, nz);
+
+        if ((!((nx==0) && (ny==0) && (nz==0))) &&
+            (!std::isnan(nx)) && (!std::isnan(ny)) && (!std::isnan(nz))) {
+
+            facet[0] = nx;
+            facet[1] = ny;
+            facet[2] = nz;
+        
+            for (int v=0;v<3;v++) {
+                int i2 = (v*3) + 6;
+                if (i2 >= 12) i2 -= 12;
+                for (int j = 0; j < 3; j++) {
+                    facet[(v*3)+3+j] = facets[f*elements+i2+j];
+                }
+            }
+
+            fwrite((const void*)facet,sizeof(float),12,fp);
+            fwrite((const void*)&attribute,sizeof(unsigned short),1,fp);
+        }
+    }
+    fclose(fp);
+}
+
+void pointcloud::save_stl_ascii(
+    std::string filename,
+    std::string header,
+    std::vector<float> &facets)
+{
+    const int elements = 13;
+    FILE * fp = fopen(filename.c_str(),"w");
+    if (fp==NULL) return;
+    unsigned int max = (unsigned int)(facets.size()/elements);
+
+    std::string name = "";
+    const char * name_str = filename.c_str();
+    for (int i = 0; i < (int)filename.length(); i++) {
+        if ((name_str[i]=='\\') || (name_str[i]=='/')) {
+            name="";
+        }
+        else {
+            if (name_str[i]=='.') break;
+            name += name_str[i];
+        }
+    }
+
+    fprintf(fp,"solid %s\n", name.c_str());
+
+    float nx=0,ny=0,nz=0;
+    for (int f = 0; f < (int)max; f++) {
+        float x0 = facets[f*elements];
+        float y0 = facets[f*elements+1];
+        float z0 = facets[f*elements+2];
+
+        float x1 = facets[f*elements+3];
+        float y1 = facets[f*elements+4];
+        float z1 = facets[f*elements+5];
+
+        float x2 = facets[f*elements+6];
+        float y2 = facets[f*elements+7];
+        float z2 = facets[f*elements+8];
+
+        float x3 = facets[f*elements+9];
+        float y3 = facets[f*elements+10];
+        float z3 = facets[f*elements+11];
+
+        //unsigned short attribute = (unsigned short)facets[f*elements+12];
+
+        // first triangle
+        surface_normal(
+            x0, y0, z0,
+            x1, y1, z1,
+            x2, y2, z2,
+            nx, ny, nz);
+
+        fprintf(fp,"facet normal %.3f %.3f %.3f\n", nx, ny, nz);
+        fprintf(fp,"outer loop\n");
+
+        for (int v=0;v<3;v++) {
+            fprintf(fp,"vertex %.3f %.3f %.3f\n", facets[f*elements+(v*3)], facets[f*elements+(v*3)+1], facets[f*elements+(v*3)+2]);
+        }
+
+        fprintf(fp,"end loop\n");
+        fprintf(fp,"end facet\n");
+
+        // second triangle
+        surface_normal(
+            x2, y2, z2,
+            x3, y3, z3,
+            x0, y0, z0,
+            nx, ny, nz);
+
+        fprintf(fp,"facet normal %.3f %.3f %.3f\n", nx, ny, nz);
+        fprintf(fp,"outer loop\n");
+
+        for (int v=0;v<3;v++) {
+            int i2 = (v*3) + 6;
+            if (i2 >= 12) i2 -= 12;
+            fprintf(fp,"vertex %.3f %.3f %.3f\n", facets[f*elements+i2], facets[f*elements+i2+1], facets[f*elements+i2+2]);
+        }
+
+        fprintf(fp,"end loop\n");
+        fprintf(fp,"end facet\n");
+    }
+
+    fprintf(fp,"endsolid %s\n", name.c_str());
+    fclose(fp);
+}
+
+void pointcloud::save_largest_object(
+    std::string filename,
+    bool binary,
+    std::vector<std::vector<float> > &objects)
+{
+    int max_points = 0;
+    int index = -1;
+    for (int i = 0; i < (int)objects.size(); i++) {
+        if ((int)objects[i].size() > max_points) {
+            max_points = (int)objects[i].size();
+            index = i;
+        }
+    }
+    if (max_points==0) return;
+    if (binary) {
+        save_stl_binary(filename, filename, objects[index]);
+    }
+    else {
+        save_stl_ascii(filename, filename, objects[index]);
     }
 }
 
