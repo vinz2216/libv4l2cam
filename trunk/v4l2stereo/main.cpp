@@ -257,6 +257,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --maxarea             Maximum area for object detection in mm2");
     opt->addUsage( "     --baseline            Baseline distance in millimetres");
     opt->addUsage( "     --equal               Perform histogram equalisation");
+    opt->addUsage( "     --maxrange            Sets teh maximum range in millimetres");
     opt->addUsage( "     --ground              y coordinate of the ground plane as percent of image height");
     opt->addUsage( "     --features            Show stereo features");
     opt->addUsage( "     --disparitymap        Show dense disparity map (colour)");
@@ -297,6 +298,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --help                Show help");
     opt->addUsage( "" );
 
+    opt->setOption( "maxrange" );
     opt->setOption( "background" );
     opt->setOption( "learnbackground" );
     opt->setOption( "backgroundmodel" );
@@ -447,6 +449,10 @@ int main(int argc, char* argv[]) {
         opt->printUsage();
         delete opt;
         return(0);
+    }
+
+    if( opt->getValue("maxrange") != NULL ) {
+        max_range_mm = atoi(opt->getValue("maxrange"));
     }
 
     if( opt->getValue("calibrationimages") != NULL ) {
@@ -1596,7 +1602,7 @@ int main(int argc, char* argv[]) {
                                 buffer, points_image,
                                 camera_calibration->pose,
                                 tilt_angle_degrees,
-                                BGR, points);
+                                BGR, points, max_range_mm);
 
                             if (object_format == POINT_CLOUD_FORMAT_X3D) {
                                 pointcloud::save_x3d(save_mesh_filename, save_mesh_filename, points);
