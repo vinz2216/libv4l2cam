@@ -740,7 +740,8 @@ void pointcloud::export_points(
     CvMat * pose,
     float tilt_degrees,
     bool BGR,
-    std::vector<float> &points)
+    std::vector<float> &points,
+    int max_range_mm)
 {
     const int x_axis = 0;
     const int y_axis = 2;
@@ -755,6 +756,7 @@ void pointcloud::export_points(
     int w = points_image->width;
     int prev_x=0;
     float dx,dy,dz,x2=0,y2=0,z2=0,x3=0,y3=0,z3=0,x4=0,y4=0,z4=0,x5=0,y5=0,z5=0;
+    float max_range_mm2 = max_range_mm*max_range_mm;
     for (int y = 1; y < points_image->height-1; y++) {
         for (int x = 1; x < w-1; x++) {
             int i = y*w + x;
@@ -766,126 +768,142 @@ void pointcloud::export_points(
                 dx = points_image_data[i*3+x_axis] - pose_x;
                 dy = points_image_data[i*3+y_axis] - pose_y;
                 dz = points_image_data[i*3+z_axis] - pose_z;
+
+                float range_mm2 = dx*dx+dy*dy+dz*dz;
+                if (range_mm2 < max_range_mm2) {
             
-                x2 = dx + pose_x;
-                y2 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
-                z2 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+                    x2 = dx + pose_x;
+                    y2 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                    z2 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
-                if (format == POINT_CLOUD_FORMAT_POINTS) {
-                    points.push_back(x2);
-                    points.push_back(y2);
-                    points.push_back(z2);
-                    points.push_back((float)img[i*3]);
-                    points.push_back((float)img[i*3+1]);
-                    points.push_back((float)img[i*3+2]);
-                }
-                if (format == POINT_CLOUD_FORMAT_STL) {
-                    if (prev_x == x-1) {
+                    if (format == POINT_CLOUD_FORMAT_POINTS) {
+                        points.push_back(x2);
+                        points.push_back(y2);
+                        points.push_back(z2);
+                        points.push_back((float)img[i*3]);
+                        points.push_back((float)img[i*3+1]);
+                        points.push_back((float)img[i*3+2]);
+                    }
+                    if (format == POINT_CLOUD_FORMAT_STL) {
+                        if (prev_x == x-1) {
 
-                        int i2 = (y-1)*w + x;
-                        if (points_image_data[i2*3+x_axis] +
-                            points_image_data[i2*3+y_axis] +
-                            points_image_data[i2*3+z_axis] != 0) {
-                            dx = points_image_data[i2*3+x_axis] - pose_x;
-                            dy = points_image_data[i2*3+y_axis] - pose_y;
-                            dz = points_image_data[i2*3+z_axis] - pose_z;
-                            x5 = dx + pose_x;
-                            y5 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
-                            z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+                            int i2 = (y-1)*w + x;
+                            if (points_image_data[i2*3+x_axis] +
+                                points_image_data[i2*3+y_axis] +
+                                points_image_data[i2*3+z_axis] != 0) {
+                                dx = points_image_data[i2*3+x_axis] - pose_x;
+                                dy = points_image_data[i2*3+y_axis] - pose_y;
+                                dz = points_image_data[i2*3+z_axis] - pose_z;
+                                float range_mm2 = dx*dx+dy*dy+dz*dz;
+                                if (range_mm2 < max_range_mm2) {
+                                    x5 = dx + pose_x;
+                                    y5 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                                    z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
-                            int i3 = ((y-1)*w) + x - 1;
-                            if (points_image_data[i3*3+x_axis] +
-                                points_image_data[i3*3+y_axis] +
-                                points_image_data[i3*3+z_axis] != 0) {
-                                dx = points_image_data[i3*3+x_axis] - pose_x;
-                                dy = points_image_data[i3*3+y_axis] - pose_y;
-                                dz = points_image_data[i3*3+z_axis] - pose_z;
-                                x4 = dx + pose_x;
-                                y4 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
-                                z4 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+                                    int i3 = ((y-1)*w) + x - 1;
+                                    if (points_image_data[i3*3+x_axis] +
+                                        points_image_data[i3*3+y_axis] +
+                                        points_image_data[i3*3+z_axis] != 0) {
+                                        dx = points_image_data[i3*3+x_axis] - pose_x;
+                                        dy = points_image_data[i3*3+y_axis] - pose_y;
+                                        dz = points_image_data[i3*3+z_axis] - pose_z;
+                                        float range_mm2 = dx*dx+dy*dy+dz*dz;
+                                        if (range_mm2 < max_range_mm2) {
+                                            x4 = dx + pose_x;
+                                            y4 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                                            z4 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
-                                points.push_back(x2);
-                                points.push_back(y2);
-                                points.push_back(z2);
+                                            points.push_back(x2);
+                                            points.push_back(y2);
+                                            points.push_back(z2);
 
-                                points.push_back(x3);
-                                points.push_back(y3);
-                                points.push_back(z3);
+                                            points.push_back(x3);
+                                            points.push_back(y3);
+                                            points.push_back(z3);
 
-                                points.push_back(x4);
-                                points.push_back(y4);
-                                points.push_back(z4);
+                                            points.push_back(x4);
+                                            points.push_back(y4);
+                                            points.push_back(z4);
 
-                                points.push_back(x5);
-                                points.push_back(y5);
-                                points.push_back(z5);
+                                            points.push_back(x5);
+                                            points.push_back(y5);
+                                            points.push_back(z5);
 
-                                if (BGR) {
-                                    points.push_back((float)rgb15(img[i*3+2],img[i*3+1],img[i*3]));
-                                }
-                                else {
-                                    points.push_back((float)rgb15(img[i*3],img[i*3+1],img[i*3+2]));
+                                            if (BGR) {
+                                                points.push_back((float)rgb15(img[i*3+2],img[i*3+1],img[i*3]));
+                                            }
+                                            else {
+                                                points.push_back((float)rgb15(img[i*3],img[i*3+1],img[i*3+2]));
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
+                        prev_x = x;
+                        x3 = x2;
+                        y3 = y2;
+                        z3 = z2;
                     }
-                    prev_x = x;
-                    x3 = x2;
-                    y3 = y2;
-                    z3 = z2;
-                }
 
-                if (format == POINT_CLOUD_FORMAT_X3D) {
-                    if (prev_x == x-1) {
-                        int i2 = (y-1)*w + x;
-                        if (points_image_data[i2*3+x_axis] +
-                            points_image_data[i2*3+y_axis] +
-                            points_image_data[i2*3+z_axis] != 0) {
-                            dx = points_image_data[i2*3+x_axis] - pose_x;
-                            dy = points_image_data[i2*3+y_axis] - pose_y;
-                            dz = points_image_data[i2*3+z_axis] - pose_z;
-                            x5 = dx + pose_x;
-                            y5 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
-                            z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+                    if (format == POINT_CLOUD_FORMAT_X3D) {
+                        if (prev_x == x-1) {
+                            int i2 = (y-1)*w + x;
+                            if (points_image_data[i2*3+x_axis] +
+                                points_image_data[i2*3+y_axis] +
+                                points_image_data[i2*3+z_axis] != 0) {
+                                dx = points_image_data[i2*3+x_axis] - pose_x;
+                                dy = points_image_data[i2*3+y_axis] - pose_y;
+                                dz = points_image_data[i2*3+z_axis] - pose_z;
+                                float range_mm2 = dx*dx+dy*dy+dz*dz;
+                                if (range_mm2 < max_range_mm2) {
+                                    x5 = dx + pose_x;
+                                    y5 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                                    z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
-                            int i3 = ((y-1)*w) + x - 1;
-                            if (points_image_data[i3*3+x_axis] +
-                                points_image_data[i3*3+y_axis] +
-                                points_image_data[i3*3+z_axis] != 0) {
-                                dx = points_image_data[i3*3+x_axis] - pose_x;
-                                dy = points_image_data[i3*3+y_axis] - pose_y;
-                                dz = points_image_data[i3*3+z_axis] - pose_z;
-                                x4 = dx + pose_x;
-                                y4 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
-                                z4 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+                                    int i3 = ((y-1)*w) + x - 1;
+                                    if (points_image_data[i3*3+x_axis] +
+                                        points_image_data[i3*3+y_axis] +
+                                        points_image_data[i3*3+z_axis] != 0) {
+                                        dx = points_image_data[i3*3+x_axis] - pose_x;
+                                        dy = points_image_data[i3*3+y_axis] - pose_y;
+                                        dz = points_image_data[i3*3+z_axis] - pose_z;
+                                        float range_mm2 = dx*dx+dy*dy+dz*dz;
+                                        if (range_mm2 < max_range_mm2) {
+                                            x4 = dx + pose_x;
+                                            y4 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                                            z4 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
-                                points.push_back(x2);
-                                points.push_back(y2);
-                                points.push_back(z2);
+                                            points.push_back(x2);
+                                            points.push_back(y2);
+                                            points.push_back(z2);
 
-                                points.push_back(x3);
-                                points.push_back(y3);
-                                points.push_back(z3);
+                                            points.push_back(x3);
+                                            points.push_back(y3);
+                                            points.push_back(z3);
 
-                                points.push_back(x4);
-                                points.push_back(y4);
-                                points.push_back(z4);
+                                            points.push_back(x4);
+                                            points.push_back(y4);
+                                            points.push_back(z4);
 
-                                points.push_back(x5);
-                                points.push_back(y5);
-                                points.push_back(z5);
+                                            points.push_back(x5);
+                                            points.push_back(y5);
+                                            points.push_back(z5);
 
-                                points.push_back((float)img[i*3+2]);
-                                points.push_back((float)img[i*3+1]);
-                                points.push_back((float)img[i*3]);
+                                            points.push_back((float)img[i*3+2]);
+                                            points.push_back((float)img[i*3+1]);
+                                            points.push_back((float)img[i*3]);
+                                        }
+                                    }
+                                }
                             }
                         }
-                    }
 
-                    prev_x = x;
-                    x3 = x2;
-                    y3 = y2;
-                    z3 = z2;
+                        prev_x = x;
+                        x3 = x2;
+                        y3 = y2;
+                        z3 = z2;
+                    }
                 }
             }
         }

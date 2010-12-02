@@ -191,7 +191,8 @@ public:
         CvMat * pose,
         float tilt_degrees,
         bool BGR,
-        std::vector<float> &points);
+        std::vector<float> &points,
+        int max_range_mm);
 
 };
 
