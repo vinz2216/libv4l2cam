@@ -183,7 +183,7 @@ int main(int argc, char* argv[]) {
     int FOV_degrees = 50;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
-    int max_background_update_frames = 30;
+    int max_background_update_frames = 90;
     int background_update_frames = max_background_update_frames;
 
     IplImage * background_image = NULL;
@@ -252,7 +252,6 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --obstaclecellsize    Obstacle map cell size in millimetres");
     opt->addUsage( "     --obstacles           Detect obstacles");
     opt->addUsage( "     --objects             Detect objects");
-    opt->addUsage( "     --savestl             Save object model in STL format");
     opt->addUsage( "     --points              Show point cloud");
     opt->addUsage( "     --minarea             Minimum area for object detection in mm2");
     opt->addUsage( "     --maxarea             Maximum area for object detection in mm2");
@@ -286,6 +285,8 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --log                 Logs stereo matches to the given output file (only when no file exists)");
     opt->addUsage( " -V  --version             Show version number");
     opt->addUsage( "     --save                Save raw images");
+    opt->addUsage( "     --savex3d             Save mesh model in X3D format");
+    opt->addUsage( "     --savestl             Save mesh model in STL format");
     opt->addUsage( "     --saveperiod          Save images repeatedly every x seconds");
     opt->addUsage( "     --flipright           Flip the right image");
     opt->addUsage( "     --flipleft            Flip the left image");
@@ -339,6 +340,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "minarea" );
     opt->setOption( "maxarea" );
     opt->setOption( "savestl" );
+    opt->setOption( "savex3d" );
     opt->setFlag( "help" );
     opt->setFlag( "flipleft" );
     opt->setFlag( "flipright" );
@@ -472,6 +474,12 @@ int main(int argc, char* argv[]) {
     if( opt->getValue("savestl") != NULL ) {
         save_mesh_filename = opt->getValue("savestl");
         object_format = POINT_CLOUD_FORMAT_STL;
+        background_update_frames = max_background_update_frames;
+    }
+
+    if( opt->getValue("savex3d") != NULL ) {
+        save_mesh_filename = opt->getValue("savex3d");
+        object_format = POINT_CLOUD_FORMAT_X3D;
         background_update_frames = max_background_update_frames;
     }
 
@@ -1569,7 +1577,7 @@ int main(int argc, char* argv[]) {
                         if (save_mesh_filename!="") {
                             if (background_update_frames <= 0) {
                                 // save the object as a mesh model
-                                pointcloud::save_largest_object(save_mesh_filename,false,objects);
+                                pointcloud::save_largest_object(save_mesh_filename,object_format,false,objects);
                                 printf("Saved %s\n", save_mesh_filename.c_str());
                                 break;
                             }
@@ -1590,7 +1598,12 @@ int main(int argc, char* argv[]) {
                                 tilt_angle_degrees,
                                 BGR, points);
 
-                            pointcloud::save_stl_ascii(save_mesh_filename, save_mesh_filename, points);
+                            if (object_format == POINT_CLOUD_FORMAT_X3D) {
+                                pointcloud::save_x3d(save_mesh_filename, save_mesh_filename, points);
+                            }
+                            if (object_format == POINT_CLOUD_FORMAT_STL) {
+                                pointcloud::save_stl_ascii(save_mesh_filename, save_mesh_filename, points);
+                            }
                             printf("Saved %s\n", save_mesh_filename.c_str());
                             break;
                         }

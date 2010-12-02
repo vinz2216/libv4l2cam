@@ -38,6 +38,7 @@ using namespace std;
 
 #define POINT_CLOUD_FORMAT_POINTS	0
 #define POINT_CLOUD_FORMAT_STL		1
+#define POINT_CLOUD_FORMAT_X3D		2
 
 #define rgb15(r,g,b)			((b>>4)|((g>>4)<<4)|((r>>4)<<8))
 
@@ -162,6 +163,11 @@ public:
         float x2, float y2, float z2,
         float &nx, float &ny, float &nz);
 
+    static void save_x3d(
+        std::string filename,
+        std::string header,
+        std::vector<float> &facets);
+
     static void save_stl_binary(
         std::string filename,
         std::string header,
@@ -174,6 +180,7 @@ public:
 
     static void save_largest_object(
         std::string filename,
+        int format,
         bool binary,
         std::vector<std::vector<float> > &objects);
 

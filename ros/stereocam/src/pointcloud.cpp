@@ -670,6 +670,51 @@ void pointcloud::find_objects(
                     }
                 }
 
+                if (format == POINT_CLOUD_FORMAT_X3D) {
+                    if ((prev_x == x-1) && (prev_id == id)) {
+                        if (get_object_id(
+                            x,y-1,w,
+                            cos_tilt, sin_tilt,
+                            centre, mult,
+                            relative_x_mm, relative_y_mm,
+                            map_dimension, threshold, map,
+                            points_image_data,
+                            pose_x, pose_y, pose_z,
+                            x5, y5, z5) == id) {
+                            if (get_object_id(
+                                x-1,y-1,w,
+                                cos_tilt, sin_tilt,
+                                centre, mult,
+                                relative_x_mm, relative_y_mm,
+                                map_dimension, threshold, map,
+                                points_image_data,
+                                pose_x, pose_y, pose_z,
+                                x4, y4, z4) == id) {
+
+                                objects[id-1].push_back(x2);
+                                objects[id-1].push_back(y2);
+                                objects[id-1].push_back(z2);
+
+                                objects[id-1].push_back(x3);
+                                objects[id-1].push_back(y3);
+                                objects[id-1].push_back(z3);
+
+                                objects[id-1].push_back(x4);
+                                objects[id-1].push_back(y4);
+                                objects[id-1].push_back(z4);
+
+                                objects[id-1].push_back(x5);
+                                objects[id-1].push_back(y5);
+                                objects[id-1].push_back(z5);
+
+                                objects[id-1].push_back((float)img[i*3+2]);
+                                objects[id-1].push_back((float)img[i*3+1]);
+                                objects[id-1].push_back((float)img[i*3]);
+                            }
+                        }
+                    }
+                }
+
                 prev_x = x;
                 prev_id = id;
                 x3 = x2;
@@ -781,6 +826,58 @@ void pointcloud::export_points(
                                 else {
                                     points.push_back((float)rgb15(img[i*3],img[i*3+1],img[i*3+2]));
                                 }
+                            }
+                        }
+                    }
+                    prev_x = x;
+                    x3 = x2;
+                    y3 = y2;
+                    z3 = z2;
+                }
+
+                if (format == POINT_CLOUD_FORMAT_X3D) {
+                    if (prev_x == x-1) {
+                        int i2 = (y-1)*w + x;
+                        if (points_image_data[i2*3+x_axis] +
+                            points_image_data[i2*3+y_axis] +
+                            points_image_data[i2*3+z_axis] != 0) {
+                            dx = points_image_data[i2*3+x_axis] - pose_x;
+                            dy = points_image_data[i2*3+y_axis] - pose_y;
+                            dz = points_image_data[i2*3+z_axis] - pose_z;
+                            x5 = dx + pose_x;
+                            y5 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                            z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+
+                            int i3 = ((y-1)*w) + x - 1;
+                            if (points_image_data[i3*3+x_axis] +
+                                points_image_data[i3*3+y_axis] +
+                                points_image_data[i3*3+z_axis] != 0) {
+                                dx = points_image_data[i3*3+x_axis] - pose_x;
+                                dy = points_image_data[i3*3+y_axis] - pose_y;
+                                dz = points_image_data[i3*3+z_axis] - pose_z;
+                                x4 = dx + pose_x;
+                                y4 = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                                z4 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+
+                                points.push_back(x2);
+                                points.push_back(y2);
+                                points.push_back(z2);
+
+                                points.push_back(x3);
+                                points.push_back(y3);
+                                points.push_back(z3);
+
+                                points.push_back(x4);
+                                points.push_back(y4);
+                                points.push_back(z4);
+
+                                points.push_back(x5);
+                                points.push_back(y5);
+                                points.push_back(z5);
+
+                                points.push_back((float)img[i*3+2]);
+                                points.push_back((float)img[i*3+1]);
+                                points.push_back((float)img[i*3]);
                             }
                         }
                     }
@@ -1000,6 +1097,94 @@ void pointcloud::save_stl_binary(
     fclose(fp);
 }
 
+void pointcloud::save_x3d(
+    std::string filename,
+    std::string header,
+    std::vector<float> &facets)
+{
+    const int elements = 15;
+    unsigned int max = (unsigned int)(facets.size()/elements);
+
+    FILE * fp = fopen(filename.c_str(),"w");
+    if (fp==NULL) return;
+
+    fprintf(fp,"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    fprintf(fp,"<!DOCTYPE X3D PUBLIC \"ISO//Web3D//DTD X3D 3.1//EN\" \"http://www.web3d.org/specifications/x3d-3.1.dtd\">\n");
+    fprintf(fp,"<X3D profile=\"Immersive\" version=\"3.1\" xsd:noNamespaceSchemaLocation=\"http://www.web3d.org/specifications/x3d-3.1.xsd\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
+    fprintf(fp, "<head>\n");
+    fprintf(fp,"<meta content=\"v4l2stereo\" name=\"generator\"/>\n");
+    fprintf(fp,"</head>\n");
+    fprintf(fp,"<Scene>\n");
+    fprintf(fp,"<Shape>\n");
+    fprintf(fp,"<IndexedFaceSet coordIndex=\"");
+
+    for (int f = 0; f < (int)max; f++) {
+        fprintf(fp,"%d %d %d -1 %d %d %d -1 ", (f*4),(f*4)+1,(f*4)+2,(f*4)+2,(f*4)+3,(f*4));
+    }
+    fprintf(fp,"\" solid=\"false\" normalPerVertex=\"false\">\n");
+    fprintf(fp,"<Coordinate point=\"");
+    for (int f = 0; f < (int)max; f++) {
+        for (int i = 0; i < 12; i++) {
+            fprintf(fp,"%.2f ", facets[f*elements + i]);
+        }
+    }
+    fprintf(fp,"\"/>\n");
+
+    fprintf(fp,"<ColorRGBA color=\"");
+    for (int f = 0; f < (int)max; f++) {
+        for (int j = 0; j < 4; j++) {
+            fprintf(fp,"%.2f %.2f %.2f 1 ", facets[f*elements + 12]/255.0f, facets[f*elements + 13]/255.0f, facets[f*elements + 14]/255.0f);
+        }
+    }
+    fprintf(fp,"\"/>\n");
+
+    fprintf(fp,"<Normal vector=\"");
+
+    float nx=0,ny=0,nz=0;
+    for (int f = 0; f < (int)max; f++) {
+        float x0 = facets[f*elements];
+        float y0 = facets[f*elements+1];
+        float z0 = facets[f*elements+2];
+
+        float x1 = facets[f*elements+3];
+        float y1 = facets[f*elements+4];
+        float z1 = facets[f*elements+5];
+
+        float x2 = facets[f*elements+6];
+        float y2 = facets[f*elements+7];
+        float z2 = facets[f*elements+8];
+
+        float x3 = facets[f*elements+9];
+        float y3 = facets[f*elements+10];
+        float z3 = facets[f*elements+11];
+
+        // first triangle
+        surface_normal(
+            x0, y0, z0,
+            x1, y1, z1,
+            x2, y2, z2,
+            nx, ny, nz);
+
+        fprintf(fp,"%.2f %.2f %.2f ", nx, ny, nz);
+
+        // second triangle
+        surface_normal(
+            x2, y2, z2,
+            x3, y3, z3,
+            x0, y0, z0,
+            nx, ny, nz);
+
+        fprintf(fp,"%.2f %.2f %.2f ", nx, ny, nz);
+    }
+    fprintf(fp,"\"/>");
+    fprintf(fp,"</IndexedFaceSet>\n");
+    fprintf(fp,"</Shape>\n");
+    fprintf(fp,"</Scene>\n");
+    fprintf(fp,"</X3D>\n");
+
+    fclose(fp);
+}
+
 void pointcloud::save_stl_ascii(
     std::string filename,
     std::string header,
@@ -1087,6 +1272,7 @@ void pointcloud::save_stl_ascii(
 
 void pointcloud::save_largest_object(
     std::string filename,
+    int format,
     bool binary,
     std::vector<std::vector<float> > &objects)
 {
@@ -1099,11 +1285,16 @@ void pointcloud::save_largest_object(
         }
     }
     if (max_points==0) return;
-    if (binary) {
-        save_stl_binary(filename, filename, objects[index]);
+    if (format == POINT_CLOUD_FORMAT_STL) {
+        if (binary) {
+            save_stl_binary(filename, filename, objects[index]);
+        }
+        else {
+            save_stl_ascii(filename, filename, objects[index]);
+        }
     }
     else {
-        save_stl_ascii(filename, filename, objects[index]);
+        save_x3d(filename, filename, objects[index]);
     }
 }
 
