@@ -183,8 +183,6 @@ int main(int argc, char* argv[]) {
     int FOV_degrees = 50;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
-    int max_background_update_frames = 90;
-    int background_update_frames = max_background_update_frames;
 
     IplImage * background_image = NULL;
     IplImage * original_left_image = NULL;
@@ -480,13 +478,13 @@ int main(int argc, char* argv[]) {
     if( opt->getValue("savestl") != NULL ) {
         save_mesh_filename = opt->getValue("savestl");
         object_format = POINT_CLOUD_FORMAT_STL;
-        background_update_frames = max_background_update_frames;
+        skip_frames = 10;
     }
 
     if( opt->getValue("savex3d") != NULL ) {
         save_mesh_filename = opt->getValue("savex3d");
         object_format = POINT_CLOUD_FORMAT_X3D;
-        background_update_frames = max_background_update_frames;
+        skip_frames = 10;
     }
 
     if( opt->getValue("learnbackground") != NULL ) {
@@ -496,7 +494,7 @@ int main(int argc, char* argv[]) {
         if (background_disparity_map_hits==NULL) background_disparity_map_hits = new int[ww*hh];
         memset((void*)background_disparity_map,'\0',ww*hh*sizeof(float));
         memset((void*)background_disparity_map_hits,'\0',ww*hh*sizeof(int));
-        background_update_frames = max_background_update_frames;
+        skip_frames = 10;
     }
 
     if( (opt->getFlag( "disparitymap" )) ||
@@ -1500,7 +1498,7 @@ int main(int argc, char* argv[]) {
                         background_disparity_map_hits[i]++;
                     }
                 }
-                if (background_update_frames <= 0) {
+                if (skip_frames <= 0) {
                     for (int i = 0; i < ww*hh; i++) {
                         if (background_disparity_map_hits[i] > 0) {
                             background_disparity_map[i] /= background_disparity_map_hits[i];
@@ -1513,7 +1511,6 @@ int main(int argc, char* argv[]) {
                     }
                     break;
                 }
-                background_update_frames--;
             }
 
             // remove background model if necessary
@@ -1581,20 +1578,19 @@ int main(int argc, char* argv[]) {
                             objects);
 
                         if (save_mesh_filename!="") {
-                            if (background_update_frames <= 0) {
+                            if (skip_frames <= 0) {
                                 // save the object as a mesh model
                                 pointcloud::save_largest_object(save_mesh_filename,object_format,false,objects);
                                 printf("Saved %s\n", save_mesh_filename.c_str());
                                 break;
                             }
-                            background_update_frames--;
                         }
                         //printf("Objects %d\n",(int)objects.size());
                     }
                 }
                 else {
                     if (save_mesh_filename!="") {
-                        if (background_update_frames <= 0) {
+                        if (skip_frames <= 0) {
                             // save all points as a mesh model
                             std::vector<float> points;
                             pointcloud::export_points(
@@ -1613,7 +1609,6 @@ int main(int argc, char* argv[]) {
                             printf("Saved %s\n", save_mesh_filename.c_str());
                             break;
                         }
-                        background_update_frames--;
                     }
                 }
 
