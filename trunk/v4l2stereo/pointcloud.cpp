@@ -33,46 +33,88 @@ void pointcloud::save(
     CvMat * pose,
     std::string point_cloud_filename)
 {
+    float pose_x = (float)cvmGet(pose,POINT_CLOUD_X_AXIS,3);
+    float pose_y = (float)cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
+    float pose_z = (float)cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
+
     FILE * fp = fopen(point_cloud_filename.c_str(),"w");
     if (fp != NULL) {
         float * points_image_data = (float*)points_image->imageData;
         int pixels = points_image->width*points_image->height;
         int n = 0, ctr = 0;
         for (int i = 0; i < pixels; i++, n += 3) {
-            if ((fabs(points_image_data[n]) < max_range_mm) &&
-                (fabs(points_image_data[n+1]) < max_range_mm) &&
-                (fabs(points_image_data[n+2]) < max_range_mm)) {
+            float dx = points_image_data[n+POINT_CLOUD_X_AXIS] - pose_x;
+            float dy = points_image_data[n+POINT_CLOUD_Y_AXIS] - pose_y;
+            float dz = points_image_data[n+POINT_CLOUD_Z_AXIS] - pose_z;
+
+            if ((fabs(dx) > 1) && (fabs(dy) > 1) && (fabs(dz) > 1) &&
+                (fabs(dx) < max_range_mm) &&
+                (fabs(dy) < max_range_mm) &&
+                (fabs(dz) < max_range_mm)) {
                 ctr++;
             }
         }
         if (ctr > 0) {
-            float * data = new float[1+16+(ctr*4)];
-            unsigned char * data_bytes = (unsigned char*)data;
-            data[0] = ctr;
-            ctr = 1;
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < 4; j++, ctr++) {
-                   data[ctr] = cvmGet(pose,i,j); 
+            float * header = new float[10];
+            header[0] = (float)POINT_CLOUD_VERSION;
+            header[1] = ctr;
+            header[2] = points_image->width;
+            header[3] = points_image->height;
+            header[4] = cvmGet(pose,POINT_CLOUD_X_AXIS,3);
+            header[5] = cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
+            header[6] = cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
+
+            CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+            CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+            for (int y = 0; y < 3; y++) {
+                for (int x = 0; x < 3; x++) {
+                    cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
                 }
             }
+            cvRodrigues2(rotation_matrix, rotation_vector);
+            header[7] = cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0);
+            header[8] = cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0);
+            header[9] = cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0);
+
+            fwrite(header,sizeof(float),10,fp);
+            cvReleaseMat(&rotation_matrix);
+            cvReleaseMat(&rotation_vector);
+
+            float tilt_degrees = 90 - (header[7]*180/3.1415927f);
+            float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
+            float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
+            
+            int elem_bytes = (sizeof(float)*3) + 3;
+            unsigned char * data_bytes = new unsigned char[elem_bytes*ctr];
+            memset((void*)data_bytes, '\0', elem_bytes * ctr);
+            ctr = 0;
             n = 0;
             for (int i = 0; i < pixels; i++, n += 3) {
-                if ((fabs(points_image_data[n]) < max_range_mm) &&
-                    (fabs(points_image_data[n+1]) < max_range_mm) &&
-                    (fabs(points_image_data[n+2]) < max_range_mm)) {
-                    data[ctr] = points_image_data[n];
-                    data[ctr+1] = points_image_data[n+1];
-                    data[ctr+2] = points_image_data[n+2];
-                    int n2 = (ctr*sizeof(float)) + (3*sizeof(float));
+                float dx = points_image_data[n+POINT_CLOUD_X_AXIS] - pose_x;
+                float dy = points_image_data[n+POINT_CLOUD_Y_AXIS] - pose_y;
+                float dz = points_image_data[n+POINT_CLOUD_Z_AXIS] - pose_z;
+
+                if ((fabs(dx) > 1) && (fabs(dy) > 1) && (fabs(dz) > 1) &&
+                    (fabs(dx) < max_range_mm) &&
+                    (fabs(dy) < max_range_mm) &&
+                    (fabs(dz) < max_range_mm)) {
+            
+                    float * data = (float*)&data_bytes[elem_bytes*ctr];
+                    data[0] = dx + pose_x;
+                    data[1] = (cos_tilt*dy - sin_tilt*dz) + pose_y;
+                    data[2] = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+
+                    int n2 = (elem_bytes*ctr) + (3*sizeof(float));
                     data_bytes[n2] = img_left[n];
                     data_bytes[n2+1] = img_left[n+1];
                     data_bytes[n2+2] = img_left[n+2];
-                    ctr+=4;
+                    ctr++;
                 }
             }
-            fwrite(data,sizeof(float),ctr,fp);
-            printf("%d points saved\n", (int)data[0]);
-            delete [] data;
+            fwrite(data_bytes,elem_bytes,(int)header[1],fp);
+            printf("%d points saved\n", (int)header[1]);
+            delete [] data_bytes;
+            delete [] header;
         }
         fclose(fp);
     }
@@ -1037,7 +1079,7 @@ void pointcloud::save_stl_binary(
     cvRodrigues2(rotation_matrix, rotation_vector);
 
     char buffer[80];
-    sprintf((char*)buffer,"%dx%d %f %f %f %f %f %f\n",
+    sprintf((char*)buffer,"%dx%d %.3f %.3f %.3f %.3f %.3f %.3f\n",
         image_width, image_height,
         cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3),
         cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0));
