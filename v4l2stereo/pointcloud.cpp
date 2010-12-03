@@ -82,7 +82,7 @@ void pointcloud::save(
 
             float tilt_degrees = 90 - (header[7]*180/3.1415927f);
             float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
-            float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
+            float sin_tilt  = (float)sin(-tilt_degrees/180.0*3.1415927);
             
             int elem_bytes = (sizeof(float)*3) + 3;
             unsigned char * data_bytes = new unsigned char[elem_bytes*ctr];
