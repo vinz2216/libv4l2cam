@@ -49,7 +49,7 @@ using namespace std;
 
 class pointcloud {
 public:
-    static void save(
+     static void save(
         unsigned char * img_left,
         IplImage * points_image, 
         int max_range_mm,

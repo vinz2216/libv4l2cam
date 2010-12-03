@@ -880,7 +880,7 @@ int main(int argc, char* argv[]) {
 
     delete opt;
 
-    if ((show_disparity_map) && (!rectify_images)) {
+    if ((show_disparity_map) && (!rectify_images) ) {
         std::cout << "Images need to be rectified before using ELAS.  You may need to recalibrate using --calibrate.\n";
         return 0;
     }
