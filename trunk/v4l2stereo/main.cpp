@@ -478,13 +478,13 @@ int main(int argc, char* argv[]) {
     if( opt->getValue("savestl") != NULL ) {
         save_mesh_filename = opt->getValue("savestl");
         object_format = POINT_CLOUD_FORMAT_STL;
-        skip_frames = 10;
+        if (skip_frames < 2) skip_frames = 2;
     }
 
     if( opt->getValue("savex3d") != NULL ) {
         save_mesh_filename = opt->getValue("savex3d");
         object_format = POINT_CLOUD_FORMAT_X3D;
-        skip_frames = 10;
+        if (skip_frames < 2) skip_frames = 2;
     }
 
     if( opt->getValue("learnbackground") != NULL ) {
@@ -494,7 +494,7 @@ int main(int argc, char* argv[]) {
         if (background_disparity_map_hits==NULL) background_disparity_map_hits = new int[ww*hh];
         memset((void*)background_disparity_map,'\0',ww*hh*sizeof(float));
         memset((void*)background_disparity_map_hits,'\0',ww*hh*sizeof(int));
-        skip_frames = 10;
+        if (skip_frames < 2) skip_frames = 2;
     }
 
     if( (opt->getFlag( "disparitymap" )) ||
@@ -1580,7 +1580,7 @@ int main(int argc, char* argv[]) {
                         if (save_mesh_filename!="") {
                             if (skip_frames <= 0) {
                                 // save the object as a mesh model
-                                pointcloud::save_largest_object(save_mesh_filename,object_format,false,objects);
+                                pointcloud::save_largest_object(save_mesh_filename,object_format,false,ww,hh,camera_calibration->pose,objects);
                                 printf("Saved %s\n", save_mesh_filename.c_str());
                                 break;
                             }
@@ -1601,10 +1601,10 @@ int main(int argc, char* argv[]) {
                                 BGR, points, max_range_mm);
 
                             if (object_format == POINT_CLOUD_FORMAT_X3D) {
-                                pointcloud::save_x3d(save_mesh_filename, save_mesh_filename, points);
+                                pointcloud::save_x3d(save_mesh_filename, ww,hh,camera_calibration->pose, points);
                             }
                             if (object_format == POINT_CLOUD_FORMAT_STL) {
-                                pointcloud::save_stl_ascii(save_mesh_filename, save_mesh_filename, points);
+                                pointcloud::save_stl_ascii(save_mesh_filename, ww,hh,camera_calibration->pose, points);
                             }
                             printf("Saved %s\n", save_mesh_filename.c_str());
                             break;
