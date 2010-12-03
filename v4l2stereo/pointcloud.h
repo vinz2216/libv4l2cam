@@ -36,6 +36,7 @@
 
 using namespace std;
 
+#define POINT_CLOUD_VERSION		1.0
 #define POINT_CLOUD_X_AXIS		0
 #define POINT_CLOUD_Y_AXIS		2
 #define POINT_CLOUD_Z_AXIS		1

@@ -80,46 +80,46 @@ using namespace std;
  * \param expanded returned expanded image
  */
 void expand(
-	unsigned char *img,
-	int img_width,
-	int img_height,
-	int tx,
-	int ty,
-	int bx,
-	int by,
-	unsigned char *expanded)
+    unsigned char *img,
+    int img_width,
+    int img_height,
+    int tx,
+    int ty,
+    int bx,
+    int by,
+    unsigned char *expanded)
 {
-	const int mult = 128;
-	const int mult2 = mult*2;
-	int w = (bx - tx) * mult;
-	int h = (by - ty) * mult;
-	int stride = img_width*3;
-    #pragma omp parallel for
-	for (int y = 0; y < img_height; y++) {
-		int n_expanded = y*img_width*3;
-		int yy = h*y/img_height;
-		int fraction_y = yy % mult;
-		yy = ty + (yy/mult);
-		for (int x = 0; x < img_width; x++, n_expanded += 3) {
-			int xx = w*x/img_width;
-			int fraction_x = xx % mult;
-			xx = tx + (xx/mult);
+    const int mult = 128;
+    const int mult2 = mult*2;
+    int w = (bx - tx) * mult;
+    int h = (by - ty) * mult;
+    int stride = img_width*3;
+#pragma omp parallel for
+    for (int y = 0; y < img_height; y++) {
+        int n_expanded = y*img_width*3;
+        int yy = h*y/img_height;
+        int fraction_y = yy % mult;
+        yy = ty + (yy/mult);
+        for (int x = 0; x < img_width; x++, n_expanded += 3) {
+            int xx = w*x/img_width;
+            int fraction_x = xx % mult;
+            xx = tx + (xx/mult);
             int n = (yy*img_width + xx)*3;
 
             expanded[n_expanded] =
-            		((img[n] * fraction_x) + (img[n+3] * (mult-fraction_x)) +
-            		(img[n] * fraction_y) + (img[n+stride] * (mult-fraction_y))) /
-            		mult2;
+                ((img[n] * fraction_x) + (img[n+3] * (mult-fraction_x)) +
+                 (img[n] * fraction_y) + (img[n+stride] * (mult-fraction_y))) /
+                mult2;
             expanded[n_expanded+1] =
-            		((img[n+1] * fraction_x) + (img[n+1+3] * (mult-fraction_x)) +
-            		(img[n+1] * fraction_y) + (img[n+1+stride] * (mult-fraction_y))) /
-            		mult2;
+                ((img[n+1] * fraction_x) + (img[n+1+3] * (mult-fraction_x)) +
+                 (img[n+1] * fraction_y) + (img[n+1+stride] * (mult-fraction_y))) /
+                mult2;
             expanded[n_expanded+2] =
-            		((img[n+2] * fraction_x) + (img[n+2+3] * (mult-fraction_x)) +
-            		(img[n+2] * fraction_y) + (img[n+2+stride] * (mult-fraction_y))) /
-            		mult2;
-		}
-	}
+                ((img[n+2] * fraction_x) + (img[n+2+3] * (mult-fraction_x)) +
+                 (img[n+2] * fraction_y) + (img[n+2+stride] * (mult-fraction_y))) /
+                mult2;
+        }
+    }
 }
 
 void elas_disparity_map(
@@ -498,20 +498,20 @@ int main(int argc, char* argv[]) {
     }
 
     if( (opt->getFlag( "disparitymap" )) ||
-        (opt->getFlag( "overhead" )) ||
-        (opt->getFlag( "vcamera" )) ||
-        (opt->getValue("background")) ||
-        (opt->getValue("learnbackground")) ) {
+            (opt->getFlag( "overhead" )) ||
+            (opt->getFlag( "vcamera" )) ||
+            (opt->getValue("background")) ||
+            (opt->getValue("learnbackground")) ) {
         show_regions = false;
         show_features = false;
         show_matches = false;
         show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = false;
-	show_lines = false;
-	show_FAST = false;
-	show_disparity_map = true;
-        colour_disparity_map = true;        
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = true;
+        colour_disparity_map = true;
     }
 
     if( opt->getFlag( "disparitymapmono" ) ) {
@@ -519,11 +519,11 @@ int main(int argc, char* argv[]) {
         show_features = false;
         show_matches = false;
         show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = false;
-	show_lines = false;
-	show_FAST = false;
-	show_disparity_map = true;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = true;
         colour_disparity_map = false;
     }
 
@@ -541,38 +541,38 @@ int main(int argc, char* argv[]) {
 
     if( opt->getFlag( "histogram" ) ) {
         show_regions = false;
-	show_features = false;
-	show_matches = false;
-	show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = true;
-	show_lines = false;
-	show_FAST = false;
-	show_disparity_map = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+        show_anaglyph = false;
+        show_histogram = true;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = false;
     }
 
     if( opt->getFlag( "matches" ) ) {
         show_regions = false;
-	show_features = false;
-	show_matches = true;
-	show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = false;
-	show_lines = false;
-	show_FAST = false;
-	show_disparity_map = false;
+        show_features = false;
+        show_matches = true;
+        show_depthmap = false;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = false;
     }
 
     if(opt->getFlag("regions")) {
         show_regions = true;
-	show_features = false;
-	show_matches = false;
-	show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = false;
-	show_lines = false;
-	show_FAST = false;
-	show_disparity_map = false;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = false;
+        show_disparity_map = false;
     }
 
     if( opt->getFlag( "depth" ) ) {
@@ -614,30 +614,30 @@ int main(int argc, char* argv[]) {
     int save_period_sec = 0;
     if(opt->getValue("saveperiod") != NULL) {
         save_period_sec = atoi(opt->getValue("saveperiod"));
-	if (save_period_sec < 1) save_period_sec=1;
+        if (save_period_sec < 1) save_period_sec=1;
     }
 
     int desired_corner_features = 70;
     if( opt->getValue( "fast" ) != NULL  ) {
         show_regions = false;
-	show_features = false;
-	show_matches = false;
-	show_depthmap = false;
-	show_anaglyph = false;
-	show_histogram = false;
-	show_lines = false;
-	show_FAST = true;
-	show_disparity_map = false;
-	desired_corner_features = atoi(opt->getValue("fast"));
-	if (desired_corner_features > 150) desired_corner_features=150;
-	if (desired_corner_features < 50) desired_corner_features=50;
+        show_features = false;
+        show_matches = false;
+        show_depthmap = false;
+        show_anaglyph = false;
+        show_histogram = false;
+        show_lines = false;
+        show_FAST = true;
+        show_disparity_map = false;
+        desired_corner_features = atoi(opt->getValue("fast"));
+        if (desired_corner_features > 150) desired_corner_features=150;
+        if (desired_corner_features < 50) desired_corner_features=50;
     }
 
     int enable_ground_priors = 0;
     int ground_y_percent = 50;
     if( opt->getValue( "ground" ) != NULL  ) {
         enable_ground_priors = 1;
-	ground_y_percent = atoi(opt->getValue("ground"));
+        ground_y_percent = atoi(opt->getValue("ground"));
     }
 
     if( opt->getValue( "fov" ) != NULL  ) {
@@ -742,10 +742,10 @@ int main(int argc, char* argv[]) {
     int zoom_by = hh - zoom_ty;
 
     // adjust offsets to compensate for the zoom
-/*
-    calibration_offset_x = calibration_offset_x * ww / (zoom_bx - zoom_tx);
-    calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
-*/
+    /*
+        calibration_offset_x = calibration_offset_x * ww / (zoom_bx - zoom_tx);
+        calibration_offset_y = calibration_offset_y * hh / (zoom_by - zoom_ty);
+    */
 
     if( opt->getValue( "intleft" ) != NULL ) {
         if (camera_calibration->ParseIntrinsic(opt->getValue("intleft"),0)==0) {
@@ -829,8 +829,8 @@ int main(int argc, char* argv[]) {
     if( opt->getValue("calibrate") != NULL ) {
         int pattern_squares_x=6,pattern_squares_y=9,square_size_mm=24;
         if (camera_calibration->ParseCalibrationParameters(
-            opt->getValue("calibrate"),
-            pattern_squares_x, pattern_squares_y, square_size_mm)==0) {
+                    opt->getValue("calibrate"),
+                    pattern_squares_x, pattern_squares_y, square_size_mm)==0) {
             std::cout << "3 Calibration parameters are needed: ";
             std::cout << "squares across, squares down, square size (mm)\n";
         }
@@ -859,6 +859,7 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue( "pointcloud" ) != NULL ) {
+        show_disparity_map = true;
         point_cloud_filename = opt->getValue("pointcloud");
         if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
     }
@@ -909,19 +910,19 @@ int main(int argc, char* argv[]) {
     if (virtual_camera_view) left_image_title = "Virtual Camera";
     if (detect_obstacles) left_image_title = "Obstacles";
     if (detect_objects) left_image_title = "objects";
- 
+
     //cout<<c.setSharpness(3)<<"   "<<c.minSharpness()<<"  "<<c.maxSharpness()<<" "<<c.defaultSharpness()<<endl;
 
     if ((!save_images) &&
-        (!headless) &&
-        (stereo_matches_filename == "")) {
+            (!headless) &&
+            (stereo_matches_filename == "")) {
 
         cvNamedWindow(left_image_title.c_str(), CV_WINDOW_AUTOSIZE);
         if ((!show_matches) &&
-            (!show_FAST) &&
-            (!show_depthmap) &&
-            (!show_anaglyph) &&
-            (!show_disparity_map)) {
+                (!show_FAST) &&
+                (!show_depthmap) &&
+                (!show_anaglyph) &&
+                (!show_disparity_map)) {
             cvNamedWindow(right_image_title.c_str(), CV_WINDOW_AUTOSIZE);
         }
     }
@@ -986,53 +987,53 @@ int main(int argc, char* argv[]) {
 
         caps = "image/jpeg";
 
-	// Can replace this pipeline with anything you like (udpsink, videowriters etc)
-	std::string l_pipetext = "appsrc name=appsource caps="+ caps +
-	    " ! jpegdec ! ffmpegcolorspace ! queue ! jpegenc ! multipartmux ! tcpserversink port=" + lp_str.str();
-	std::string r_pipetext = "appsrc name=appsource caps="+ caps +
-	    " ! jpegdec ! ffmpegcolorspace ! queue ! jpegenc ! multipartmux ! tcpserversink port=" + rp_str.str();
+        // Can replace this pipeline with anything you like (udpsink, videowriters etc)
+        std::string l_pipetext = "appsrc name=appsource caps="+ caps +
+                                 " ! jpegdec ! ffmpegcolorspace ! queue ! jpegenc ! multipartmux ! tcpserversink port=" + lp_str.str();
+        std::string r_pipetext = "appsrc name=appsource caps="+ caps +
+                                 " ! jpegdec ! ffmpegcolorspace ! queue ! jpegenc ! multipartmux ! tcpserversink port=" + rp_str.str();
 
-	// Create the left image pipeline
-	l_pipeline = gst_parse_launch( l_pipetext.c_str(), &l_error );
+        // Create the left image pipeline
+        l_pipeline = gst_parse_launch( l_pipetext.c_str(), &l_error );
 
-	// If needed, create right image pipeline
-	if ((!show_matches) &&
-		(!show_FAST) &&
-		(!show_depthmap) &&
-		(!show_anaglyph) &&
-		(!show_disparity_map)) {
-	    r_pipeline = gst_parse_launch( r_pipetext.c_str(), &r_error );
-	}
+        // If needed, create right image pipeline
+        if ((!show_matches) &&
+                (!show_FAST) &&
+                (!show_depthmap) &&
+                (!show_anaglyph) &&
+                (!show_disparity_map)) {
+            r_pipeline = gst_parse_launch( r_pipetext.c_str(), &r_error );
+        }
 
-	// Seperate errors in case of port clash
-	if( l_error == NULL ) {
-	    l_source = gst_bin_get_by_name( GST_BIN( l_pipeline ), "appsource" );
-	    gst_app_src_set_caps( (GstAppSrc*) l_source, gst_caps_from_string( caps.c_str() ) );
-	    gst_element_set_state( l_pipeline, GST_STATE_PLAYING );
-	    cout << "Streaming started on port " << start_port << endl;
-	    cout << "Watch stream with the command:" << endl;
-	    cout << "gst-launch tcpclientsrc host=[ip] port=" << start_port << " ! multipartdemux ! jpegdec ! autovideosink" << endl;
-	} else {
-	    cout << "A gstreamer error occurred: " << l_error->message << endl;
-	}
+        // Seperate errors in case of port clash
+        if( l_error == NULL ) {
+            l_source = gst_bin_get_by_name( GST_BIN( l_pipeline ), "appsource" );
+            gst_app_src_set_caps( (GstAppSrc*) l_source, gst_caps_from_string( caps.c_str() ) );
+            gst_element_set_state( l_pipeline, GST_STATE_PLAYING );
+            cout << "Streaming started on port " << start_port << endl;
+            cout << "Watch stream with the command:" << endl;
+            cout << "gst-launch tcpclientsrc host=[ip] port=" << start_port << " ! multipartdemux ! jpegdec ! autovideosink" << endl;
+        } else {
+            cout << "A gstreamer error occurred: " << l_error->message << endl;
+        }
 
-	// Cannot rely on pipeline, as there maybe a situation where the pipeline is null
-	if ((!show_matches) &&
-            (!show_FAST) &&
-            (!show_depthmap) &&
-            (!show_anaglyph) &&
-            (!show_disparity_map)) {
-	    if( r_error == NULL ) {
-		r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
-		gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
-		gst_element_set_state( r_pipeline, GST_STATE_PLAYING );
-		cout << "Streaming started on port " << start_port + 1 << endl;
-		cout << "Watch stream with the command:" << endl;
-		cout << "gst-launch tcpclientsrc host=[ip] port=" << start_port + 1 << " ! multipartdemux ! jpegdec ! autovideosink" << endl;
-	    } else {
-		cout << "A gstreamer error occurred: " << r_error->message << endl;
-	    }
-	}
+        // Cannot rely on pipeline, as there maybe a situation where the pipeline is null
+        if ((!show_matches) &&
+                (!show_FAST) &&
+                (!show_depthmap) &&
+                (!show_anaglyph) &&
+                (!show_disparity_map)) {
+            if( r_error == NULL ) {
+                r_source = gst_bin_get_by_name( GST_BIN( r_pipeline ), "appsource" );
+                gst_app_src_set_caps( (GstAppSrc*) r_source, gst_caps_from_string( caps.c_str() ) );
+                gst_element_set_state( r_pipeline, GST_STATE_PLAYING );
+                cout << "Streaming started on port " << start_port + 1 << endl;
+                cout << "Watch stream with the command:" << endl;
+                cout << "gst-launch tcpclientsrc host=[ip] port=" << start_port + 1 << " ! multipartdemux ! jpegdec ! autovideosink" << endl;
+            } else {
+                cout << "A gstreamer error occurred: " << r_error->message << endl;
+            }
+        }
     }
 #endif
 
@@ -1050,14 +1051,14 @@ int main(int argc, char* argv[]) {
     CvMat * virtual_camera_points=NULL;
     CvMat * virtual_camera_image_points=NULL;
 
-/*
-    gridmap3d * grid = NULL;
-    if (point_cloud_filename != "") {
-        grid = new gridmap3d(256,256,10);
-    }
-*/
+    /*
+        gridmap3d * grid = NULL;
+        if (point_cloud_filename != "") {
+            grid = new gridmap3d(256,256,10);
+        }
+    */
 
-    while(1){
+    while(1) {
 
         while(c.Get()==0 || c2.Get()==0) usleep(100);
 
@@ -1079,7 +1080,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (rectify_images) {
-            #pragma omp parallel for
+#pragma omp parallel for
             for (int cam = 0; cam <= 1; cam++) {
                 if (cam == 0) {
                     camera_calibration->RectifyImage(0, ww, hh, l_, -calibration_offset_y);
@@ -1109,7 +1110,7 @@ int main(int argc, char* argv[]) {
                 hist_image1 = cvCreateImage( cvGetSize(l), IPL_DEPTH_8U, 1 );
             }
 
-        #pragma omp parallel for
+#pragma omp parallel for
             for (int i = 0; i < 2; i++) {
                 unsigned char *img = l_;
                 IplImage* hist_image = hist_image0;
@@ -1118,22 +1119,22 @@ int main(int argc, char* argv[]) {
                     hist_image = hist_image1;
                 }
                 if ((background_image!=NULL) ||
-                    (background_disparity_map!=NULL) ||
-                    (overhead_view) ||
-                    (virtual_camera_view) ||
-                    (detect_obstacles) ||
-                    (detect_objects) ||
-                    (point_cloud_filename!="")) {
+                        (background_disparity_map!=NULL) ||
+                        (overhead_view) ||
+                        (virtual_camera_view) ||
+                        (detect_obstacles) ||
+                        (detect_objects) ||
+                        (point_cloud_filename!="")) {
                     memcpy((void*)(original_left_image->imageData),l_,ww*hh*3);
                 }
                 svs::histogram_equalise(
                     hist_image,
                     img, ww, hh);
-                }
             }
+        }
 
-            if ((show_features) || (show_matches)) {
-        #pragma omp parallel for
+        if ((show_features) || (show_matches)) {
+#pragma omp parallel for
             for (int cam = 1; cam >= 0; cam--) {
 
                 int calib_offset_x = 0;
@@ -1156,21 +1157,21 @@ int main(int argc, char* argv[]) {
                 }
 
                 no_of_feats = stereocam->get_features_vertical(
-                    rectified_frame_buf,
-                    inhibition_radius,
-                    minimum_response,
-                    calib_offset_x,
-                    calib_offset_y,
-                    0);
+                                  rectified_frame_buf,
+                                  inhibition_radius,
+                                  minimum_response,
+                                  calib_offset_x,
+                                  calib_offset_y,
+                                  0);
 
                 if ((cam == 0) || (show_features) || (show_lines)) {
                     no_of_feats_horizontal = stereocam->get_features_horizontal(
-                        rectified_frame_buf,
-                        inhibition_radius,
-                        minimum_response,
-                        calib_offset_x,
-                        calib_offset_y,
-                        0);
+                                                 rectified_frame_buf,
+                                                 inhibition_radius,
+                                                 minimum_response,
+                                                 calib_offset_x,
+                                                 calib_offset_y,
+                                                 0);
                 }
 
                 if (show_lines) {
@@ -1188,25 +1189,25 @@ int main(int argc, char* argv[]) {
                         6*320/SVS_MAX_IMAGE_WIDTH);
                     for (int line = 0; line < lines->line_vertical[0]; line++) {
                         drawing::drawLine(rectified_frame_buf,ww,hh,
-                            lines->line_vertical[line*5 + 1] - calib_offset_x,
-                            lines->line_vertical[line*5 + 2] - calib_offset_y,
-                            lines->line_vertical[line*5 + 3] - calib_offset_x,
-                            lines->line_vertical[line*5 + 4] - calib_offset_y,
-                            255,0,0,
-                            0,false);
+                                          lines->line_vertical[line*5 + 1] - calib_offset_x,
+                                          lines->line_vertical[line*5 + 2] - calib_offset_y,
+                                          lines->line_vertical[line*5 + 3] - calib_offset_x,
+                                          lines->line_vertical[line*5 + 4] - calib_offset_y,
+                                          255,0,0,
+                                          0,false);
                     }
                     for (int line = 0; line < lines->line_horizontal[0]; line++) {
                         drawing::drawLine(rectified_frame_buf,ww,hh,
-                            lines->line_horizontal[line*5 + 1] - calib_offset_x,
-                            lines->line_horizontal[line*5 + 2] - calib_offset_y,
-                            lines->line_horizontal[line*5 + 3] - calib_offset_x,
-                            lines->line_horizontal[line*5 + 4] - calib_offset_y,
-                            0,255,0,
-                            0,false);
+                                          lines->line_horizontal[line*5 + 1] - calib_offset_x,
+                                          lines->line_horizontal[line*5 + 2] - calib_offset_y,
+                                          lines->line_horizontal[line*5 + 3] - calib_offset_x,
+                                          lines->line_horizontal[line*5 + 4] - calib_offset_y,
+                                          0,255,0,
+                                          0,false);
                     }
                 }
 
-		//printf("cam %d:  %d\n", cam, no_of_feats);
+                //printf("cam %d:  %d\n", cam, no_of_feats);
 
                 /* display the features */
                 if (show_features) {
@@ -1262,233 +1263,233 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
-            }
+        }
 
-            /* set ground plane parameters */
-            lcam->enable_ground_priors = enable_ground_priors;
-            lcam->ground_y_percent = ground_y_percent;
+        /* set ground plane parameters */
+        lcam->enable_ground_priors = enable_ground_priors;
+        lcam->ground_y_percent = ground_y_percent;
 
-            matches = 0;
-            if (show_matches) {
-                matches = lcam->match(
-                    rcam,
-                    ideal_no_of_matches,
-                    max_disparity_percent,
-                    learnDesc,
-                    learnLuma,
-                    learnDisp,
-                    learnGrad,
-                    groundPrior,
-                    use_priors);
-            }
+        matches = 0;
+        if (show_matches) {
+            matches = lcam->match(
+                          rcam,
+                          ideal_no_of_matches,
+                          max_disparity_percent,
+                          learnDesc,
+                          learnLuma,
+                          learnDisp,
+                          learnGrad,
+                          groundPrior,
+                          use_priors);
+        }
 
-            if (show_regions) {
-                lcam->enable_segmentation = 1;
-                if (lcam->low_contrast != NULL) {
-                    lcam->segment(l_, matches);
-                    memset((void*)l_, '\0', ww*hh*3);
-                    int min_vol = ww*hh/500;
-                    int r=255, g=0, b=0;
-                    int i = 0;
-                    for (int y = 0; y < hh; y++) {
-                        for (int x = 0; x < ww; x++, i++) {
-                            int ID = lcam->low_contrast[i];
-                            if ((ID > 0) && (ID < lcam->no_of_regions )) {
-                                if ((int)lcam->region_volume[ID] > min_vol) {
-                                    int disp = lcam->region_disparity[ID*3];
-                                    int slope_x = (int)lcam->region_disparity[ID*3+1] - 127;
-                                    int slope_y = (int)lcam->region_disparity[ID*3+2] - 127;
-                                    if (disp != 255) {
-                                        if (!((slope_x == 0) && (slope_y == 0))) {
-                                            int region_tx = lcam->region_bounding_box[ID*4];
-                                            int region_ty = lcam->region_bounding_box[ID*4+1];
-                                            int region_bx = lcam->region_bounding_box[ID*4+2];
-                                            int region_by = lcam->region_bounding_box[ID*4+3];
-                                            int disp_horizontal = 0;
-                                            if (region_bx > region_tx) {
-                                                disp_horizontal =
-                                                    -(slope_x/2) + ((x - region_tx) * slope_x /
-                                                     (region_bx - region_tx));
-                                            }
-                                            int disp_vertical = 0;
-                                            if (region_by > region_ty) {
-                                                disp_vertical =
-                                                    -(slope_y/2) + ((y - region_ty) * slope_y /
-                                                    (region_by - region_ty));
-                                            }
-                                            disp += disp_horizontal + disp_vertical;
-                                            if (disp < 0) disp = 0;
+        if (show_regions) {
+            lcam->enable_segmentation = 1;
+            if (lcam->low_contrast != NULL) {
+                lcam->segment(l_, matches);
+                memset((void*)l_, '\0', ww*hh*3);
+                int min_vol = ww*hh/500;
+                int r=255, g=0, b=0;
+                int i = 0;
+                for (int y = 0; y < hh; y++) {
+                    for (int x = 0; x < ww; x++, i++) {
+                        int ID = lcam->low_contrast[i];
+                        if ((ID > 0) && (ID < lcam->no_of_regions )) {
+                            if ((int)lcam->region_volume[ID] > min_vol) {
+                                int disp = lcam->region_disparity[ID*3];
+                                int slope_x = (int)lcam->region_disparity[ID*3+1] - 127;
+                                int slope_y = (int)lcam->region_disparity[ID*3+2] - 127;
+                                if (disp != 255) {
+                                    if (!((slope_x == 0) && (slope_y == 0))) {
+                                        int region_tx = lcam->region_bounding_box[ID*4];
+                                        int region_ty = lcam->region_bounding_box[ID*4+1];
+                                        int region_bx = lcam->region_bounding_box[ID*4+2];
+                                        int region_by = lcam->region_bounding_box[ID*4+3];
+                                        int disp_horizontal = 0;
+                                        if (region_bx > region_tx) {
+                                            disp_horizontal =
+                                                -(slope_x/2) + ((x - region_tx) * slope_x /
+                                                                (region_bx - region_tx));
                                         }
-                                        r = 20+disp*5;
-                                        if (r > 255) r = 255;
-                                        g = r;
-                                        b = r;
-                                        l_[i*3] = b;
-                                        l_[i*3+1] = g;
-                                        l_[i*3+2] = r;
+                                        int disp_vertical = 0;
+                                        if (region_by > region_ty) {
+                                            disp_vertical =
+                                                -(slope_y/2) + ((y - region_ty) * slope_y /
+                                                                (region_by - region_ty));
+                                        }
+                                        disp += disp_horizontal + disp_vertical;
+                                        if (disp < 0) disp = 0;
                                     }
-                                    /*
-                                    r = lcam->region_colour[ID*3+2];
-                                    g = lcam->region_colour[ID*3+1];
-                                    b = lcam->region_colour[ID*3];
+                                    r = 20+disp*5;
+                                    if (r > 255) r = 255;
+                                    g = r;
+                                    b = r;
                                     l_[i*3] = b;
                                     l_[i*3+1] = g;
                                     l_[i*3+2] = r;
-                                    */
                                 }
+                                /*
+                                r = lcam->region_colour[ID*3+2];
+                                g = lcam->region_colour[ID*3+1];
+                                b = lcam->region_colour[ID*3];
+                                l_[i*3] = b;
+                                l_[i*3+1] = g;
+                                l_[i*3+2] = r;
+                                */
                             }
                         }
                     }
+                }
 
-			/*
-			for (int i = 0; i < lcam->no_of_regions; i++) {
-				if ((int)lcam->region_volume[i] > min_vol) {
-					drawing::drawCross(
-							l_, ww, hh,
-							(int)lcam->region_centre[i*2],
-							(int)lcam->region_centre[i*2+1],
-							4, 255,0,0, 1);
-				}
-			} */
+                /*
+                for (int i = 0; i < lcam->no_of_regions; i++) {
+                	if ((int)lcam->region_volume[i] > min_vol) {
+                		drawing::drawCross(
+                				l_, ww, hh,
+                				(int)lcam->region_centre[i*2],
+                				(int)lcam->region_centre[i*2+1],
+                				4, 255,0,0, 1);
+                	}
+                } */
 
-			if (lcam->region_history_index > -1) {
-				for (i = 0; i < lcam->prev_region_centre[lcam->region_history_index][0]; i++) {
-					int ctr = lcam->region_history_index;
-					int j0 = lcam->prev_region_centre[ctr][i*4+3];
-					int j = j0;
-					int k = lcam->prev_region_centre[ctr][i*4+4];
-					int prev_x = lcam->prev_region_centre[ctr][i*4+1];
-					int prev_y = lcam->prev_region_centre[ctr][i*4+2];
+                if (lcam->region_history_index > -1) {
+                    for (i = 0; i < lcam->prev_region_centre[lcam->region_history_index][0]; i++) {
+                        int ctr = lcam->region_history_index;
+                        int j0 = lcam->prev_region_centre[ctr][i*4+3];
+                        int j = j0;
+                        int k = lcam->prev_region_centre[ctr][i*4+4];
+                        int prev_x = lcam->prev_region_centre[ctr][i*4+1];
+                        int prev_y = lcam->prev_region_centre[ctr][i*4+2];
 
-					int n = 0;
-					while ((j != 65535) && (n < SVS_REGION_HISTORY-1)) {
-						int x = lcam->prev_region_centre[j][k*4+1];
-						int y = lcam->prev_region_centre[j][k*4+2];
-						int j2 = lcam->prev_region_centre[j][k*4+3];
-						k = lcam->prev_region_centre[j][k*4+4];
-						j = j2;
-						if (j == lcam->region_history_index) break;
-						drawing::drawLine(l_,ww,hh,prev_x,prev_y,x,y,0,255,0,1,false);
-						prev_x = x;
-						prev_y = y;
-						n++;
-					}
-				}
-			}
-		}
-	}
+                        int n = 0;
+                        while ((j != 65535) && (n < SVS_REGION_HISTORY-1)) {
+                            int x = lcam->prev_region_centre[j][k*4+1];
+                            int y = lcam->prev_region_centre[j][k*4+2];
+                            int j2 = lcam->prev_region_centre[j][k*4+3];
+                            k = lcam->prev_region_centre[j][k*4+4];
+                            j = j2;
+                            if (j == lcam->region_history_index) break;
+                            drawing::drawLine(l_,ww,hh,prev_x,prev_y,x,y,0,255,0,1,false);
+                            prev_x = x;
+                            prev_y = y;
+                            n++;
+                        }
+                    }
+                }
+            }
+        }
 
-	/* show disparity histogram */
-	if (show_histogram) {
-	    memset(disparity_histogram[0], 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
-	    memset(disparity_histogram[1], 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
-	    memset(disparity_histogram[2], 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
-	    memset(r_, 0, ww * hh * 3 * sizeof(unsigned char));
-	    int hist_max[3];
-	    hist_max[0] = 0;
-	    hist_max[1] = 0;
-	    hist_max[2] = 0;
+        /* show disparity histogram */
+        if (show_histogram) {
+            memset(disparity_histogram[0], 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
+            memset(disparity_histogram[1], 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
+            memset(disparity_histogram[2], 0, SVS_MAX_IMAGE_WIDTH * sizeof(int));
+            memset(r_, 0, ww * hh * 3 * sizeof(unsigned char));
+            int hist_max[3];
+            hist_max[0] = 0;
+            hist_max[1] = 0;
+            hist_max[2] = 0;
 
-		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
-			int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
-			disparity_histogram[2][disp]++;
-			if (x < ww/2)
-				disparity_histogram[0][disp]++;
-			else
-				disparity_histogram[1][disp]++;
-			if (disparity_histogram[0][disp] > hist_max[0]) hist_max[0] = disparity_histogram[0][disp];
-			if (disparity_histogram[1][disp] > hist_max[1]) hist_max[1] = disparity_histogram[1][disp];
-			if (disparity_histogram[2][disp] > hist_max[2]) hist_max[2] = disparity_histogram[2][disp];
-		}
-		int max_disparity_pixels = max_disparity_percent * ww / 100;
+            for (int i = 0; i < matches; i++) {
+                int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
+                int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
+                disparity_histogram[2][disp]++;
+                if (x < ww/2)
+                    disparity_histogram[0][disp]++;
+                else
+                    disparity_histogram[1][disp]++;
+                if (disparity_histogram[0][disp] > hist_max[0]) hist_max[0] = disparity_histogram[0][disp];
+                if (disparity_histogram[1][disp] > hist_max[1]) hist_max[1] = disparity_histogram[1][disp];
+                if (disparity_histogram[2][disp] > hist_max[2]) hist_max[2] = disparity_histogram[2][disp];
+            }
+            int max_disparity_pixels = max_disparity_percent * ww / 100;
 
-		int mass[3];
-		mass[0] = 0;
-		mass[1] = 0;
-		mass[2] = 0;
-		int disp2[3];
-		disp2[0] = 0;
-		disp2[1] = 0;
-		disp2[2] = 0;
-		int hist_thresh[3];
-		hist_thresh[0] = hist_max[0] / 4;
-		hist_thresh[1] = hist_max[1] / 4;
-		hist_thresh[2] = hist_max[2] / 4;
-		for (int d = 3; d < max_disparity_pixels-1; d++) {
-			for (int i = 0; i < 3; i++) {
-				if (disparity_histogram[i][d] > hist_thresh[i]) {
-					int m = disparity_histogram[i][d] + disparity_histogram[i][d-1] + disparity_histogram[i][d+1];
-					mass[i] += m;
-					disp2[i] += m * d;
-				}
-			}
-		}
-		for (int i = 0; i < 3; i++) {
-		    if (mass[i] > 0) disp2[i] /= mass[i];
-		}
+            int mass[3];
+            mass[0] = 0;
+            mass[1] = 0;
+            mass[2] = 0;
+            int disp2[3];
+            disp2[0] = 0;
+            disp2[1] = 0;
+            disp2[2] = 0;
+            int hist_thresh[3];
+            hist_thresh[0] = hist_max[0] / 4;
+            hist_thresh[1] = hist_max[1] / 4;
+            hist_thresh[2] = hist_max[2] / 4;
+            for (int d = 3; d < max_disparity_pixels-1; d++) {
+                for (int i = 0; i < 3; i++) {
+                    if (disparity_histogram[i][d] > hist_thresh[i]) {
+                        int m = disparity_histogram[i][d] + disparity_histogram[i][d-1] + disparity_histogram[i][d+1];
+                        mass[i] += m;
+                        disp2[i] += m * d;
+                    }
+                }
+            }
+            for (int i = 0; i < 3; i++) {
+                if (mass[i] > 0) disp2[i] /= mass[i];
+            }
 
-		int tx=0,ty=0,bx=0,by=0;
-		for (int i = 0; i < 3; i++) {
-			if (hist_max[i] > 0) {
-				switch(i) {
-					case 0: {
-						tx = 0;
-						ty = 0;
-						bx = ww/2;
-						by = hh/2;
-						break;
-					}
-					case 1: {
-						tx = ww/2;
-						ty = 0;
-						bx = ww;
-						by = hh/2;
-						break;
-					}
-					case 2: {
-						tx = 0;
-						ty = hh/2;
-						bx = ww;
-						by = hh;
-						break;
-					}
-				}
+            int tx=0,ty=0,bx=0,by=0;
+            for (int i = 0; i < 3; i++) {
+                if (hist_max[i] > 0) {
+                    switch(i) {
+                    case 0: {
+                        tx = 0;
+                        ty = 0;
+                        bx = ww/2;
+                        by = hh/2;
+                        break;
+                    }
+                    case 1: {
+                        tx = ww/2;
+                        ty = 0;
+                        bx = ww;
+                        by = hh/2;
+                        break;
+                    }
+                    case 2: {
+                        tx = 0;
+                        ty = hh/2;
+                        bx = ww;
+                        by = hh;
+                        break;
+                    }
+                    }
 
-				for (int x = tx; x < bx; x++) {
-					int disp = (x-tx) * max_disparity_pixels / (bx-tx);
-					int h2 = disparity_histogram[i][disp] * (by-ty) / hist_max[i];
-					for (int y = by-1; y > by-1-h2; y--) {
-						int n = ((y * ww) + x) * 3;
-						r_[n] = 255;
-						r_[n+1] = 255;
-						r_[n+2] = 255;
-					}
-				}
+                    for (int x = tx; x < bx; x++) {
+                        int disp = (x-tx) * max_disparity_pixels / (bx-tx);
+                        int h2 = disparity_histogram[i][disp] * (by-ty) / hist_max[i];
+                        for (int y = by-1; y > by-1-h2; y--) {
+                            int n = ((y * ww) + x) * 3;
+                            r_[n] = 255;
+                            r_[n+1] = 255;
+                            r_[n+2] = 255;
+                        }
+                    }
 
-				int xx = tx + (disp2[i] * (bx-tx) / max_disparity_pixels);
-				drawing::drawLine(r_, ww, hh, xx, ty, xx, by-1, 255,0,0,0,false);
-			}
-		}
+                    int xx = tx + (disp2[i] * (bx-tx) / max_disparity_pixels);
+                    drawing::drawLine(r_, ww, hh, xx, ty, xx, by-1, 255,0,0,0,false);
+                }
+            }
 
-		drawing::drawLine(r_, ww, hh, ww/2, 0, ww/2, hh/2, 0,255,0,1,false);
-		drawing::drawLine(r_, ww, hh, 0, hh/2, ww-1, hh/2, 0,255,0,1,false);
-	}
+            drawing::drawLine(r_, ww, hh, ww/2, 0, ww/2, hh/2, 0,255,0,1,false);
+            drawing::drawLine(r_, ww, hh, 0, hh/2, ww-1, hh/2, 0,255,0,1,false);
+        }
 
-	/* show disparity as spots */
-	if (show_matches) {
-		for (int i = 0; i < matches; i++) {
-			if ((lcam->svs_matches[i*5] > 0) &&
-			   (lcam->svs_matches[i*5+4] != 9999)) {
-			    int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
-			    int y = lcam->svs_matches[i*5 + 2];
-			    int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
-	            if (disp < ww/2) drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
-			}
-		}
-	}
+        /* show disparity as spots */
+        if (show_matches) {
+            for (int i = 0; i < matches; i++) {
+                if ((lcam->svs_matches[i*5] > 0) &&
+                        (lcam->svs_matches[i*5+4] != 9999)) {
+                    int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
+                    int y = lcam->svs_matches[i*5 + 2];
+                    int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
+                    if (disp < ww/2) drawing::drawBlendedSpot(l_, ww, hh, x, y, 1 + (disp/6), 0, 255, 0);
+                }
+            }
+        }
 
-	if (show_disparity_map) {
+        if (show_disparity_map) {
             elas_disparity_map(l_, r_, ww, hh, I1, I2, left_disparities, right_disparities, elas);
 
             if (learn_background_filename != "") {
@@ -1518,125 +1519,21 @@ int main(int argc, char* argv[]) {
             if (background_disparity_map != NULL) {
                 for (int i = 1; i < ww*(hh-1); i++) {
                     if ((left_disparities[i] < 1) || (background_disparity_map[i] < 1) ||
-                        (left_disparities[i]+left_disparities[i+1]+left_disparities[i+ww] < 
-                         (background_disparity_map[i]) * 3 *(100+min_disparity) / 100)) {
+                            (left_disparities[i]+left_disparities[i+1]+left_disparities[i+ww] <
+                             (background_disparity_map[i]) * 3 *(100+min_disparity) / 100)) {
                         left_disparities[i]=0;
                     }
                 }
             }
 
-            if ((virtual_camera_view) || (detect_obstacles) || (detect_objects)) {
-                // convert disparity map to 3D points
-                pointcloud::disparity_map_to_3d_points(
-                    left_disparities,ww,hh,
-                    camera_calibration->disparityToDepth,
-                    camera_calibration->pose,
-                    disparity_image, points_image);
-
-                if (buffer == NULL) {
-                    buffer = new unsigned char[ww * hh * 3];
-                }
-                if (histogram_equalisation) {
-                    memcpy((void*)buffer,(void*)(original_left_image->imageData),ww*hh*3);
-                }
-                else {
-                    memcpy((void*)buffer,(void*)l_,ww*hh*3);
-                }
-
-                if ((detect_obstacles) || (detect_objects)) {
-                    if (obstacle_map == NULL) {
-                        obstacle_map = new int[obstacle_map_dimension*obstacle_map_dimension];
-                    }
-                    pointcloud::obstacle_map(
-                        points_image,
-                        obstacle_map_dimension,
-                        obstacle_map_cell_size_mm,
-                        camera_calibration->pose,
-                        obstacle_map_relative_x_mm,
-                        obstacle_map_relative_y_mm,
-                        obstacle_map_threshold,
-                        tilt_angle_degrees,
-                        obstacle_map);
-
-                    if (detect_objects) {
-
-                        std::vector<std::vector<float> > objects;
-
-                        pointcloud::find_objects(
-                            object_format,
-                            buffer, points_image,
-                            obstacle_map_dimension,
-                            obstacle_map_cell_size_mm,
-                            camera_calibration->pose,
-                            obstacle_map_relative_x_mm, obstacle_map_relative_y_mm,
-                            obstacle_map_threshold,
-                            tilt_angle_degrees,
-                            obstacle_map,
-                            object_min_area_mm2,
-                            object_max_area_mm2,
-                            BGR,
-                            objects);
-
-                        if (save_mesh_filename!="") {
-                            if (skip_frames <= 0) {
-                                // save the object as a mesh model
-                                pointcloud::save_largest_object(save_mesh_filename,object_format,false,ww,hh,camera_calibration->pose,objects);
-                                printf("Saved %s\n", save_mesh_filename.c_str());
-                                break;
-                            }
-                        }
-                        //printf("Objects %d\n",(int)objects.size());
-                    }
-                }
-                else {
-                    if (save_mesh_filename!="") {
-                        if (skip_frames <= 0) {
-                            // save all points as a mesh model
-                            std::vector<float> points;
-                            pointcloud::export_points(
-                                object_format,
-                                buffer, points_image,
-                                camera_calibration->pose,
-                                tilt_angle_degrees,
-                                BGR, points, max_range_mm);
-
-                            if (object_format == POINT_CLOUD_FORMAT_X3D) {
-                                pointcloud::save_x3d(save_mesh_filename, ww,hh,camera_calibration->pose, points);
-                            }
-                            if (object_format == POINT_CLOUD_FORMAT_STL) {
-                                pointcloud::save_stl_ascii(save_mesh_filename, ww,hh,camera_calibration->pose, points);
-                            }
-                            printf("Saved %s\n", save_mesh_filename.c_str());
-                            break;
-                        }
-                    }
-                }
-
-                pointcloud::virtual_camera(
-                    buffer, points_image,
-                    camera_calibration->pose,
-                    camera_calibration->intrinsicCalibration_left,
-                    camera_calibration->distortion_left,
-                    max_range_mm,
-                    virtual_camera_depth,
-                    virtual_camera_rotation_matrix,
-                    virtual_camera_translation,
-                    virtual_camera_rotation_vector,
-                    virtual_camera_points,
-                    virtual_camera_image_points,
-                    view_point_cloud,
-                    l_);
-            }
-            else {
-                if (overhead_view) {
+            if (point_cloud_filename != "") {
+                if (skip_frames <= 0) {
                     // convert disparity map to 3D points
                     pointcloud::disparity_map_to_3d_points(
                         left_disparities,ww,hh,
                         camera_calibration->disparityToDepth,
                         camera_calibration->pose,
                         disparity_image, points_image);
-
-                    int max_height_mm = 2000;
 
                     if (buffer == NULL) {
                         buffer = new unsigned char[ww * hh * 3];
@@ -1648,118 +1545,269 @@ int main(int argc, char* argv[]) {
                         memcpy((void*)buffer,(void*)l_,ww*hh*3);
                     }
 
-                    pointcloud::show(
-                        points_image, left_disparities,
-                        buffer,
-                        camera_calibration->pose,
-                        max_range_mm, max_height_mm,
-                        2,
-                        ww,hh,l_);
-
-                    //pointcloud::save(l_,points_image,max_range_mm,camera_calibration->pose,point_cloud_filename);
-                    //break;
-/*
-                    grid->insert(0,0,0,
-                        (float*)points_image->imageData,ww,hh,l_);
-                    grid->show(ww,hh,l_,1);
-*/
+                    pointcloud::save(buffer,points_image,max_range_mm,camera_calibration->pose,point_cloud_filename);
+                    break;
                 }
-                else {
-                    int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+            }
+            else {
+                if ((virtual_camera_view) || (detect_obstacles) || (detect_objects)) {
+                    // convert disparity map to 3D points
+                    pointcloud::disparity_map_to_3d_points(
+                        left_disparities,ww,hh,
+                        camera_calibration->disparityToDepth,
+                        camera_calibration->pose,
+                        disparity_image, points_image);
 
-                    if (background_disparity_map != NULL) {
-                        // subtract a background disparity map
-                        if (histogram_equalisation) {
-                            memcpy((void*)l_,(void*)(original_left_image->imageData),ww*hh*3);
-                        }
-                        unsigned char * background_image_ = NULL;
-                        if (background_image != NULL) background_image_ = (unsigned char*)background_image->imageData;
-                        int i = 0, n;
-                        for (int y = 0; y < hh; y++) {
-                            for (int x = 0; x < ww; x++, i++) {
-                                if (left_disparities[i] == 0) {
-                                    if (background_image != NULL) {
-                                        int yy = y * background_image->height / hh;
-                                        int xx = x * background_image->width / ww;
-                                        n = ((yy*background_image->width) + xx)*3;
-                                        l_[i*3] = background_image_[n];
-                                        l_[i*3+1] = background_image_[n+1];
-                                        l_[i*3+2] = background_image_[n+2];
-                                    }
-                                    else {
-                                        l_[i*3] = 0;
-                                        l_[i*3+1] = 0;
-                                        l_[i*3+2] = 0;
-                                    }
-                                }
-                            }
-                        }                    
+                    if (buffer == NULL) {
+                        buffer = new unsigned char[ww * hh * 3];
+                    }
+                    if (histogram_equalisation) {
+                        memcpy((void*)buffer,(void*)(original_left_image->imageData),ww*hh*3);
                     }
                     else {
-                        if (background_image != NULL) {
-                            // use a background image with a disparity threshold
-                            unsigned char * background_image_ = (unsigned char*)background_image->imageData;
+                        memcpy((void*)buffer,(void*)l_,ww*hh*3);
+                    }
 
+                    if ((detect_obstacles) || (detect_objects)) {
+                        if (obstacle_map == NULL) {
+                            obstacle_map = new int[obstacle_map_dimension*obstacle_map_dimension];
+                        }
+                        pointcloud::obstacle_map(
+                            points_image,
+                            obstacle_map_dimension,
+                            obstacle_map_cell_size_mm,
+                            camera_calibration->pose,
+                            obstacle_map_relative_x_mm,
+                            obstacle_map_relative_y_mm,
+                            obstacle_map_threshold,
+                            tilt_angle_degrees,
+                            obstacle_map);
+
+                        if (detect_objects) {
+
+                            std::vector<std::vector<float> > objects;
+
+                            pointcloud::find_objects(
+                                object_format,
+                                buffer, points_image,
+                                obstacle_map_dimension,
+                                obstacle_map_cell_size_mm,
+                                camera_calibration->pose,
+                                obstacle_map_relative_x_mm, obstacle_map_relative_y_mm,
+                                obstacle_map_threshold,
+                                tilt_angle_degrees,
+                                obstacle_map,
+                                object_min_area_mm2,
+                                object_max_area_mm2,
+                                BGR,
+                                objects);
+
+                            if (save_mesh_filename!="") {
+                                if (skip_frames <= 0) {
+                                    // save the object as a mesh model
+                                    pointcloud::save_largest_object(save_mesh_filename,object_format,false,ww,hh,camera_calibration->pose,objects);
+                                    printf("Saved %s\n", save_mesh_filename.c_str());
+                                    break;
+                                }
+                            }
+                            //printf("Objects %d\n",(int)objects.size());
+                        }
+                    }
+                    else {
+                        if (save_mesh_filename!="") {
+                            if (skip_frames <= 0) {
+                                // save all points as a mesh model
+                                std::vector<float> points;
+                                pointcloud::export_points(
+                                    object_format,
+                                    buffer, points_image,
+                                    camera_calibration->pose,
+                                    tilt_angle_degrees,
+                                    BGR, points, max_range_mm);
+
+                                if (object_format == POINT_CLOUD_FORMAT_X3D) {
+                                    pointcloud::save_x3d(save_mesh_filename, ww,hh,camera_calibration->pose, points);
+                                }
+                                if (object_format == POINT_CLOUD_FORMAT_STL) {
+                                    pointcloud::save_stl_ascii(save_mesh_filename, ww,hh,camera_calibration->pose, points);
+                                }
+                                printf("Saved %s\n", save_mesh_filename.c_str());
+                                break;
+                            }
+                        }
+                    }
+
+                    pointcloud::virtual_camera(
+                        buffer, points_image,
+                        camera_calibration->pose,
+                        camera_calibration->intrinsicCalibration_left,
+                        camera_calibration->distortion_left,
+                        max_range_mm,
+                        virtual_camera_depth,
+                        virtual_camera_rotation_matrix,
+                        virtual_camera_translation,
+                        virtual_camera_rotation_vector,
+                        virtual_camera_points,
+                        virtual_camera_image_points,
+                        view_point_cloud,
+                        l_);
+                }
+                else {
+                    if (overhead_view) {
+                        // convert disparity map to 3D points
+                        pointcloud::disparity_map_to_3d_points(
+                            left_disparities,ww,hh,
+                            camera_calibration->disparityToDepth,
+                            camera_calibration->pose,
+                            disparity_image, points_image);
+
+                        int max_height_mm = 2000;
+
+                        if (buffer == NULL) {
+                            buffer = new unsigned char[ww * hh * 3];
+                        }
+                        if (histogram_equalisation) {
+                            memcpy((void*)buffer,(void*)(original_left_image->imageData),ww*hh*3);
+                        }
+                        else {
+                            memcpy((void*)buffer,(void*)l_,ww*hh*3);
+                        }
+
+                        pointcloud::show(
+                            points_image, left_disparities,
+                            buffer,
+                            camera_calibration->pose,
+                            max_range_mm, max_height_mm,
+                            2,
+                            ww,hh,l_);
+
+                        //pointcloud::save(l_,points_image,max_range_mm,ww,hh,camera_calibration->pose,point_cloud_filename);
+                        //break;
+                        /*
+                                            grid->insert(0,0,0,
+                                                (float*)points_image->imageData,ww,hh,l_);
+                                            grid->show(ww,hh,l_,1);
+                        */
+                    }
+                    else {
+                        int max_disparity_pixels = SVS_MAX_IMAGE_WIDTH * max_disparity_percent / 100;
+
+                        if (background_disparity_map != NULL) {
+                            // subtract a background disparity map
                             if (histogram_equalisation) {
                                 memcpy((void*)l_,(void*)(original_left_image->imageData),ww*hh*3);
                             }
-
+                            unsigned char * background_image_ = NULL;
+                            if (background_image != NULL) background_image_ = (unsigned char*)background_image->imageData;
                             int i = 0, n;
                             for (int y = 0; y < hh; y++) {
-                                int yy = y * background_image->height / hh;
                                 for (int x = 0; x < ww; x++, i++) {
-                                    if (left_disparities[i] <= min_disparity) {
-                                        int xx = x * background_image->width / ww;
-                                        n = ((yy*background_image->width) + xx)*3;
-                                        l_[i*3] = background_image_[n];
-                                        l_[i*3+1] = background_image_[n+1];
-                                        l_[i*3+2] = background_image_[n+2];
+                                    if (left_disparities[i] == 0) {
+                                        if (background_image != NULL) {
+                                            int yy = y * background_image->height / hh;
+                                            int xx = x * background_image->width / ww;
+                                            n = ((yy*background_image->width) + xx)*3;
+                                            l_[i*3] = background_image_[n];
+                                            l_[i*3+1] = background_image_[n+1];
+                                            l_[i*3+2] = background_image_[n+2];
+                                        }
+                                        else {
+                                            l_[i*3] = 0;
+                                            l_[i*3+1] = 0;
+                                            l_[i*3+2] = 0;
+                                        }
                                     }
                                 }
                             }
                         }
                         else {
-                            // show disparity map
-                            if (!colour_disparity_map) {
-                                // monochrome disparities
-                                float mult = 255.0f/max_disparity_pixels;
-                                for (int i = 0; i < ww*hh; i++) {
-                                    if (left_disparities[i] > min_disparity) {
-                                        l_[i*3] = (unsigned char)(left_disparities[i]*mult);
+                            if (background_image != NULL) {
+                                // use a background image with a disparity threshold
+                                unsigned char * background_image_ = (unsigned char*)background_image->imageData;
+
+                                if (histogram_equalisation) {
+                                    memcpy((void*)l_,(void*)(original_left_image->imageData),ww*hh*3);
+                                }
+
+                                int i = 0, n;
+                                for (int y = 0; y < hh; y++) {
+                                    int yy = y * background_image->height / hh;
+                                    for (int x = 0; x < ww; x++, i++) {
+                                        if (left_disparities[i] <= min_disparity) {
+                                            int xx = x * background_image->width / ww;
+                                            n = ((yy*background_image->width) + xx)*3;
+                                            l_[i*3] = background_image_[n];
+                                            l_[i*3+1] = background_image_[n+1];
+                                            l_[i*3+2] = background_image_[n+2];
+                                        }
                                     }
-                                    else {
-                                        l_[i*3]=0;
-                                    }
-                                    l_[i*3+1] = l_[i*3];
-                                    l_[i*3+2] = l_[i*3];
                                 }
                             }
                             else {
-                                // colour coded disparities
-                                for (int i = 0; i < ww*hh; i++) {
-                                    if (left_disparities[i] > min_disparity) {
-                                        float val = min(( *(((float*)left_disparities)+i) )*0.01f,1.0f);
-                                        if (val <= 0) {
-                                            l_[3*i+0] = 0; l_[3*i+1] = 0; l_[3*i+2] = 0;
-                                        } else {
-                                            float h2 = 6.0f * (1.0f - val);
-                                            unsigned char x  = (unsigned char)((1.0f - fabs(fmod(h2, 2.0f) - 1.0f))*255);
-                                            if (0 <= h2&&h2<1) {
-                                                l_[3*i+0] = 255;
-                                                l_[3*i+1] = x;
-                                                l_[3*i+2] = 0;
-                                            }
-                                            else if (1<=h2&&h2<2)  { l_[3*i+0] = x; l_[3*i+1] = 255; l_[3*i+2] = 0; }
-                                            else if (2<=h2&&h2<3)  { l_[3*i+0] = 0; l_[3*i+1] = 255; l_[3*i+2] = x; }
-                                            else if (3<=h2&&h2<4)  { l_[3*i+0] = 0; l_[3*i+1] = x; l_[3*i+2] = 255; }
-                                            else if (4<=h2&&h2<5)  { l_[3*i+0] = x; l_[3*i+1] = 0; l_[3*i+2] = 255; }
-                                            else if (5<=h2&&h2<=6) { l_[3*i+0] = 255; l_[3*i+1] = 0; l_[3*i+2] = x; }
+                                // show disparity map
+                                if (!colour_disparity_map) {
+                                    // monochrome disparities
+                                    float mult = 255.0f/max_disparity_pixels;
+                                    for (int i = 0; i < ww*hh; i++) {
+                                        if (left_disparities[i] > min_disparity) {
+                                            l_[i*3] = (unsigned char)(left_disparities[i]*mult);
                                         }
+                                        else {
+                                            l_[i*3]=0;
+                                        }
+                                        l_[i*3+1] = l_[i*3];
+                                        l_[i*3+2] = l_[i*3];
                                     }
-                                    else {
-                                        l_[3*i+0] = 0;
-                                        l_[3*i+1] = 0;
-                                        l_[3*i+2] = 0;
+                                }
+                                else {
+                                    // colour coded disparities
+                                    for (int i = 0; i < ww*hh; i++) {
+                                        if (left_disparities[i] > min_disparity) {
+                                            float val = min(( *(((float*)left_disparities)+i) )*0.01f,1.0f);
+                                            if (val <= 0) {
+                                                l_[3*i+0] = 0;
+                                                l_[3*i+1] = 0;
+                                                l_[3*i+2] = 0;
+                                            } else {
+                                                float h2 = 6.0f * (1.0f - val);
+                                                unsigned char x  = (unsigned char)((1.0f - fabs(fmod(h2, 2.0f) - 1.0f))*255);
+                                                if (0 <= h2&&h2<1) {
+                                                    l_[3*i+0] = 255;
+                                                    l_[3*i+1] = x;
+                                                    l_[3*i+2] = 0;
+                                                }
+                                                else if (1<=h2&&h2<2)  {
+                                                    l_[3*i+0] = x;
+                                                    l_[3*i+1] = 255;
+                                                    l_[3*i+2] = 0;
+                                                }
+                                                else if (2<=h2&&h2<3)  {
+                                                    l_[3*i+0] = 0;
+                                                    l_[3*i+1] = 255;
+                                                    l_[3*i+2] = x;
+                                                }
+                                                else if (3<=h2&&h2<4)  {
+                                                    l_[3*i+0] = 0;
+                                                    l_[3*i+1] = x;
+                                                    l_[3*i+2] = 255;
+                                                }
+                                                else if (4<=h2&&h2<5)  {
+                                                    l_[3*i+0] = x;
+                                                    l_[3*i+1] = 0;
+                                                    l_[3*i+2] = 255;
+                                                }
+                                                else if (5<=h2&&h2<=6) {
+                                                    l_[3*i+0] = 255;
+                                                    l_[3*i+1] = 0;
+                                                    l_[3*i+2] = x;
+                                                }
+                                            }
+                                        }
+                                        else {
+                                            l_[3*i+0] = 0;
+                                            l_[3*i+1] = 0;
+                                            l_[3*i+2] = 0;
+                                        }
                                     }
                                 }
                             }
@@ -1769,180 +1817,180 @@ int main(int argc, char* argv[]) {
             }
         }
 
-	/* show depth map */
-	if (show_depthmap) {
-		if (depthmap_buffer == NULL) {
-			depthmap_buffer = new unsigned char[ww*hh*3];
-			memset(depthmap_buffer, 0, ww*hh*3*sizeof(unsigned char));
-		}
-		memset(l_, 0, ww*hh*3*sizeof(unsigned char));
-		if (matches == 0) matches = prev_matches;
-		for (int i = 0; i < matches; i++) {
-			int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
-			int y = lcam->svs_matches[i*5 + 2];
-			int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
-			int max_disparity_pixels = max_disparity_percent * ww / 100;
-			int disp_intensity = 50 + (disp * 300 / max_disparity_pixels);
-			if (disp_intensity > 255) disp_intensity = 255;
-			int radius = 10 + (disp/8);
-			if (use_priors != 0) {
-			    int n = (y*ww+x)*3;
-			    int disp_intensity2 = disp_intensity;
-			    disp_intensity = (disp_intensity + depthmap_buffer[n]) / 2;
-		        drawing::drawBlendedSpot(depthmap_buffer, ww, hh, x, y, radius, disp_intensity2, disp_intensity2, disp_intensity2);
-			}
-		    drawing::drawBlendedSpot(l_, ww, hh, x, y, radius, disp_intensity, disp_intensity, disp_intensity);
-		}
-		prev_matches = matches;
-	}
+        /* show depth map */
+        if (show_depthmap) {
+            if (depthmap_buffer == NULL) {
+                depthmap_buffer = new unsigned char[ww*hh*3];
+                memset(depthmap_buffer, 0, ww*hh*3*sizeof(unsigned char));
+            }
+            memset(l_, 0, ww*hh*3*sizeof(unsigned char));
+            if (matches == 0) matches = prev_matches;
+            for (int i = 0; i < matches; i++) {
+                int x = lcam->svs_matches[i*5 + 1]/SVS_SUB_PIXEL;
+                int y = lcam->svs_matches[i*5 + 2];
+                int disp = lcam->svs_matches[i*5 + 3]/SVS_SUB_PIXEL;
+                int max_disparity_pixels = max_disparity_percent * ww / 100;
+                int disp_intensity = 50 + (disp * 300 / max_disparity_pixels);
+                if (disp_intensity > 255) disp_intensity = 255;
+                int radius = 10 + (disp/8);
+                if (use_priors != 0) {
+                    int n = (y*ww+x)*3;
+                    int disp_intensity2 = disp_intensity;
+                    disp_intensity = (disp_intensity + depthmap_buffer[n]) / 2;
+                    drawing::drawBlendedSpot(depthmap_buffer, ww, hh, x, y, radius, disp_intensity2, disp_intensity2, disp_intensity2);
+                }
+                drawing::drawBlendedSpot(l_, ww, hh, x, y, radius, disp_intensity, disp_intensity, disp_intensity);
+            }
+            prev_matches = matches;
+        }
 
-	if (show_anaglyph) {
-		int n = 0;
-		int max = (ww * hh * 3) - 3;
-		for (int y = 0; y < hh; y++) {
-			int y2 = y + calibration_offset_y;
-			for (int x = 0; x < ww; x++, n += 3) {
-				int x2 = x + calibration_offset_x;
-				int n2 = ((y2 * ww) + x2) * 3;
-				if ((n2 > -1) && (n2 < max)) {
-					l_[n] = 0;
-					l_[n+1] = l_[n+2];
-					l_[n+2] = r_[n2+2];
-				}
-			}
-		}
-	}
+        if (show_anaglyph) {
+            int n = 0;
+            int max = (ww * hh * 3) - 3;
+            for (int y = 0; y < hh; y++) {
+                int y2 = y + calibration_offset_y;
+                for (int x = 0; x < ww; x++, n += 3) {
+                    int x2 = x + calibration_offset_x;
+                    int n2 = ((y2 * ww) + x2) * 3;
+                    if ((n2 > -1) && (n2 < max)) {
+                        l_[n] = 0;
+                        l_[n+1] = l_[n+2];
+                        l_[n+2] = r_[n2+2];
+                    }
+                }
+            }
+        }
 
-	/* log stereo matches */
-	if ((log_stereo_matches_filename != "")) {
-		if (lcam->log_matches(log_stereo_matches_filename, l_, matches, true)) {
-		    printf("%d stereo matches logged to %s\n", matches, log_stereo_matches_filename.c_str());
-		}
-	}
+        /* log stereo matches */
+        if ((log_stereo_matches_filename != "")) {
+            if (lcam->log_matches(log_stereo_matches_filename, l_, matches, true)) {
+                printf("%d stereo matches logged to %s\n", matches, log_stereo_matches_filename.c_str());
+            }
+        }
 
-	if (skip_frames == 0) {
+        if (skip_frames == 0) {
 
-		if (save_period_sec > 0) {
-			char filename[256];
-			sprintf((char*)filename,"stereo_%d_0.jpg", image_index);
-			cvSaveImage(filename, l);
-			sprintf((char*)filename,"stereo_%d_1.jpg", image_index);
-			if ((!show_matches) &&
-				(!show_FAST) &&
-				(!show_depthmap) &&
-				(!show_anaglyph) &&
-				(!show_disparity_map))
-				cvSaveImage(filename, r);
-			image_index++;
-			sleep(save_period_sec);
-		}
+            if (save_period_sec > 0) {
+                char filename[256];
+                sprintf((char*)filename,"stereo_%d_0.jpg", image_index);
+                cvSaveImage(filename, l);
+                sprintf((char*)filename,"stereo_%d_1.jpg", image_index);
+                if ((!show_matches) &&
+                        (!show_FAST) &&
+                        (!show_depthmap) &&
+                        (!show_anaglyph) &&
+                        (!show_disparity_map))
+                    cvSaveImage(filename, r);
+                image_index++;
+                sleep(save_period_sec);
+            }
 
-		/* save left and right images to file, then quit */
-		if (save_images) {
-			std::string filename = save_filename + "0.jpg";
-			cvSaveImage(filename.c_str(), l);
-			filename = save_filename + "1.jpg";
-			if ((!show_matches) &&
-				(!show_FAST) &&
-				(!show_depthmap) &&
-				(!show_anaglyph) &&
-				(!show_disparity_map))
-				cvSaveImage(filename.c_str(), r);
+            /* save left and right images to file, then quit */
+            if (save_images) {
+                std::string filename = save_filename + "0.jpg";
+                cvSaveImage(filename.c_str(), l);
+                filename = save_filename + "1.jpg";
+                if ((!show_matches) &&
+                        (!show_FAST) &&
+                        (!show_depthmap) &&
+                        (!show_anaglyph) &&
+                        (!show_disparity_map))
+                    cvSaveImage(filename.c_str(), r);
 
-			/* save stereo matches */
-			if ((stereo_matches_filename != "") && (!show_FAST) &&
-			    ((skip_frames == 0) || (matches > 5))) {
-				lcam->save_matches(stereo_matches_filename, l_, matches, true);
-				printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
-			}
+                /* save stereo matches */
+                if ((stereo_matches_filename != "") && (!show_FAST) &&
+                        ((skip_frames == 0) || (matches > 5))) {
+                    lcam->save_matches(stereo_matches_filename, l_, matches, true);
+                    printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
+                }
 
-			break;
-		}
-	}
+                break;
+            }
+        }
 
-	/* save stereo matches to a file, then quit */
-	if ((stereo_matches_filename != "") && (!save_images) && (!show_FAST) &&
-	    ((skip_frames == 0) || (matches > 5))) {
-		lcam->save_matches(stereo_matches_filename, l_, matches, false);
-		printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
-		break;
-	}
+        /* save stereo matches to a file, then quit */
+        if ((stereo_matches_filename != "") && (!save_images) && (!show_FAST) &&
+                ((skip_frames == 0) || (matches > 5))) {
+            lcam->save_matches(stereo_matches_filename, l_, matches, false);
+            printf("%d stereo matches saved to %s\n", matches, stereo_matches_filename.c_str());
+            break;
+        }
 
-	//motion->update(l_,ww,hh);
-	//motion->show(l_,ww,hh);
+        //motion->update(l_,ww,hh);
+        //motion->show(l_,ww,hh);
 
-	if (show_FAST) {
-		/* load previous matches from file */
-		if (stereo_matches_input_filename != "") {
-			corners_left->load_matches(stereo_matches_input_filename, true);
-			stereo_matches_input_filename = "";
-		}
+        if (show_FAST) {
+            /* load previous matches from file */
+            if (stereo_matches_input_filename != "") {
+                corners_left->load_matches(stereo_matches_input_filename, true);
+                stereo_matches_input_filename = "";
+            }
 
-		/* locate corner features in the left image */
-		corners_left->update(l_,ww,hh, desired_corner_features,1);
+            /* locate corner features in the left image */
+            corners_left->update(l_,ww,hh, desired_corner_features,1);
 
-		/* assign disparity values to corner features */
-		corners_left->match_interocular(
-			ww, hh,
-			matches, lcam->svs_matches);
+            /* assign disparity values to corner features */
+            corners_left->match_interocular(
+                ww, hh,
+                matches, lcam->svs_matches);
 
-		/* save stereo matches to a file, then quit */
-		if ((stereo_matches_filename != "") && (!save_images) &&
-			((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
-			/* save the matches */
-			corners_left->save_matches(stereo_matches_filename, l_, ww, true);
-			break;
-		}
+            /* save stereo matches to a file, then quit */
+            if ((stereo_matches_filename != "") && (!save_images) &&
+                    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
+                /* save the matches */
+                corners_left->save_matches(stereo_matches_filename, l_, ww, true);
+                break;
+            }
 
-		/* save stereo matches to a file, then quit */
-		if ((descriptors_filename != "") && (!save_images) &&
-			((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
-			if (corners_left->save_descriptors(descriptors_filename, l_, ww, hh) > 40) {
-			    break;
-			}
-		}
+            /* save stereo matches to a file, then quit */
+            if ((descriptors_filename != "") && (!save_images) &&
+                    ((skip_frames == 0) || (corners_left->get_no_of_disparities() > 50))) {
+                if (corners_left->save_descriptors(descriptors_filename, l_, ww, hh) > 40) {
+                    break;
+                }
+            }
 
-		corners_left->show(l_,ww,hh,1);
-	}
+            corners_left->show(l_,ww,hh,1);
+        }
 
 #ifdef GSTREAMER
-    /*
-     * The streaming bit - seems a bit hacky, someone else can try
-     * and convert an IPLImage directly to something GStreamer can handle.
-     * My bitbanging abilities just aren't up to the task.
-     */
-    if (stream) {
-	    CvMat* l_buf;
-	    l_buf = cvEncodeImage(".jpg", l);
+        /*
+         * The streaming bit - seems a bit hacky, someone else can try
+         * and convert an IPLImage directly to something GStreamer can handle.
+         * My bitbanging abilities just aren't up to the task.
+         */
+        if (stream) {
+            CvMat* l_buf;
+            l_buf = cvEncodeImage(".jpg", l);
 
-	    l_app_buffer = gst_app_buffer_new( l_buf->data.ptr, l_buf->step, NULL, l_buf->data.ptr );
-	    g_signal_emit_by_name( l_source, "push-buffer", l_app_buffer, &ret );
+            l_app_buffer = gst_app_buffer_new( l_buf->data.ptr, l_buf->step, NULL, l_buf->data.ptr );
+            g_signal_emit_by_name( l_source, "push-buffer", l_app_buffer, &ret );
 
-	    if ((!show_matches) &&
-	    	(!show_FAST) &&
-	    	(!show_depthmap) &&
-	    	(!show_anaglyph) &&
-		(!show_disparity_map)) {
-		    CvMat* r_buf;
-		    r_buf = cvEncodeImage(".jpg", r);
+            if ((!show_matches) &&
+                    (!show_FAST) &&
+                    (!show_depthmap) &&
+                    (!show_anaglyph) &&
+                    (!show_disparity_map)) {
+                CvMat* r_buf;
+                r_buf = cvEncodeImage(".jpg", r);
 
-		    r_app_buffer = gst_app_buffer_new( r_buf->data.ptr, r_buf->step, NULL, r_buf->data.ptr );
-		    g_signal_emit_by_name( r_source, "push-buffer", r_app_buffer, &ret );
-	    }
-    }
+                r_app_buffer = gst_app_buffer_new( r_buf->data.ptr, r_buf->step, NULL, r_buf->data.ptr );
+                g_signal_emit_by_name( r_source, "push-buffer", r_app_buffer, &ret );
+            }
+        }
 #endif
 
-	/* display the left and right images */
-	if ((!save_images) && (!headless) && (stereo_matches_filename == "")) {
-	    cvShowImage(left_image_title.c_str(), l);
-	    if ((!show_matches) &&
-	    	(!show_FAST) &&
-	    	(!show_depthmap) &&
-	    	(!show_anaglyph) &&
-		(!show_disparity_map)) {
-		    cvShowImage(right_image_title.c_str(), r);
-	    }
-	}
+        /* display the left and right images */
+        if ((!save_images) && (!headless) && (stereo_matches_filename == "")) {
+            cvShowImage(left_image_title.c_str(), l);
+            if ((!show_matches) &&
+                    (!show_FAST) &&
+                    (!show_depthmap) &&
+                    (!show_anaglyph) &&
+                    (!show_disparity_map)) {
+                cvShowImage(right_image_title.c_str(), r);
+            }
+        }
 
         skip_frames--;
         if (skip_frames < 0) skip_frames = 0;
@@ -1970,14 +2018,14 @@ int main(int argc, char* argv[]) {
 
     /* destroy the left and right images */
     if ((!save_images) &&
-        (stereo_matches_filename == "")) {
+            (stereo_matches_filename == "")) {
 
         cvDestroyWindow(left_image_title.c_str());
         if ((!show_matches) &&
-            (!show_FAST) &&
-            (!show_depthmap) &&
-            (!show_anaglyph) &&
-            (!show_disparity_map)) {
+                (!show_FAST) &&
+                (!show_depthmap) &&
+                (!show_anaglyph) &&
+                (!show_disparity_map)) {
             cvDestroyWindow(right_image_title.c_str());
         }
     }
