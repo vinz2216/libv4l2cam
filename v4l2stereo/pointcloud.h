@@ -36,6 +36,10 @@
 
 using namespace std;
 
+#define POINT_CLOUD_X_AXIS		0
+#define POINT_CLOUD_Y_AXIS		2
+#define POINT_CLOUD_Z_AXIS		1
+
 #define POINT_CLOUD_FORMAT_POINTS	0
 #define POINT_CLOUD_FORMAT_STL		1
 #define POINT_CLOUD_FORMAT_X3D		2
@@ -165,23 +169,32 @@ public:
 
     static void save_x3d(
         std::string filename,
-        std::string header,
+        int image_width,
+        int image_height,
+        CvMat * pose,
         std::vector<float> &facets);
 
     static void save_stl_binary(
         std::string filename,
-        std::string header,
+        int image_width,
+        int image_height,
+        CvMat * pose,
         std::vector<float> &facets);
 
     static void save_stl_ascii(
         std::string filename,
-        std::string header,
+        int image_width,
+        int image_height,
+        CvMat * pose,
         std::vector<float> &facets);
 
     static void save_largest_object(
         std::string filename,
         int format,
         bool binary,
+        int image_width,
+        int image_height,
+        CvMat * pose,
         std::vector<std::vector<float> > &objects);
 
     static void export_points(

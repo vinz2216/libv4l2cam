@@ -501,23 +501,20 @@ int pointcloud::get_object_id(
     float &y2,
     float &z2)
 {
-    const int x_axis = 0;
-    const int y_axis = 2;
-    const int z_axis = 1;
     int id = 0;
     int i = y*width + x;
 
-    if ((points_image_data[i*3+x_axis]==0) &&
-        (points_image_data[i*3+y_axis]==0) &&
-        (points_image_data[i*3+z_axis]==0)) return 0;
+    if ((points_image_data[i*3+POINT_CLOUD_X_AXIS]==0) &&
+        (points_image_data[i*3+POINT_CLOUD_Y_AXIS]==0) &&
+        (points_image_data[i*3+POINT_CLOUD_Z_AXIS]==0)) return 0;
 
-    if ((std::isnan(points_image_data[i*3+x_axis])) ||
-        (std::isnan(points_image_data[i*3+y_axis])) ||
-        (std::isnan(points_image_data[i*3+z_axis]))) return 0;
+    if ((std::isnan(points_image_data[i*3+POINT_CLOUD_X_AXIS])) ||
+        (std::isnan(points_image_data[i*3+POINT_CLOUD_Y_AXIS])) ||
+        (std::isnan(points_image_data[i*3+POINT_CLOUD_Z_AXIS]))) return 0;
 
-    float dx = points_image_data[i*3+x_axis] - pose_x;
-    float dy = points_image_data[i*3+y_axis] - pose_y;
-    float dz = points_image_data[i*3+z_axis] - pose_z;
+    float dx = points_image_data[i*3+POINT_CLOUD_X_AXIS] - pose_x;
+    float dy = points_image_data[i*3+POINT_CLOUD_Y_AXIS] - pose_y;
+    float dz = points_image_data[i*3+POINT_CLOUD_Z_AXIS] - pose_z;
             
     x2 = dx;
     y2 = cos_tilt*dy - sin_tilt*dz;
@@ -553,9 +550,6 @@ void pointcloud::find_objects(
     bool BGR,
     std::vector<std::vector<float> > &objects)
 {
-    const int x_axis = 0;
-    const int y_axis = 2;
-    const int z_axis = 1;
     for (int i = 0; i < map_dimension*map_dimension; i++) {
         if (map[i] < threshold) map[i]=0;
     }
@@ -588,9 +582,9 @@ void pointcloud::find_objects(
     }
 
     float * points_image_data = (float*)points_image->imageData;
-    float pose_x = (float)cvmGet(pose,x_axis,3);
-    float pose_y = (float)cvmGet(pose,y_axis,3);
-    float pose_z = (float)cvmGet(pose,z_axis,3);
+    float pose_x = (float)cvmGet(pose,POINT_CLOUD_X_AXIS,3);
+    float pose_y = (float)cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
+    float pose_z = (float)cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
     float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
     float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
     int centre = map_dimension/2;
@@ -743,14 +737,10 @@ void pointcloud::export_points(
     std::vector<float> &points,
     int max_range_mm)
 {
-    const int x_axis = 0;
-    const int y_axis = 2;
-    const int z_axis = 1;
-
     float * points_image_data = (float*)points_image->imageData;
-    float pose_x = (float)cvmGet(pose,x_axis,3);
-    float pose_y = (float)cvmGet(pose,y_axis,3);
-    float pose_z = (float)cvmGet(pose,z_axis,3);
+    float pose_x = (float)cvmGet(pose,POINT_CLOUD_X_AXIS,3);
+    float pose_y = (float)cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
+    float pose_z = (float)cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
     float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
     float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
     int w = points_image->width;
@@ -761,13 +751,13 @@ void pointcloud::export_points(
         for (int x = 1; x < w-1; x++) {
             int i = y*w + x;
 
-            if (points_image_data[i*3+x_axis] +
-                points_image_data[i*3+y_axis] +
-                points_image_data[i*3+z_axis] != 0) {
+            if (points_image_data[i*3+POINT_CLOUD_X_AXIS] +
+                points_image_data[i*3+POINT_CLOUD_Y_AXIS] +
+                points_image_data[i*3+POINT_CLOUD_Z_AXIS] != 0) {
 
-                dx = points_image_data[i*3+x_axis] - pose_x;
-                dy = points_image_data[i*3+y_axis] - pose_y;
-                dz = points_image_data[i*3+z_axis] - pose_z;
+                dx = points_image_data[i*3+POINT_CLOUD_X_AXIS] - pose_x;
+                dy = points_image_data[i*3+POINT_CLOUD_Y_AXIS] - pose_y;
+                dz = points_image_data[i*3+POINT_CLOUD_Z_AXIS] - pose_z;
 
                 float range_mm2 = dx*dx+dy*dy+dz*dz;
                 if (range_mm2 < max_range_mm2) {
@@ -788,12 +778,12 @@ void pointcloud::export_points(
                         if (prev_x == x-1) {
 
                             int i2 = (y-1)*w + x;
-                            if (points_image_data[i2*3+x_axis] +
-                                points_image_data[i2*3+y_axis] +
-                                points_image_data[i2*3+z_axis] != 0) {
-                                dx = points_image_data[i2*3+x_axis] - pose_x;
-                                dy = points_image_data[i2*3+y_axis] - pose_y;
-                                dz = points_image_data[i2*3+z_axis] - pose_z;
+                            if (points_image_data[i2*3+POINT_CLOUD_X_AXIS] +
+                                points_image_data[i2*3+POINT_CLOUD_Y_AXIS] +
+                                points_image_data[i2*3+POINT_CLOUD_Z_AXIS] != 0) {
+                                dx = points_image_data[i2*3+POINT_CLOUD_X_AXIS] - pose_x;
+                                dy = points_image_data[i2*3+POINT_CLOUD_Y_AXIS] - pose_y;
+                                dz = points_image_data[i2*3+POINT_CLOUD_Z_AXIS] - pose_z;
                                 float range_mm2 = dx*dx+dy*dy+dz*dz;
                                 if (range_mm2 < max_range_mm2) {
                                     x5 = dx + pose_x;
@@ -801,12 +791,12 @@ void pointcloud::export_points(
                                     z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
                                     int i3 = ((y-1)*w) + x - 1;
-                                    if (points_image_data[i3*3+x_axis] +
-                                        points_image_data[i3*3+y_axis] +
-                                        points_image_data[i3*3+z_axis] != 0) {
-                                        dx = points_image_data[i3*3+x_axis] - pose_x;
-                                        dy = points_image_data[i3*3+y_axis] - pose_y;
-                                        dz = points_image_data[i3*3+z_axis] - pose_z;
+                                    if (points_image_data[i3*3+POINT_CLOUD_X_AXIS] +
+                                        points_image_data[i3*3+POINT_CLOUD_Y_AXIS] +
+                                        points_image_data[i3*3+POINT_CLOUD_Z_AXIS] != 0) {
+                                        dx = points_image_data[i3*3+POINT_CLOUD_X_AXIS] - pose_x;
+                                        dy = points_image_data[i3*3+POINT_CLOUD_Y_AXIS] - pose_y;
+                                        dz = points_image_data[i3*3+POINT_CLOUD_Z_AXIS] - pose_z;
                                         float range_mm2 = dx*dx+dy*dy+dz*dz;
                                         if (range_mm2 < max_range_mm2) {
                                             x4 = dx + pose_x;
@@ -849,12 +839,12 @@ void pointcloud::export_points(
                     if (format == POINT_CLOUD_FORMAT_X3D) {
                         if (prev_x == x-1) {
                             int i2 = (y-1)*w + x;
-                            if (points_image_data[i2*3+x_axis] +
-                                points_image_data[i2*3+y_axis] +
-                                points_image_data[i2*3+z_axis] != 0) {
-                                dx = points_image_data[i2*3+x_axis] - pose_x;
-                                dy = points_image_data[i2*3+y_axis] - pose_y;
-                                dz = points_image_data[i2*3+z_axis] - pose_z;
+                            if (points_image_data[i2*3+POINT_CLOUD_X_AXIS] +
+                                points_image_data[i2*3+POINT_CLOUD_Y_AXIS] +
+                                points_image_data[i2*3+POINT_CLOUD_Z_AXIS] != 0) {
+                                dx = points_image_data[i2*3+POINT_CLOUD_X_AXIS] - pose_x;
+                                dy = points_image_data[i2*3+POINT_CLOUD_Y_AXIS] - pose_y;
+                                dz = points_image_data[i2*3+POINT_CLOUD_Z_AXIS] - pose_z;
                                 float range_mm2 = dx*dx+dy*dy+dz*dz;
                                 if (range_mm2 < max_range_mm2) {
                                     x5 = dx + pose_x;
@@ -862,12 +852,12 @@ void pointcloud::export_points(
                                     z5 = (sin_tilt*dy + cos_tilt*dz) + pose_z;
 
                                     int i3 = ((y-1)*w) + x - 1;
-                                    if (points_image_data[i3*3+x_axis] +
-                                        points_image_data[i3*3+y_axis] +
-                                        points_image_data[i3*3+z_axis] != 0) {
-                                        dx = points_image_data[i3*3+x_axis] - pose_x;
-                                        dy = points_image_data[i3*3+y_axis] - pose_y;
-                                        dz = points_image_data[i3*3+z_axis] - pose_z;
+                                    if (points_image_data[i3*3+POINT_CLOUD_X_AXIS] +
+                                        points_image_data[i3*3+POINT_CLOUD_Y_AXIS] +
+                                        points_image_data[i3*3+POINT_CLOUD_Z_AXIS] != 0) {
+                                        dx = points_image_data[i3*3+POINT_CLOUD_X_AXIS] - pose_x;
+                                        dy = points_image_data[i3*3+POINT_CLOUD_Y_AXIS] - pose_y;
+                                        dz = points_image_data[i3*3+POINT_CLOUD_Z_AXIS] - pose_z;
                                         float range_mm2 = dx*dx+dy*dy+dz*dz;
                                         if (range_mm2 < max_range_mm2) {
                                             x4 = dx + pose_x;
@@ -921,16 +911,13 @@ void pointcloud::obstacle_map(
     float tilt_degrees,
     int * map)
 {
-    const int x_axis = 0;
-    const int y_axis = 2;
-    const int z_axis = 1;
     int max_range_mm = map_dimension * map_cell_size_mm;
     int centre = map_dimension/2;
     float * points_image_data = (float*)points_image->imageData;
     memset((void*)map,'\0',map_dimension*map_dimension*sizeof(int));
-    float pose_x = (float)cvmGet(pose,x_axis,3);
-    float pose_y = (float)cvmGet(pose,y_axis,3);
-    float pose_z = (float)cvmGet(pose,z_axis,3);
+    float pose_x = (float)cvmGet(pose,POINT_CLOUD_X_AXIS,3);
+    float pose_y = (float)cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
+    float pose_z = (float)cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
     float mult = map_dimension / (float)max_range_mm;
     float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
     float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
@@ -940,9 +927,9 @@ void pointcloud::obstacle_map(
         for (int x = 1; x < w-1; x++) {            
             int i = y*w + x;
 
-            float dx = points_image_data[i*3+x_axis] - pose_x;
-            float dy = points_image_data[i*3+y_axis] - pose_y;
-            float dz = points_image_data[i*3+z_axis] - pose_z;
+            float dx = points_image_data[i*3+POINT_CLOUD_X_AXIS] - pose_x;
+            float dy = points_image_data[i*3+POINT_CLOUD_Y_AXIS] - pose_y;
+            float dz = points_image_data[i*3+POINT_CLOUD_Z_AXIS] - pose_z;
             
             float x2 = dx;
             float y2 = cos_tilt*dy - sin_tilt*dz;
@@ -972,9 +959,9 @@ void pointcloud::obstacle_map(
         for (int x = 1; x < w-1; x++) {
             int i = y*w + x;
 
-            float dx = points_image_data[i*3+x_axis] - pose_x;
-            float dy = points_image_data[i*3+y_axis] - pose_y;
-            float dz = points_image_data[i*3+z_axis] - pose_z;
+            float dx = points_image_data[i*3+POINT_CLOUD_X_AXIS] - pose_x;
+            float dy = points_image_data[i*3+POINT_CLOUD_Y_AXIS] - pose_y;
+            float dz = points_image_data[i*3+POINT_CLOUD_Z_AXIS] - pose_z;
             
             float x2 = dx;
             float y2 = cos_tilt*dy - sin_tilt*dz;
@@ -1030,7 +1017,9 @@ void pointcloud::surface_normal(
 
 void pointcloud::save_stl_binary(
     std::string filename,
-    std::string header,
+    int image_width,
+    int image_height,
+    CvMat * pose,
     std::vector<float> &facets)
 {
     const int elements = 13;
@@ -1038,9 +1027,24 @@ void pointcloud::save_stl_binary(
     if (fp==NULL) return;
     unsigned int max = (unsigned int)(facets.size()/elements);
 
+    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
+        }
+    }
+    cvRodrigues2(rotation_matrix, rotation_vector);
+
     char buffer[80];
-    sprintf((char*)buffer,"%s\n",header.c_str());
+    sprintf((char*)buffer,"%dx%d %f %f %f %f %f %f\n",
+        image_width, image_height,
+        cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3),
+        cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0));
+
     fwrite(buffer,1,80,fp);
+    cvReleaseMat(&rotation_matrix);
+    cvReleaseMat(&rotation_vector);
 
     fwrite((const void*)&max,sizeof(unsigned int),1,fp);
 
@@ -1117,7 +1121,9 @@ void pointcloud::save_stl_binary(
 
 void pointcloud::save_x3d(
     std::string filename,
-    std::string header,
+    int image_width,
+    int image_height,
+    CvMat * pose,
     std::vector<float> &facets)
 {
     const int elements = 15;
@@ -1130,7 +1136,24 @@ void pointcloud::save_x3d(
     fprintf(fp,"<!DOCTYPE X3D PUBLIC \"ISO//Web3D//DTD X3D 3.1//EN\" \"http://www.web3d.org/specifications/x3d-3.1.dtd\">\n");
     fprintf(fp,"<X3D profile=\"Immersive\" version=\"3.1\" xsd:noNamespaceSchemaLocation=\"http://www.web3d.org/specifications/x3d-3.1.xsd\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
     fprintf(fp, "<head>\n");
-    fprintf(fp,"<meta content=\"v4l2stereo\" name=\"generator\"/>\n");
+    fprintf(fp,"<meta content=\"v4l2stereo\" name=\"generator\"/>\n");    
+    fprintf(fp,"<meta content=\"%dx%d\" name=\"resolution\"/>\n", image_width, image_height);
+    fprintf(fp,"<meta content=\"%f %f %f\" name=\"translation\"/>\n",
+        cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3));
+
+    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
+        }
+    }
+    cvRodrigues2(rotation_matrix, rotation_vector);
+    fprintf(fp,"<meta content=\"%f %f %f\" name=\"rotation\"/>\n",
+        cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0));
+    cvReleaseMat(&rotation_matrix);
+    cvReleaseMat(&rotation_vector);
+
     fprintf(fp,"</head>\n");
     fprintf(fp,"<Scene>\n");
     fprintf(fp,"<Shape>\n");
@@ -1205,7 +1228,9 @@ void pointcloud::save_x3d(
 
 void pointcloud::save_stl_ascii(
     std::string filename,
-    std::string header,
+    int image_width,
+    int image_height,
+    CvMat * pose,
     std::vector<float> &facets)
 {
     const int elements = 13;
@@ -1292,6 +1317,9 @@ void pointcloud::save_largest_object(
     std::string filename,
     int format,
     bool binary,
+    int image_width,
+    int image_height,
+    CvMat * pose,
     std::vector<std::vector<float> > &objects)
 {
     int max_points = 0;
@@ -1305,14 +1333,14 @@ void pointcloud::save_largest_object(
     if (max_points==0) return;
     if (format == POINT_CLOUD_FORMAT_STL) {
         if (binary) {
-            save_stl_binary(filename, filename, objects[index]);
+            save_stl_binary(filename, image_width, image_height, pose, objects[index]);
         }
         else {
-            save_stl_ascii(filename, filename, objects[index]);
+            save_stl_ascii(filename, image_width, image_height, pose, objects[index]);
         }
     }
     else {
-        save_x3d(filename, filename, objects[index]);
+        save_x3d(filename, image_width, image_height, pose, objects[index]);
     }
 }
 
