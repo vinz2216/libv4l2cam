@@ -31,13 +31,14 @@ void pointcloud::save(
     IplImage * points_image, 
     int max_range_mm,
     CvMat * pose,
+    float baseline,
     std::string point_cloud_filename)
 {
     float pose_x = (float)cvmGet(pose,POINT_CLOUD_X_AXIS,3);
     float pose_y = (float)cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
     float pose_z = (float)cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
 
-    FILE * fp = fopen(point_cloud_filename.c_str(),"w");
+    FILE * fp = fopen(point_cloud_filename.c_str(),"wb");
     if (fp != NULL) {
         float * points_image_data = (float*)points_image->imageData;
         int pixels = points_image->width*points_image->height;
@@ -55,7 +56,7 @@ void pointcloud::save(
             }
         }
         if (ctr > 0) {
-            float * header = new float[10];
+            float * header = new float[11];
             header[0] = (float)POINT_CLOUD_VERSION;
             header[1] = ctr;
             header[2] = points_image->width;
@@ -75,14 +76,15 @@ void pointcloud::save(
             header[7] = cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0);
             header[8] = cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0);
             header[9] = cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0);
+            header[10] = baseline;
 
-            fwrite(header,sizeof(float),10,fp);
+            fwrite(header,sizeof(float),11,fp);
             cvReleaseMat(&rotation_matrix);
             cvReleaseMat(&rotation_vector);
 
             float tilt_degrees = 90 - (header[7]*180/3.1415927f);
             float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
-            float sin_tilt = (float)sin(-tilt_degrees/180.0*3.1415927);
+            float sin_tilt  = (float)sin(-tilt_degrees/180.0*3.1415927);
             
             int elem_bytes = (sizeof(float)*3) + 3;
             unsigned char * data_bytes = new unsigned char[elem_bytes*ctr];
@@ -1062,6 +1064,7 @@ void pointcloud::save_stl_binary(
     int image_width,
     int image_height,
     CvMat * pose,
+    float baseline,
     std::vector<float> &facets)
 {
     const int elements = 13;
@@ -1079,10 +1082,11 @@ void pointcloud::save_stl_binary(
     cvRodrigues2(rotation_matrix, rotation_vector);
 
     char buffer[80];
-    sprintf((char*)buffer,"%dx%d %.3f %.3f %.3f %.3f %.3f %.3f\n",
+    sprintf((char*)buffer,"%dx%d %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n",
         image_width, image_height,
         cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3),
-        cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0));
+        cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0),
+        baseline);
 
     fwrite(buffer,1,80,fp);
     cvReleaseMat(&rotation_matrix);
@@ -1166,6 +1170,7 @@ void pointcloud::save_x3d(
     int image_width,
     int image_height,
     CvMat * pose,
+    float baseline,
     std::vector<float> &facets)
 {
     const int elements = 15;
@@ -1179,6 +1184,7 @@ void pointcloud::save_x3d(
     fprintf(fp,"<X3D profile=\"Immersive\" version=\"3.1\" xsd:noNamespaceSchemaLocation=\"http://www.web3d.org/specifications/x3d-3.1.xsd\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
     fprintf(fp, "<head>\n");
     fprintf(fp,"<meta content=\"v4l2stereo\" name=\"generator\"/>\n");    
+    fprintf(fp,"<meta content=\"%f\" name=\"baseline\"/>\n", baseline);
     fprintf(fp,"<meta content=\"%dx%d\" name=\"resolution\"/>\n", image_width, image_height);
     fprintf(fp,"<meta content=\"%f %f %f\" name=\"translation\"/>\n",
         cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3));
@@ -1273,6 +1279,7 @@ void pointcloud::save_stl_ascii(
     int image_width,
     int image_height,
     CvMat * pose,
+    float baseline,
     std::vector<float> &facets)
 {
     const int elements = 13;
@@ -1362,6 +1369,7 @@ void pointcloud::save_largest_object(
     int image_width,
     int image_height,
     CvMat * pose,
+    float baseline,
     std::vector<std::vector<float> > &objects)
 {
     int max_points = 0;
@@ -1375,14 +1383,14 @@ void pointcloud::save_largest_object(
     if (max_points==0) return;
     if (format == POINT_CLOUD_FORMAT_STL) {
         if (binary) {
-            save_stl_binary(filename, image_width, image_height, pose, objects[index]);
+            save_stl_binary(filename, image_width, image_height, pose, baseline, objects[index]);
         }
         else {
-            save_stl_ascii(filename, image_width, image_height, pose, objects[index]);
+            save_stl_ascii(filename, image_width, image_height, pose, baseline, objects[index]);
         }
     }
     else {
-        save_x3d(filename, image_width, image_height, pose, objects[index]);
+        save_x3d(filename, image_width, image_height, pose, baseline, objects[index]);
     }
 }
 
