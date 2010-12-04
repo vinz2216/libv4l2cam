@@ -54,6 +54,7 @@ public:
         IplImage * points_image, 
         int max_range_mm,
         CvMat * pose,
+        float baseline,
         std::string point_cloud_filename);
 
     static void disparity_map_to_3d_points(
@@ -173,6 +174,7 @@ public:
         int image_width,
         int image_height,
         CvMat * pose,
+        float baseline,
         std::vector<float> &facets);
 
     static void save_stl_binary(
@@ -180,6 +182,7 @@ public:
         int image_width,
         int image_height,
         CvMat * pose,
+        float baseline,
         std::vector<float> &facets);
 
     static void save_stl_ascii(
@@ -187,6 +190,7 @@ public:
         int image_width,
         int image_height,
         CvMat * pose,
+        float baseline,
         std::vector<float> &facets);
 
     static void save_largest_object(
@@ -196,6 +200,7 @@ public:
         int image_width,
         int image_height,
         CvMat * pose,
+        float baseline,
         std::vector<std::vector<float> > &objects);
 
     static void export_points(
