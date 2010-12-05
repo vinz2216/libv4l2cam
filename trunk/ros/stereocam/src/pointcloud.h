@@ -57,6 +57,15 @@ public:
         float baseline,
         std::string point_cloud_filename);
 
+    static bool load(
+        std::string point_cloud_filename,
+        CvMat * &pose,
+        int &image_width,
+        int &image_height,
+        float &baseline,
+        vector<float> &point,
+        vector<unsigned char> &point_colour);
+
     static void disparity_map_to_3d_points(
         float * disparity_map,
         int img_width,
@@ -86,6 +95,24 @@ public:
         CvMat * distortion_coeffs,
         float max_range_mm,
         bool view_point_cloud,
+        unsigned char * img_output);
+
+    static void virtual_camera(
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour,
+        CvMat * pose,
+        CvMat * intrinsic_matrix,
+        CvMat * distortion_coeffs,
+        float max_range_mm,
+        float * &depth,
+        CvMat * &rotation_matrix,
+        CvMat * &translation,
+        CvMat * &rotation_vector,
+        CvMat * &points,
+        CvMat * &image_points,
+        bool view_point_cloud,
+        int image_width,
+        int image_height,
         unsigned char * img_output);
 
     static void virtual_camera(
