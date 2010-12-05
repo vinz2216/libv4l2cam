@@ -37,11 +37,12 @@ using namespace std;
 int main(int argc, char* argv[]) {
     int ww = 640;
     int hh = 480;
-    float max_range_mm = 3000;
+    float max_range_mm = 4000;
     double displacement_mm = 5;
     double rotation_step_degrees = 0.5;
     bool headless = false;
     bool view_point_cloud = false;
+    bool show_axes = false;
     int camera_image_width=0,camera_image_height=0;
     float stereo_camera_baseline=0;
     std::vector<float> point;
@@ -71,6 +72,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --poserotation        Three values specifying camera rotation in degrees");
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
+    opt->addUsage( "     --axes                Show axes");
     opt->addUsage( " -V  --version             Show version number");
     opt->addUsage( "     --headless            Disable video output");
     opt->addUsage( "     --help                Show help");
@@ -82,6 +84,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "poserotation" );
     opt->setOption( "posetranslation" );
     opt->setOption( "calibrationfile" );
+    opt->setFlag( "axes" );
     opt->setFlag( "headless" );
     opt->setFlag( "help" );
     opt->setFlag( "version", 'V' );
@@ -111,6 +114,10 @@ int main(int argc, char* argv[]) {
 
     if( opt->getFlag( "headless" ) ) {
         headless = true;
+    }
+
+    if( opt->getFlag( "axes" ) ) {
+        show_axes = true;
     }
 
     if( opt->getValue( "calibrationfile" ) != NULL ) {
@@ -212,6 +219,7 @@ int main(int argc, char* argv[]) {
             virtual_camera_points,
             virtual_camera_image_points,
             view_point_cloud,
+            show_axes,
             ww, hh,
             l_);
 

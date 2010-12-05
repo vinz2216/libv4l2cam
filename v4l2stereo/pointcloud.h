@@ -48,6 +48,16 @@ using namespace std;
 #define rgb15(r,g,b)			((b>>4)|((g>>4)<<4)|((r>>4)<<8))
 
 class pointcloud {
+protected:
+    static void virtual_camera_show_axes(
+        CvMat * intrinsic_matrix,
+        CvMat * distortion_coeffs,
+        CvMat * &translation,
+        CvMat * &rotation_vector,
+        int image_width,
+        int image_height,
+        unsigned char * img_output);
+
 public:
      static void save(
         unsigned char * img_left,
@@ -111,6 +121,7 @@ public:
         CvMat * &points,
         CvMat * &image_points,
         bool view_point_cloud,
+        bool show_axes,
         int image_width,
         int image_height,
         unsigned char * img_output);
