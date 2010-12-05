@@ -34,21 +34,21 @@ void pointcloud::save(
     float baseline,
     std::string point_cloud_filename)
 {
-    float pose_x = (float)cvmGet(pose,POINT_CLOUD_X_AXIS,3);
-    float pose_y = (float)cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
-    float pose_z = (float)cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
+    float pose_x = (float)cvmGet(pose,0,3);
+    float pose_y = (float)cvmGet(pose,1,3);
+    float pose_z = (float)cvmGet(pose,2,3);
 
     FILE * fp = fopen(point_cloud_filename.c_str(),"wb");
     if (fp != NULL) {
         float * points_image_data = (float*)points_image->imageData;
-        int pixels = points_image->width*points_image->height;
+        int pixels = points_image->width * points_image->height;
         int n = 0, ctr = 0;
         for (int i = 0; i < pixels; i++, n += 3) {
-            float dx = points_image_data[n+POINT_CLOUD_X_AXIS] - pose_x;
-            float dy = points_image_data[n+POINT_CLOUD_Y_AXIS] - pose_y;
-            float dz = points_image_data[n+POINT_CLOUD_Z_AXIS] - pose_z;
+            float dx = points_image_data[n] - pose_x;
+            float dy = points_image_data[n+1] - pose_y;
+            float dz = points_image_data[n+2] - pose_z;
 
-            if ((fabs(dx) > 1) && (fabs(dy) > 1) && (fabs(dz) > 1) &&
+            if ((fabs(dx)+fabs(dy)+fabs(dz) > 1) &&
                 (fabs(dx) < max_range_mm) &&
                 (fabs(dy) < max_range_mm) &&
                 (fabs(dz) < max_range_mm)) {
@@ -61,9 +61,9 @@ void pointcloud::save(
             header[1] = ctr;
             header[2] = points_image->width;
             header[3] = points_image->height;
-            header[4] = cvmGet(pose,POINT_CLOUD_X_AXIS,3);
-            header[5] = cvmGet(pose,POINT_CLOUD_Y_AXIS,3);
-            header[6] = cvmGet(pose,POINT_CLOUD_Z_AXIS,3);
+            header[4] = cvmGet(pose,0,3);
+            header[5] = cvmGet(pose,1,3);
+            header[6] = cvmGet(pose,2,3);
 
             CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
             CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
@@ -73,38 +73,38 @@ void pointcloud::save(
                 }
             }
             cvRodrigues2(rotation_matrix, rotation_vector);
-            header[7] = cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0);
-            header[8] = cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0);
-            header[9] = cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0);
+            header[7] = cvmGet(rotation_vector,0,0);
+            header[8] = cvmGet(rotation_vector,1,0);
+            header[9] = cvmGet(rotation_vector,2,0);
             header[10] = baseline;
 
             fwrite(header,sizeof(float),11,fp);
             cvReleaseMat(&rotation_matrix);
             cvReleaseMat(&rotation_vector);
 
-            float tilt_degrees = 90 - (header[7]*180/3.1415927f);
-            float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
-            float sin_tilt  = (float)sin(-tilt_degrees/180.0*3.1415927);
-            
+            //float tilt_degrees = 90 - (header[7]*180/3.1415927f);
+            //float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
+            //float sin_tilt  = (float)sin(-tilt_degrees/180.0*3.1415927);
+
             int elem_bytes = (sizeof(float)*3) + 3;
             unsigned char * data_bytes = new unsigned char[elem_bytes*ctr];
             memset((void*)data_bytes, '\0', elem_bytes * ctr);
             ctr = 0;
             n = 0;
             for (int i = 0; i < pixels; i++, n += 3) {
-                float dx = points_image_data[n+POINT_CLOUD_X_AXIS] - pose_x;
-                float dy = points_image_data[n+POINT_CLOUD_Y_AXIS] - pose_y;
-                float dz = points_image_data[n+POINT_CLOUD_Z_AXIS] - pose_z;
+                float dx = points_image_data[n] - pose_x;
+                float dy = points_image_data[n+1] - pose_y;
+                float dz = points_image_data[n+2] - pose_z;
 
-                if ((fabs(dx) > 1) && (fabs(dy) > 1) && (fabs(dz) > 1) &&
+                if ((fabs(dx) + fabs(dy) + fabs(dz) > 1) &&
                     (fabs(dx) < max_range_mm) &&
                     (fabs(dy) < max_range_mm) &&
                     (fabs(dz) < max_range_mm)) {
             
                     float * data = (float*)&data_bytes[elem_bytes*ctr];
-                    data[0] = dx + pose_x;
-                    data[1] = (cos_tilt*dy - sin_tilt*dz) + pose_y;
-                    data[2] = (sin_tilt*dy + cos_tilt*dz) + pose_z;
+                    data[0] = dx+pose_x; //dx + pose_x;
+                    data[1] = dy+pose_y; //(cos_tilt*dy - sin_tilt*dz) + pose_y;
+                    data[2] = dz+pose_z; //(sin_tilt*dy + cos_tilt*dz) + pose_z;
 
                     int n2 = (elem_bytes*ctr) + (3*sizeof(float));
                     data_bytes[n2] = img_left[n];
@@ -113,13 +113,78 @@ void pointcloud::save(
                     ctr++;
                 }
             }
-            fwrite(data_bytes,elem_bytes,(int)header[1],fp);
-            printf("%d points saved\n", (int)header[1]);
+            fwrite(data_bytes,elem_bytes,ctr,fp);
+            printf("%d points saved\n", ctr);
             delete [] data_bytes;
             delete [] header;
         }
         fclose(fp);
     }
+}
+
+bool pointcloud::load(
+     std::string point_cloud_filename,
+     CvMat * &pose,
+     int &image_width,
+     int &image_height,
+     float &baseline,
+     vector<float> &point,
+     vector<unsigned char> &point_colour)
+{
+    bool success = true;
+    FILE * fp = fopen(point_cloud_filename.c_str(),"rb");
+    if (fp==NULL) return false;
+    float * header = new float[11];
+    size_t retval = fread(header, sizeof(float), 11, fp);
+    if (retval != 11) return false;
+
+    //float version = header[0];
+    if (pose == NULL) pose = cvCreateMat(4, 4, CV_32F);
+    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+
+    int no_of_points = 0, elem_bytes = 0;
+    image_width = 0;
+    image_height = 0;
+    
+    elem_bytes = (sizeof(float)*3) + 3;
+    no_of_points = (int)header[1];
+    image_width = (int)header[2];
+    image_height = (int)header[3];
+    cvmSet(pose,0,3,header[4]);
+    cvmSet(pose,1,3,header[5]);
+    cvmSet(pose,2,3,header[6]);
+    cvmSet(rotation_vector,0,0,header[7]);
+    cvmSet(rotation_vector,1,0,header[8]);
+    cvmSet(rotation_vector,2,0,header[9]);
+    baseline = header[10];
+    cvRodrigues2(rotation_vector,rotation_matrix);
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
+        }
+    }
+
+    if (no_of_points > 0) {
+        unsigned char * data_bytes = new unsigned char[elem_bytes * no_of_points];
+        retval = fread(data_bytes,elem_bytes,no_of_points,fp);
+        for (int i = 0; i < no_of_points; i++) {
+            float * data = (float*)&data_bytes[i*elem_bytes];
+            point.push_back(data[0]);
+            point.push_back(data[1]);
+            point.push_back(data[2]);
+            int n = (i*elem_bytes) + (3*sizeof(float));
+            point_colour.push_back(data_bytes[n]);
+            point_colour.push_back(data_bytes[n+1]);
+            point_colour.push_back(data_bytes[n+2]);
+        }
+        delete [] data_bytes;
+    }
+
+    cvReleaseMat(&rotation_vector);
+    cvReleaseMat(&rotation_matrix);
+    delete [] header;
+    return success;
 }
 
 void pointcloud::disparity_map_to_3d_points(
@@ -453,6 +518,117 @@ void pointcloud::virtual_camera(
                                 prev_y = y;
                                 prev_dist = dist;
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void pointcloud::virtual_camera(
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour,
+    CvMat * pose,
+    CvMat * intrinsic_matrix,
+    CvMat * distortion_coeffs,
+    float max_range_mm,
+    float * &depth,
+    CvMat * &rotation_matrix,
+    CvMat * &translation,
+    CvMat * &rotation_vector,
+    CvMat * &points,
+    CvMat * &image_points,
+    bool view_point_cloud,
+    int image_width,
+    int image_height,
+    unsigned char * img_output)
+{
+    int no_of_points = (int)point.size()/3;
+    max_range_mm *= max_range_mm;
+
+    if (depth == NULL) {
+        depth = new float[image_width*image_height];
+        rotation_matrix = cvCreateMat(3, 3, CV_32F);
+        translation = cvCreateMat(3, 1, CV_32F);
+        rotation_vector = cvCreateMat(3, 1, CV_32F);
+        points = cvCreateMat(no_of_points, 3, CV_32F);
+        image_points = cvCreateMat(no_of_points, 2, CV_32F);
+    }
+
+    // view rotation
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix,y,x,cvmGet(pose,y,x));
+        }
+    }
+    // view translation
+    for (int i = 0; i < 3; i++) {
+        cvmSet(translation,i,0,cvmGet(pose,i,3));
+    }
+    // convert from 3x3 to 3x1
+    cvRodrigues2(rotation_matrix, rotation_vector);
+
+    // set 3D points
+    for (int i = 0; i < no_of_points; i++) {
+        cvmSet(points,i,0,point[i*3]);
+        cvmSet(points,i,1,point[i*3+1]);
+        cvmSet(points,i,2,point[i*3+2]);
+    }
+
+    // project points
+    cvProjectPoints2(
+        points,
+        rotation_vector, translation,
+        intrinsic_matrix,
+        distortion_coeffs,
+        image_points);
+
+    // draw
+    memset((void*)img_output,'\0',image_width*image_height*3);
+    memset((void*)depth,'\0',image_width*image_height*sizeof(float));
+
+    float pose_x = cvmGet(translation,0,0);
+    float pose_y = cvmGet(translation,1,0);
+    float pose_z = cvmGet(translation,2,0);
+
+    for (int i = 0; i < no_of_points; i++) {
+        int x = (int)cvmGet(image_points,i,0);
+        if ((x >=0) && (x < image_width)) {
+            int y = (int)cvmGet(image_points,i,1);
+            if ((y >=0) && (y < image_height-1)) {
+                int n = y*image_width + (image_width-1-x);
+
+                float dx = point[i*3] - pose_x;
+                float dy = point[i*3+1] - pose_y;
+                float dz = point[i*3+2] - pose_z;
+                float dist = dx*dx + dy*dy + dz*dz;
+                if ((dist > 0) && (dist < max_range_mm)) {
+                    bool show = false;
+                    if (depth[n] == 0) {
+                        depth[n] = dist;
+                        show = true;
+                    }
+                    else {
+                        if (dist < depth[n]) {
+                            depth[n] = dist;
+                            show = true;
+                        }
+                    }
+
+                    if (show) {
+                        if (!view_point_cloud) {
+                            img_output[n*3] = point_colour[i*3];
+                            img_output[n*3+1] = point_colour[i*3+1];
+                            img_output[n*3+2] = point_colour[i*3+2];
+                            img_output[(n+image_width)*3] = point_colour[i*3];
+                            img_output[(n+image_width)*3+1] = point_colour[i*3+1];
+                            img_output[(n+image_width)*3+2] = point_colour[i*3+2];
+                        }
+                        else {
+                            img_output[n*3] = 255;
+                            img_output[n*3+1] = 255;
+                            img_output[n*3+2] = 255;
                         }
                     }
                 }
@@ -1056,8 +1232,6 @@ void pointcloud::surface_normal(
         nz = cpz / r;
     }
 }
-
-
 
 void pointcloud::save_stl_binary(
     std::string filename,

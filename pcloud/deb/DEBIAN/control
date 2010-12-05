@@ -1,0 +1,12 @@
+Package: pcloud
+Version: 0.1
+Section: utils
+Maintainer: Bob Mottram <fuzzgun@gmail.com>
+Architecture: all
+Depends: libcv2.1, libhighgui2.1, libcvaux2.1, libcv-dev, libhighgui-dev, libcvaux-dev, libgtk2.0-dev, libavcodec-dev, libavformat-dev, libjpeg62-dev, libtiff4-dev
+Recommends: 
+Suggests: 
+Essential: no
+Priority: optional
+Homepage: http://code.google.com/p/libv4l2cam/
+Description: A utility for viewing and processing point clouds generated from stereo vision
