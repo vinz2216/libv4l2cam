@@ -526,6 +526,90 @@ void pointcloud::virtual_camera(
     }
 }
 
+void pointcloud::virtual_camera_show_axes(
+    CvMat * intrinsic_matrix,
+    CvMat * distortion_coeffs,
+    CvMat * &translation,
+    CvMat * &rotation_vector,
+    int image_width,
+    int image_height,
+    unsigned char * img_output)
+{
+    CvMat * axis_points = cvCreateMat(4, 3, CV_32F);
+    CvMat * axis_image_points = cvCreateMat(4, 2, CV_32F);
+
+    float length = 2000;
+
+    cvmSet(axis_points,0,0,0.0f);
+    cvmSet(axis_points,0,1,0.0f);
+    cvmSet(axis_points,0,2,0.0f);
+
+    cvmSet(axis_points,1,0,length);
+    cvmSet(axis_points,1,1,0.0f);
+    cvmSet(axis_points,1,2,0.0f);
+
+    cvmSet(axis_points,2,0,0.0f);
+    cvmSet(axis_points,2,1,length);
+    cvmSet(axis_points,2,2,0.0f);
+
+    cvmSet(axis_points,3,0,0.0f);
+    cvmSet(axis_points,3,1,0.0f);
+    cvmSet(axis_points,3,2,length);
+
+    // project points
+    cvProjectPoints2(
+        axis_points,
+        rotation_vector, translation,
+        intrinsic_matrix,
+        distortion_coeffs,
+        axis_image_points);
+
+    float cx = (float)cvmGet(axis_image_points,0,0);
+    float cy = (float)cvmGet(axis_image_points,0,1);
+    int r=0,g=0,b=0;
+    for (int axis = 0; axis < 3; axis++) {
+        float x = (float)cvmGet(axis_image_points,axis+1,0);
+        float y = (float)cvmGet(axis_image_points,axis+1,1);
+        float dx = x - cx;
+        float dy = y - cy;
+        float hyp = (float)sqrt(dx*dx + dy*dy);
+
+        switch(axis) {
+            case 0: {
+                r = 255;
+                g = b = 0;
+                break;
+            }
+            case 1: {
+                g = 255;
+                r = b = 0;
+                break;
+            }
+            case 2: {
+                b = 255;
+                r = g = 0;
+                break;
+            }
+        }
+
+        for (int i = 0; i < image_width*3; i++) {
+            int xx = (int)(cx + (i*dx/hyp));
+            if ((xx >= 0) && (xx < image_width)) {
+                int yy = (int)(cy + (i*dy/hyp));            
+                if ((yy >= 0) && (yy < image_height)) {
+                    int n = (yy*image_width + (image_width-1-xx))*3;
+                    img_output[n] = b;
+                    img_output[n+1] = g;
+                    img_output[n+2] = r;
+                }
+            }
+        }
+    }
+
+    cvReleaseMat(&axis_points);
+    cvReleaseMat(&axis_image_points);
+}
+
 void pointcloud::virtual_camera(
     std::vector<float> &point,
     std::vector<unsigned char> &point_colour,
@@ -540,6 +624,7 @@ void pointcloud::virtual_camera(
     CvMat * &points,
     CvMat * &image_points,
     bool view_point_cloud,
+    bool show_axes,
     int image_width,
     int image_height,
     unsigned char * img_output)
@@ -634,6 +719,16 @@ void pointcloud::virtual_camera(
                 }
             }
         }
+    }
+
+    if (show_axes) {
+        virtual_camera_show_axes(
+            intrinsic_matrix,
+            distortion_coeffs,
+            translation,
+            rotation_vector,
+            image_width, image_height,
+            img_output);
     }
 }
 
