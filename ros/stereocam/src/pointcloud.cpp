@@ -19,6 +19,15 @@
 
 #include "pointcloud.h"
 
+CvMat* pointcloud::matMul(const CvMat* A, const CvMat* B) 
+{
+    assert(A->cols == B->rows);
+
+    CvMat* M = cvCreateMat(A->rows, B->cols, A->type);
+    cvMatMul(A, B, M);
+    return M;
+}
+
 /*
   Format: floating point array with 4 float values per point
   The first array value is the number of subsequent points,
@@ -422,7 +431,7 @@ void pointcloud::virtual_camera(
             if ((x >=0) && (x < w)) {
                 int y = (int)cvmGet(image_points,i,1);
                 if ((y >=0) && (y < points_image->height-2)) {
-                    int n = y*w + (w-1-x);
+                    int n = y*w + x;//(w-1-x);
 
                     float dx = points_image_data[i*3] - cvmGet(translation,0,0);
                     float dy = points_image_data[i*3+1] - cvmGet(translation,1,0);
@@ -456,7 +465,7 @@ void pointcloud::virtual_camera(
                                     for (int l = 0; l <= length; l++) {
                                         int xx = prev_x + (l*dx2/length);
                                         int yy = prev_y + (l*dy2/length);
-                                        int n2 = yy*w + (w-1-xx);
+                                        int n2 = yy*w + xx;//(w-1-xx);
                                         int i2 = prev_i + (l*(i-prev_i)/length);
                                         if (!view_point_cloud) {
                                             img_output[n2*3] = img[i2*3];
@@ -501,7 +510,7 @@ void pointcloud::virtual_camera(
                                     for (int l = 0; l < length; l++) {
                                         int xx = prev_x + (l*dx2/length);
                                         int yy = prev_y + (l*dy2/length);
-                                        int n2 = yy*w + (w-1-xx);
+                                        int n2 = yy*w + xx;//(w-1-xx);
                                         int i2 = prev_i + (l*(i-prev_i)/length);
                                         if (!view_point_cloud) {
                                             img_output[n2*3] = img[i2*3];
@@ -682,7 +691,7 @@ void pointcloud::virtual_camera(
         if ((x >=0) && (x < image_width)) {
             int y = (int)cvmGet(image_points,i,1);
             if ((y >=0) && (y < image_height-1)) {
-                int n = y*image_width + (image_width-1-x);
+                int n = y*image_width + x;//(image_width-1-x);
 
                 float dx = point[i*3] - pose_x;
                 float dy = point[i*3+1] - pose_y;
