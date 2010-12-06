@@ -173,7 +173,7 @@ public:
         double * pose_matrix);
 
     void SetPoseRotation(
-        double * pose_matrix);
+        double * pose_vector);
 
     int ParsePose(
         char * pose_str);

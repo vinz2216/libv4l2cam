@@ -59,9 +59,6 @@ camcalibbase::camcalibbase()
     };
     pose = cvCreateMat(4,4,CV_64F);
     matSet(pose, initPose);
-
-    double initPoseRot[] = { 90, 0, 0 };
-    SetPoseRotation(initPoseRot);
 }
 
 camcalibbase::~camcalibbase()
@@ -390,22 +387,11 @@ void camcalibbase::SetDistortion(
 }
 
 void camcalibbase::SetPoseRotation(
-    double * pose_matrix)
+    double * pose_vector)
 {
-    CvMat * rot = cvCreateMat(3, 1, CV_64F);
-    CvMat * rotmat = cvCreateMat(3, 3, CV_64F);
     for (int i = 0; i < 3; i++) {
-        cvmSet(rot, i, 0, pose_matrix[i]*3.1415927f/180);
+        if (pose_vector[i]!=0) rotate_pose(-pose_vector[i], i);
     }
-    // convert from 3x1 vector to 3x3 rotation matrix
-    cvRodrigues2(rot, rotmat);
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            cvmSet(pose, i, j, cvmGet(rotmat,i,j));
-        }
-    }
-    cvReleaseMat(&rot);
-    cvReleaseMat(&rotmat);
 }
 
 void camcalibbase::GetPoseRotation(
@@ -501,31 +487,55 @@ void camcalibbase::translate_pose(double distance_mm, int axis)
 
 void camcalibbase::rotate_pose(double angle_degrees, int axis)
 {
-    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
-    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+    float angle_radians = angle_degrees*3.1415927f/180.0f;
+    CvMat * rotation_matrix = cvCreateMat(4, 4, CV_64F);
 
-    for (int y = 0; y < 3; y++) {
-        for (int x = 0; x < 3; x++) {
-            cvmSet(rotation_matrix,y,x,cvmGet(pose,y,x));
+    // identity
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (x != y) {
+                cvmSet(rotation_matrix,y,x,0);
+            }
+            else {
+                cvmSet(rotation_matrix,y,x,1);
+            }
         }
     }
-    // convert from 3x3 to 3x1
-    cvRodrigues2(rotation_matrix, rotation_vector);
+    
+    switch(axis) {
+        case 0: { // rotate around X axis
+            cvmSet(rotation_matrix,1,1,cos(angle_radians));
+            cvmSet(rotation_matrix,1,2,sin(angle_radians));
+            cvmSet(rotation_matrix,2,1,-sin(angle_radians));
+            cvmSet(rotation_matrix,2,2,cos(angle_radians));
+            break;
+        }
+        case 1: { // rotate around Y axis
+            cvmSet(rotation_matrix,0,0,cos(angle_radians));
+            cvmSet(rotation_matrix,0,2,-sin(angle_radians));
+            cvmSet(rotation_matrix,2,0,sin(angle_radians));
+            cvmSet(rotation_matrix,2,2,cos(angle_radians));
+            break;
+        }
+        case 2: { // rotate around Z axis
+            cvmSet(rotation_matrix,0,0,cos(angle_radians));
+            cvmSet(rotation_matrix,0,1,sin(angle_radians));
+            cvmSet(rotation_matrix,1,0,-sin(angle_radians));
+            cvmSet(rotation_matrix,1,1,cos(angle_radians));
+            break;
+        }
+    }
 
-    cvmSet(rotation_vector,axis,0,cvmGet(rotation_vector,axis,0)+(angle_degrees*3.1415927/180.0));
+    CvMat * new_pose = matMul(rotation_matrix, pose);
 
-    // convert from 3x1 to 3x3
-    cvRodrigues2(rotation_vector, rotation_matrix);
-
-    // update pose rotation
     for (int y = 0; y < 3; y++) {
         for (int x = 0; x < 3; x++) {
-            cvmSet(pose,y,x,cvmGet(rotation_matrix,y,x));
+            cvmSet(pose,y,x,cvmGet(new_pose,y,x));
         }
     }
 
     cvReleaseMat(&rotation_matrix);
-    cvReleaseMat(&rotation_vector);
+    cvReleaseMat(&new_pose);
 }
 
 void camcalibbase::ParseCalibrationFile(

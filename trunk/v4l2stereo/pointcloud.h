@@ -49,6 +49,8 @@ using namespace std;
 
 class pointcloud {
 protected:
+    static CvMat* matMul(const CvMat* A, const CvMat* B);
+
     static void virtual_camera_show_axes(
         CvMat * intrinsic_matrix,
         CvMat * distortion_coeffs,
