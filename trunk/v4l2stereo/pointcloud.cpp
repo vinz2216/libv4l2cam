@@ -1531,7 +1531,7 @@ void pointcloud::save_stl_binary(
     fclose(fp);
 }
 
-void pointcloud::save_x3d(
+void pointcloud::save_mesh_x3d(
     std::string filename,
     int image_width,
     int image_height,
@@ -1633,6 +1633,68 @@ void pointcloud::save_x3d(
     }
     fprintf(fp,"\"/>");
     fprintf(fp,"</IndexedFaceSet>\n");
+    fprintf(fp,"</Shape>\n");
+    fprintf(fp,"</Scene>\n");
+    fprintf(fp,"</X3D>\n");
+
+    fclose(fp);
+}
+
+void pointcloud::save_point_cloud_x3d(
+    std::string filename,
+    int image_width,
+    int image_height,
+    CvMat * pose,
+    float baseline,
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour)
+{
+    unsigned int max = (unsigned int)(point.size()/3);
+
+    FILE * fp = fopen(filename.c_str(),"w");
+    if (fp==NULL) return;
+
+    fprintf(fp,"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    fprintf(fp,"<!DOCTYPE X3D PUBLIC \"ISO//Web3D//DTD X3D 3.1//EN\" \"http://www.web3d.org/specifications/x3d-3.1.dtd\">\n");
+    fprintf(fp,"<X3D profile=\"Immersive\" version=\"3.1\" xsd:noNamespaceSchemaLocation=\"http://www.web3d.org/specifications/x3d-3.1.xsd\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
+    fprintf(fp, "<head>\n");
+    fprintf(fp,"<meta content=\"v4l2stereo\" name=\"generator\"/>\n");    
+    fprintf(fp,"<meta content=\"%f\" name=\"baseline\"/>\n", baseline);
+    fprintf(fp,"<meta content=\"%dx%d\" name=\"resolution\"/>\n", image_width, image_height);
+    fprintf(fp,"<meta content=\"%f %f %f\" name=\"translation\"/>\n",
+        cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3));
+
+    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
+        }
+    }
+    cvRodrigues2(rotation_matrix, rotation_vector);
+    fprintf(fp,"<meta content=\"%f %f %f\" name=\"rotation\"/>\n",
+        cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0));
+    cvReleaseMat(&rotation_matrix);
+    cvReleaseMat(&rotation_vector);
+
+    fprintf(fp,"</head>\n");
+    fprintf(fp,"<Scene>\n");
+    fprintf(fp,"<Shape>\n");
+    fprintf(fp,"<PointSet>\n");
+    fprintf(fp,"<Coordinate point=\"");
+
+    for (int p = 0; p < (int)max; p++) {
+        fprintf(fp,"%.2f %.2f %.2f ", -point[p*3], point[p*3+1], point[p*3+2]);
+    }
+    fprintf(fp,"\"/>\n");
+
+    fprintf(fp,"<ColorRGBA color=\"");
+    for (int p = 0; p < (int)max; p++) {
+        fprintf(fp,"%.2f %.2f %.2f 1 ", point_colour[p*3+2]/255.0f, point_colour[p*3+1]/255.0f, point_colour[p*3]/255.0f);
+    }
+    fprintf(fp,"\"/>\n");
+
+    fprintf(fp,"</PointSet>\n");
     fprintf(fp,"</Shape>\n");
     fprintf(fp,"</Scene>\n");
     fprintf(fp,"</X3D>\n");
@@ -1756,7 +1818,7 @@ void pointcloud::save_largest_object(
         }
     }
     else {
-        save_x3d(filename, image_width, image_height, pose, baseline, objects[index]);
+        save_mesh_x3d(filename, image_width, image_height, pose, baseline, objects[index]);
     }
 }
 

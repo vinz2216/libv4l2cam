@@ -1634,7 +1634,7 @@ int main(int argc, char* argv[]) {
                                     BGR, points, max_range_mm);
 
                                 if (object_format == POINT_CLOUD_FORMAT_X3D) {
-                                    pointcloud::save_x3d(
+                                    pointcloud::save_mesh_x3d(
                                         save_mesh_filename, ww,hh,
                                         camera_calibration->pose,
                                         cvmGet(camera_calibration->extrinsicTranslation,0,0),

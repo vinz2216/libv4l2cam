@@ -73,6 +73,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
     opt->addUsage( " -s  --save                Save filename");
+    opt->addUsage( " -x  --savex3d             Save as X3D filename");
     opt->addUsage( "     --axes                Show axes");
     opt->addUsage( " -V  --version             Show version number");
     opt->addUsage( "     --headless            Disable video output");
@@ -80,6 +81,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "" );
 
     opt->setOption( "save", 's' );
+    opt->setOption( "savex3d", 'x' );
     opt->setOption( "filename", 'f' );
     opt->setOption( "width", 'w' );
     opt->setOption( "height", 'h' );
@@ -146,6 +148,11 @@ int main(int argc, char* argv[]) {
     std::string save_filename = "";
     if( opt->getValue( 's' ) != NULL  || opt->getValue( "save" ) != NULL  ) {
         save_filename = opt->getValue( "save" );
+    }
+
+    std::string save_x3d_filename = "";
+    if( opt->getValue( 'x' ) != NULL  || opt->getValue( "savex3d" ) != NULL  ) {
+        save_x3d_filename = opt->getValue( "savex3d" );
     }
 
     //std::vector<std::string> point_cloud_filenames;
@@ -216,6 +223,17 @@ int main(int argc, char* argv[]) {
             camera_image_width, camera_image_height,
             stereo_camera_baseline,
             save_filename);
+        delete camera_calibration;
+        return 0;
+    }
+
+    if (save_x3d_filename != "") {
+        pointcloud::save_point_cloud_x3d(
+            save_x3d_filename,
+            camera_image_width, camera_image_height,
+            camera_calibration->pose,
+            stereo_camera_baseline,
+            point, point_colour);
         delete camera_calibration;
         return 0;
     }

@@ -29,11 +29,7 @@ CvMat* pointcloud::matMul(const CvMat* A, const CvMat* B)
 }
 
 /*
-  Format: floating point array with 4 float values per point
-  The first array value is the number of subsequent points,
-  followed by 16 floats containing the 4x4 pose matrix.
-  For each point the first three floats are the point coordinates,
-  and the subsequent three bytes are the RGB values
+  Format: An 11 float header, followed by three floats and three bytes per point
 */
 void pointcloud::save(
     unsigned char * img_left,
@@ -91,10 +87,6 @@ void pointcloud::save(
             cvReleaseMat(&rotation_matrix);
             cvReleaseMat(&rotation_vector);
 
-            //float tilt_degrees = 90 - (header[7]*180/3.1415927f);
-            //float cos_tilt = (float)cos(-tilt_degrees/180.0*3.1415927);
-            //float sin_tilt  = (float)sin(-tilt_degrees/180.0*3.1415927);
-
             int elem_bytes = (sizeof(float)*3) + 3;
             unsigned char * data_bytes = new unsigned char[elem_bytes*ctr];
             memset((void*)data_bytes, '\0', elem_bytes * ctr);
@@ -111,14 +103,110 @@ void pointcloud::save(
                     (fabs(dz) < max_range_mm)) {
             
                     float * data = (float*)&data_bytes[elem_bytes*ctr];
-                    data[0] = dx+pose_x; //dx + pose_x;
-                    data[1] = dy+pose_y; //(cos_tilt*dy - sin_tilt*dz) + pose_y;
-                    data[2] = dz+pose_z; //(sin_tilt*dy + cos_tilt*dz) + pose_z;
+                    data[0] = dx+pose_x;
+                    data[1] = dy+pose_y;
+                    data[2] = dz+pose_z;
 
                     int n2 = (elem_bytes*ctr) + (3*sizeof(float));
                     data_bytes[n2] = img_left[n];
                     data_bytes[n2+1] = img_left[n+1];
                     data_bytes[n2+2] = img_left[n+2];
+                    ctr++;
+                }
+            }
+            fwrite(data_bytes,elem_bytes,ctr,fp);
+            printf("%d points saved\n", ctr);
+            delete [] data_bytes;
+            delete [] header;
+        }
+        fclose(fp);
+    }
+}
+
+/*
+  Format: An 11 float header, followed by three floats and three bytes per point
+*/
+void pointcloud::save(
+    vector<float> &point,
+    vector<unsigned char> &point_colour,
+    int max_range_mm,
+    CvMat * pose,
+    int image_width,
+    int image_height,
+    float baseline,
+    std::string point_cloud_filename)
+{
+    float pose_x = (float)cvmGet(pose,0,3);
+    float pose_y = (float)cvmGet(pose,1,3);
+    float pose_z = (float)cvmGet(pose,2,3);
+
+    FILE * fp = fopen(point_cloud_filename.c_str(),"wb");
+    if (fp != NULL) {
+        int no_of_points = (int)point.size()/3;
+        int n = 0, ctr = 0;
+        for (int i = 0; i < no_of_points; i++, n += 3) {
+            float dx = point[n] - pose_x;
+            float dy = point[n+1] - pose_y;
+            float dz = point[n+2] - pose_z;
+
+            if ((fabs(dx)+fabs(dy)+fabs(dz) > 1) &&
+                (fabs(dx) < max_range_mm) &&
+                (fabs(dy) < max_range_mm) &&
+                (fabs(dz) < max_range_mm)) {
+                ctr++;
+            }
+        }
+        if (ctr > 0) {
+            float * header = new float[11];
+            header[0] = (float)POINT_CLOUD_VERSION;
+            header[1] = ctr;
+            header[2] = image_width;
+            header[3] = image_height;
+            header[4] = cvmGet(pose,0,3);
+            header[5] = cvmGet(pose,1,3);
+            header[6] = cvmGet(pose,2,3);
+
+            CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+            CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+            for (int y = 0; y < 3; y++) {
+                for (int x = 0; x < 3; x++) {
+                    cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
+                }
+            }
+            cvRodrigues2(rotation_matrix, rotation_vector);
+            header[7] = cvmGet(rotation_vector,0,0);
+            header[8] = cvmGet(rotation_vector,1,0);
+            header[9] = cvmGet(rotation_vector,2,0);
+            header[10] = baseline;
+
+            fwrite(header,sizeof(float),11,fp);
+            cvReleaseMat(&rotation_matrix);
+            cvReleaseMat(&rotation_vector);
+
+            int elem_bytes = (sizeof(float)*3) + 3;
+            unsigned char * data_bytes = new unsigned char[elem_bytes*ctr];
+            memset((void*)data_bytes, '\0', elem_bytes * ctr);
+            ctr = 0;
+            n = 0;
+            for (int i = 0; i < no_of_points; i++, n += 3) {
+                float dx = point[n] - pose_x;
+                float dy = point[n+1] - pose_y;
+                float dz = point[n+2] - pose_z;
+
+                if ((fabs(dx) + fabs(dy) + fabs(dz) > 1) &&
+                    (fabs(dx) < max_range_mm) &&
+                    (fabs(dy) < max_range_mm) &&
+                    (fabs(dz) < max_range_mm)) {
+            
+                    float * data = (float*)&data_bytes[elem_bytes*ctr];
+                    data[0] = dx+pose_x;
+                    data[1] = dy+pose_y;
+                    data[2] = dz+pose_z;
+
+                    int n2 = (elem_bytes*ctr) + (3*sizeof(float));
+                    data_bytes[n2] = point_colour[n];
+                    data_bytes[n2+1] = point_colour[n+1];
+                    data_bytes[n2+2] = point_colour[n+2];
                     ctr++;
                 }
             }
@@ -1443,7 +1531,7 @@ void pointcloud::save_stl_binary(
     fclose(fp);
 }
 
-void pointcloud::save_x3d(
+void pointcloud::save_mesh_x3d(
     std::string filename,
     int image_width,
     int image_height,
@@ -1545,6 +1633,68 @@ void pointcloud::save_x3d(
     }
     fprintf(fp,"\"/>");
     fprintf(fp,"</IndexedFaceSet>\n");
+    fprintf(fp,"</Shape>\n");
+    fprintf(fp,"</Scene>\n");
+    fprintf(fp,"</X3D>\n");
+
+    fclose(fp);
+}
+
+void pointcloud::save_point_cloud_x3d(
+    std::string filename,
+    int image_width,
+    int image_height,
+    CvMat * pose,
+    float baseline,
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour)
+{
+    unsigned int max = (unsigned int)(point.size()/3);
+
+    FILE * fp = fopen(filename.c_str(),"w");
+    if (fp==NULL) return;
+
+    fprintf(fp,"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    fprintf(fp,"<!DOCTYPE X3D PUBLIC \"ISO//Web3D//DTD X3D 3.1//EN\" \"http://www.web3d.org/specifications/x3d-3.1.dtd\">\n");
+    fprintf(fp,"<X3D profile=\"Immersive\" version=\"3.1\" xsd:noNamespaceSchemaLocation=\"http://www.web3d.org/specifications/x3d-3.1.xsd\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema-instance\">\n");
+    fprintf(fp, "<head>\n");
+    fprintf(fp,"<meta content=\"v4l2stereo\" name=\"generator\"/>\n");    
+    fprintf(fp,"<meta content=\"%f\" name=\"baseline\"/>\n", baseline);
+    fprintf(fp,"<meta content=\"%dx%d\" name=\"resolution\"/>\n", image_width, image_height);
+    fprintf(fp,"<meta content=\"%f %f %f\" name=\"translation\"/>\n",
+        cvmGet(pose,POINT_CLOUD_X_AXIS,3), cvmGet(pose,POINT_CLOUD_Y_AXIS,3), cvmGet(pose,POINT_CLOUD_Z_AXIS,3));
+
+    CvMat * rotation_matrix = cvCreateMat(3, 3, CV_32F);
+    CvMat * rotation_vector = cvCreateMat(3, 1, CV_32F);
+    for (int y = 0; y < 3; y++) {
+        for (int x = 0; x < 3; x++) {
+            cvmSet(rotation_matrix, y, x, cvmGet(pose, y, x));
+        }
+    }
+    cvRodrigues2(rotation_matrix, rotation_vector);
+    fprintf(fp,"<meta content=\"%f %f %f\" name=\"rotation\"/>\n",
+        cvmGet(rotation_vector,POINT_CLOUD_X_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Y_AXIS,0), cvmGet(rotation_vector,POINT_CLOUD_Z_AXIS,0));
+    cvReleaseMat(&rotation_matrix);
+    cvReleaseMat(&rotation_vector);
+
+    fprintf(fp,"</head>\n");
+    fprintf(fp,"<Scene>\n");
+    fprintf(fp,"<Shape>\n");
+    fprintf(fp,"<PointSet>\n");
+    fprintf(fp,"<Coordinate point=\"");
+
+    for (int p = 0; p < (int)max; p++) {
+        fprintf(fp,"%.2f %.2f %.2f ", -point[p*3], point[p*3+1], point[p*3+2]);
+    }
+    fprintf(fp,"\"/>\n");
+
+    fprintf(fp,"<ColorRGBA color=\"");
+    for (int p = 0; p < (int)max; p++) {
+        fprintf(fp,"%.2f %.2f %.2f 1 ", point_colour[p*3+2]/255.0f, point_colour[p*3+1]/255.0f, point_colour[p*3]/255.0f);
+    }
+    fprintf(fp,"\"/>\n");
+
+    fprintf(fp,"</PointSet>\n");
     fprintf(fp,"</Shape>\n");
     fprintf(fp,"</Scene>\n");
     fprintf(fp,"</X3D>\n");
@@ -1668,7 +1818,7 @@ void pointcloud::save_largest_object(
         }
     }
     else {
-        save_x3d(filename, image_width, image_height, pose, baseline, objects[index]);
+        save_mesh_x3d(filename, image_width, image_height, pose, baseline, objects[index]);
     }
 }
 
