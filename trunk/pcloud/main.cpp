@@ -72,12 +72,14 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --poserotation        Three values specifying camera rotation in degrees");
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
+    opt->addUsage( " -s  --save                Save filename");
     opt->addUsage( "     --axes                Show axes");
     opt->addUsage( " -V  --version             Show version number");
     opt->addUsage( "     --headless            Disable video output");
     opt->addUsage( "     --help                Show help");
     opt->addUsage( "" );
 
+    opt->setOption( "save", 's' );
     opt->setOption( "filename", 'f' );
     opt->setOption( "width", 'w' );
     opt->setOption( "height", 'h' );
@@ -141,6 +143,11 @@ int main(int argc, char* argv[]) {
         camera_calibration->ParsePoseTranslation(opt->getValue("posetranslation"));
     }
 
+    std::string save_filename = "";
+    if( opt->getValue( 's' ) != NULL  || opt->getValue( "save" ) != NULL  ) {
+        save_filename = opt->getValue( "save" );
+    }
+
     //std::vector<std::string> point_cloud_filenames;
     if( opt->getValue( 'f' ) != NULL  || opt->getValue( "filename" ) != NULL  ) {
         std::string str = opt->getValue( "filename" );
@@ -201,6 +208,18 @@ int main(int argc, char* argv[]) {
 
     printf("%d points loaded\n", (int)point.size()/3);
 
+    if (save_filename != "") {
+        pointcloud::save(
+            point, point_colour,
+            max_range_mm,
+            camera_calibration->pose,
+            camera_image_width, camera_image_height,
+            stereo_camera_baseline,
+            save_filename);
+        delete camera_calibration;
+        return 0;
+    }
+
     while(1) {
 
         usleep(100);
@@ -231,8 +250,8 @@ int main(int argc, char* argv[]) {
         int wait = cvWaitKey(10) & 255;
         if (wait==',') camera_calibration->translate_pose(-displacement_mm,0);
         if (wait=='.') camera_calibration->translate_pose(displacement_mm,0);
-        if ((wait=='a') || (wait=='A')) camera_calibration->translate_pose(displacement_mm,1);
-        if ((wait=='z') || (wait=='Z')) camera_calibration->translate_pose(-displacement_mm,1);
+        if ((wait=='a') || (wait=='A')) camera_calibration->translate_pose(-displacement_mm,1);
+        if ((wait=='z') || (wait=='Z')) camera_calibration->translate_pose(displacement_mm,1);
         if ((wait=='s') || (wait=='S')) camera_calibration->translate_pose(displacement_mm,2);
         if ((wait=='x') || (wait=='X')) camera_calibration->translate_pose(-displacement_mm,2);
         if (wait=='1') camera_calibration->rotate_pose(-rotation_step_degrees,0);
