@@ -61,6 +61,16 @@ protected:
         unsigned char * img_output);
 
 public:
+    static void save(
+        vector<float> &point,
+        vector<unsigned char> &point_colour,
+        int max_range_mm,
+        CvMat * pose,
+        int image_width,
+        int image_height,
+        float baseline,
+        std::string point_cloud_filename);
+
      static void save(
         unsigned char * img_left,
         IplImage * points_image, 
