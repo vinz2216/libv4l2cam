@@ -61,6 +61,16 @@ protected:
         unsigned char * img_output);
 
 public:
+    static void save(
+        vector<float> &point,
+        vector<unsigned char> &point_colour,
+        int max_range_mm,
+        CvMat * pose,
+        int image_width,
+        int image_height,
+        float baseline,
+        std::string point_cloud_filename);
+
      static void save(
         unsigned char * img_left,
         IplImage * points_image, 
@@ -209,7 +219,16 @@ public:
         float x2, float y2, float z2,
         float &nx, float &ny, float &nz);
 
-    static void save_x3d(
+    static void save_point_cloud_x3d(
+        std::string filename,
+        int image_width,
+        int image_height,
+        CvMat * pose,
+        float baseline,
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour);
+
+    static void save_mesh_x3d(
         std::string filename,
         int image_width,
         int image_height,
