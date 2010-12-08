@@ -885,7 +885,7 @@ void camcalib::SetPoseRotation(
     double * pose_vector)
 {
     for (int i = 0; i < 3; i++) {
-        if (pose_vector[i]!=0) rotate_pose(-pose_vector[i], i);
+        if (pose_vector[i]!=0) rotate_pose(pose_vector[i], i);
     }
 }
 
