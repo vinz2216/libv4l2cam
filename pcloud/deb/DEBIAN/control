@@ -9,4 +9,5 @@ Suggests:
 Essential: no
 Priority: optional
 Homepage: http://code.google.com/p/libv4l2cam/
-Description: A utility for viewing and processing point clouds generated from stereo vision
+Description: A utility for viewing and processing point clouds
+  This utility allows point clouds created using the v4l2stereo utility to be visualised, combined together and re-saved in X3D format
