@@ -873,8 +873,8 @@ int main(int argc, char* argv[]) {
         // obtain the tilt angle from the pose rotation
         double rotation_vector[3];
         camera_calibration->GetPoseRotation(rotation_vector);
-        tilt_angle_degrees = 90 - rotation_vector[0];
-        rotation_vector[0] = 90;
+        tilt_angle_degrees = -rotation_vector[0];
+        rotation_vector[0] = -rotation_vector[0];
         camera_calibration->SetPoseRotation(rotation_vector);
     }
 
@@ -2017,14 +2017,14 @@ int main(int argc, char* argv[]) {
             double rotation_step_degrees = 0.5;
             if (wait==',') camera_calibration->translate_pose(-displacement_mm,0);
             if (wait=='.') camera_calibration->translate_pose(displacement_mm,0);
-            if ((wait=='a') || (wait=='A')) camera_calibration->translate_pose(displacement_mm,1);
-            if ((wait=='z') || (wait=='Z')) camera_calibration->translate_pose(-displacement_mm,1);
+            if ((wait=='a') || (wait=='A')) camera_calibration->translate_pose(-displacement_mm,1);
+            if ((wait=='z') || (wait=='Z')) camera_calibration->translate_pose(displacement_mm,1);
             if ((wait=='s') || (wait=='S')) camera_calibration->translate_pose(displacement_mm,2);
             if ((wait=='x') || (wait=='X')) camera_calibration->translate_pose(-displacement_mm,2);
             if (wait=='1') camera_calibration->rotate_pose(-rotation_step_degrees,0);
             if (wait=='2') camera_calibration->rotate_pose(rotation_step_degrees,0);
-            if (wait=='3') camera_calibration->rotate_pose(-rotation_step_degrees,1);
-            if (wait=='4') camera_calibration->rotate_pose(rotation_step_degrees,1);
+            if (wait=='3') camera_calibration->rotate_pose(rotation_step_degrees,1);
+            if (wait=='4') camera_calibration->rotate_pose(-rotation_step_degrees,1);
             if (wait=='5') camera_calibration->rotate_pose(-rotation_step_degrees,2);
             if (wait=='6') camera_calibration->rotate_pose(rotation_step_degrees,2);
         }
