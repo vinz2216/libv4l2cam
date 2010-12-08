@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-//#define GSTREAMER
+#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -64,7 +64,7 @@
 #include "pointcloud.h"
 //#include "gridmap3d.h"
 
-#define VERSION 1.051
+#define VERSION 1.052
 
 using namespace std;
 
@@ -808,7 +808,9 @@ int main(int argc, char* argv[]) {
     }
 
     if( opt->getValue("poserotation") != NULL ) {
-        camera_calibration->ParsePoseRotation(opt->getValue("poserotation"));
+        bool flip = false;
+        if( opt->getValue("pointcloud") != NULL ) flip = true;
+        camera_calibration->ParsePoseRotation(opt->getValue("poserotation"), flip);
     }
 
     if( opt->getValue("posetranslation") != NULL ) {
@@ -873,8 +875,8 @@ int main(int argc, char* argv[]) {
         // obtain the tilt angle from the pose rotation
         double rotation_vector[3];
         camera_calibration->GetPoseRotation(rotation_vector);
-        tilt_angle_degrees = -rotation_vector[0];
-        rotation_vector[0] = -rotation_vector[0];
+        tilt_angle_degrees = rotation_vector[0];
+        rotation_vector[0] = rotation_vector[0];
         camera_calibration->SetPoseRotation(rotation_vector);
     }
 

@@ -615,7 +615,8 @@ int camcalib::ParseIntrinsic(
 }
 
 int camcalib::ParsePoseRotation(
-    char * pose_str)
+    char * pose_str,
+    bool flip)
 {
     char str[256];
     double params[3];
@@ -638,6 +639,10 @@ int camcalib::ParsePoseRotation(
         params[p++] = atof(str);
     }
     if (p==3) {
+        if (flip) {
+            params[1] = -params[1];
+            params[2] = -params[2];
+        }
         SetPoseRotation(params);
         success=1;
     }

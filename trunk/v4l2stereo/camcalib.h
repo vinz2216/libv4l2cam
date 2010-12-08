@@ -179,7 +179,7 @@ public:
         char * pose_str);
 
     int ParsePoseRotation(
-        char * pose_str);
+        char * pose_str, bool flip);
 
     int ParseDistortion(
         char * distortion_str,
