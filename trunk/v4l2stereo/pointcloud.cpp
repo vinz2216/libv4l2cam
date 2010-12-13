@@ -1822,6 +1822,114 @@ void pointcloud::save_largest_object(
     }
 }
 
+void pointcloud::fill_surface(
+    int * height,
+    int dimension,
+    int x, int y,
+    int surface_height_mm,
+    vector<int> &surface,
+    int depth)
+{
+    if ((depth < 10000) && (x >= 0) && (y >= 0) && (x < dimension) && (y < dimension)) {
+        if (height[y*dimension + x] == surface_height_mm) {
+            surface.push_back(x);
+            surface.push_back(y);
+            height[y*dimension+x]++;
+
+            fill_surface(height, dimension, x, y-1, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x+1, y-1, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x+1, y, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x+1, y+1, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x, y+1, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x-1, y+1, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x-1, y, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x-1, y-1, surface_height_mm, surface, depth+1);
+        }
+    }
+}
+
+void pointcloud::find_horizontal_surfaces(
+    int map_dimension_mm,
+    int cell_size_mm,
+    int min_height_mm,
+    int min_surface_area_mm2,
+    int * height,
+    vector<vector<int> > &surfaces)
+{
+    int dimension = map_dimension_mm / cell_size_mm;
+    int n=0;
+    for (int y = 0; y < dimension; y++) {
+        for (int x = 0; x < dimension; x++, n++) {
+            if (height[n] > min_height_mm) {
+                if (height[n] % cell_size_mm == 0) {
+                    vector<int> surface;
+                    fill_surface(height, dimension, x, y, height[n], surface, 0);
+                    int area_mm2 = ((int)surface.size()/2)*cell_size_mm;
+                    area_mm2 *= area_mm2;
+                    if (area_mm2 > min_surface_area_mm2) {
+                        surfaces.push_back(surface);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void pointcloud::height_field(
+    vector<float> &point,
+    int camera_height_mm,
+    int map_dimension_mm,
+    int cell_size_mm,
+    int min_height_mm,
+    int max_height_mm,
+    int * height)
+{
+    int dimension = map_dimension_mm / cell_size_mm;
+    int half_dimension = dimension/2;
+
+    for (int i = 0; i < dimension * dimension; i++) {
+        height[i] = min_height_mm;
+    }
+
+    for (int i = (int)point.size()-1; i >= 0; i--) {
+        int z_mm = (int)(point[i*3+2] + camera_height_mm);
+        if ((z_mm >= min_height_mm) && (z_mm <= max_height_mm)) {                     
+            int x = half_dimension + (int)(point[i*3] / cell_size_mm);
+            if ((x >= 0) && (x < dimension)) {
+                int y = half_dimension + (int)(point[i*3+1] / cell_size_mm);
+                if ((y >= 0) && (y < dimension)) {
+                    int n = y*dimension + x;
+                    int z = (z_mm/cell_size_mm) * cell_size_mm;
+                    if (height[n] < z) {
+                        height[n] = z;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void pointcloud::overhead_occupancy(
+    vector<float> &point,
+    int map_dimension_mm,
+    int cell_size_mm,
+    unsigned int * map)
+{
+    int dimension = map_dimension_mm / cell_size_mm;
+    int half_dimension = dimension/2;
+    memset((void*)map,'\0',dimension * dimension * sizeof(unsigned int));
+    for (int i = (int)point.size()-1; i >= 0; i--) {
+        int x = half_dimension + (int)(point[i*3] / cell_size_mm);
+        if ((x >= 0) && (x < dimension)) {
+            int y = half_dimension + (int)(point[i*3+1] / cell_size_mm);
+            if ((y >= 0) && (y < dimension)) {
+                int n = y*dimension + x;
+                map[n]++;
+            }
+        }
+    }
+}
+
 
 
 
