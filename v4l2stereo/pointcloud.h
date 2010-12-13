@@ -60,6 +60,14 @@ protected:
         int image_height,
         unsigned char * img_output);
 
+    static void fill_surface(
+        int * height,
+        int dimension,
+        int x, int y,
+        int surface_height_mm,
+        vector<int> &surface,
+        int depth);
+
 public:
     static void save(
         vector<float> &point,
@@ -272,6 +280,28 @@ public:
         std::vector<float> &points,
         int max_range_mm);
 
+    static void height_field(
+        vector<float> &point,
+        int camera_height_mm,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int max_height_mm,
+        int * height);
+
+    static void find_horizontal_surfaces(
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int min_surface_area_mm2,
+        int * height,
+        vector<vector<int> > &surfaces);
+
+    static void overhead_occupancy(
+        vector<float> &point,
+        int map_dimension_mm,
+        int cell_size_mm,
+        unsigned int * map);
 };
 
 #endif
