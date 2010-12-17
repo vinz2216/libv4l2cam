@@ -127,8 +127,8 @@ void pointcloud::save(
   Format: An 11 float header, followed by three floats and three bytes per point
 */
 void pointcloud::save(
-    vector<float> &point,
-    vector<unsigned char> &point_colour,
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour,
     int max_range_mm,
     CvMat * pose,
     int image_width,
@@ -225,8 +225,8 @@ bool pointcloud::load(
      int &image_width,
      int &image_height,
      float &baseline,
-     vector<float> &point,
-     vector<unsigned char> &point_colour)
+     std::vector<float> &point,
+     std::vector<unsigned char> &point_colour)
 {
     bool success = true;
     FILE * fp = fopen(point_cloud_filename.c_str(),"rb");
@@ -1827,14 +1827,13 @@ void pointcloud::fill_surface(
     int dimension,
     int x, int y,
     int surface_height_mm,
-    vector<int> &surface,
+    std::vector<cv::Point> &surface,
     int depth)
 {
     if ((depth < 10000) && (x >= 0) && (y >= 0) && (x < dimension) && (y < dimension)) {
         if (height[y*dimension + x] == surface_height_mm) {
-            surface.push_back(x);
-            surface.push_back(y);
-            height[y*dimension+x]++;
+            surface.push_back(cv::Point(x, y));
+            height[y*dimension + x]++;
 
             fill_surface(height, dimension, x, y-1, surface_height_mm, surface, depth+1);
             fill_surface(height, dimension, x+1, y-1, surface_height_mm, surface, depth+1);
@@ -1848,35 +1847,216 @@ void pointcloud::fill_surface(
     }
 }
 
+void pointcloud::enlarge_surface(
+    std::vector<cv::Point> &surface,
+    std::vector<cv::Point> &enlarged,
+    int enlarge_percent)
+{
+    enlarged.clear();
+    float av_x=0,av_y=0;
+    for (int i = 0; i < (int)surface.size(); i++) {
+        av_x += surface[i].x;
+        av_y += surface[i].y;
+    }
+    av_x /= (int)surface.size();
+    av_y /= (int)surface.size();
+    for (int i = 0; i < (int)surface.size(); i++) {
+        float dx = (surface[i].x - av_x)*(100+enlarge_percent)/100;
+        float dy = (surface[i].y - av_y)*(100+enlarge_percent)/100;
+        cv::Point pt;
+        pt.x = av_x + dx;
+        pt.y = av_y + dy;
+        enlarged.push_back(pt);
+    }
+}
+
+bool pointcloud::connected_surfaces(
+    std::vector<cv::Point> &surface1,
+    std::vector<cv::Point> &surface2)
+{
+    bool connected = false;
+    std::vector<cv::Point> enlarged1;
+    std::vector<cv::Point> enlarged2;
+
+    enlarge_surface(surface1,enlarged1,10);
+    enlarge_surface(surface2,enlarged2,10);
+
+    for (int i = 0; i < (int)enlarged1.size(); i++) {
+        if (inside_surface(enlarged2, enlarged1[i].x,enlarged1[i].y)) {
+            return true;
+        }
+    }
+    for (int i = 0; i < (int)enlarged2.size(); i++) {
+        if (inside_surface(enlarged1, enlarged2[i].x,enlarged2[i].y)) {
+            return true;
+        }
+    }
+    return connected;
+}
+
+void pointcloud::join_surfaces(
+    std::vector<std::vector<cv::Point> > &surfaces,
+    std::vector<int> &surface_heights,
+    int max_height_difference)
+{
+    std::vector<std::vector<cv::Point> > new_surfaces;
+    std::vector<int> new_surface_heights;
+    bool * connection_matrix = new bool[(int)surfaces.size()*(int)surfaces.size()];
+    for (int i = ((int)surfaces.size()*(int)surfaces.size())-1; i >= 0; i--) {
+        connection_matrix[i] = false;
+    }
+
+    for (int i = 0; i < (int)surfaces.size(); i++) {
+        for (int j = i+1; j < (int)surfaces.size(); j++) {
+            if (fabs(surface_heights[i] - surface_heights[j]) < max_height_difference) {
+                if (connected_surfaces(surfaces[i], surfaces[j])) {
+                    connection_matrix[i*(int)surfaces.size() + j] = true;
+                    connection_matrix[j*(int)surfaces.size() + i] = true;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < (int)surfaces.size(); i++) {
+        std::vector<cv::Point> pts;
+        for (int j = 0; j < (int)surfaces[i].size(); j++) {
+            pts.push_back(surfaces[i][j]);
+        }
+
+        int height = surface_heights[i];
+        int height_hits=1;
+        for (int j = 0; j < (int)surfaces.size(); j++) {
+            if (connection_matrix[i*(int)surfaces.size() + j]) {
+                for (int k = 0; k < (int)surfaces[j].size(); k++) {
+                    pts.push_back(surfaces[j][k]);
+                }
+                height += surface_heights[j];
+                height_hits++;
+            }
+        }
+
+        if (height_hits == 1) {
+            new_surfaces.push_back(pts);
+            new_surface_heights.push_back(surface_heights[i]);
+        }
+        else {
+            int no_of_points = (int)pts.size();
+            CvPoint * points = new CvPoint[no_of_points];
+            int * hull = new int[no_of_points];
+                        
+            for (int k = 0; k < (int)pts.size(); k++) {
+                points[k] = pts[k];
+            }
+
+            CvMat pointMat = cvMat(1, no_of_points, CV_32SC2, points);
+            CvMat hullMat = cvMat(1, no_of_points, CV_32SC1, hull);
+            cvConvexHull2( &pointMat, &hullMat, CV_CLOCKWISE, 0 );
+            std::vector<cv::Point> hull2;
+            for (int k = 0; k < (int)hullMat.cols; k++) {
+                hull2.push_back(points[hull[k]]);
+            }
+            new_surfaces.push_back(hull2);
+            new_surface_heights.push_back(height/height_hits);
+            delete [] hull;
+            delete [] points;
+        }
+    }
+
+    delete [] connection_matrix;
+
+    surfaces.clear();
+    surface_heights.clear();
+    for (int i = 0; i < (int)new_surfaces.size(); i++) {
+        surfaces.push_back(new_surfaces[i]);
+        surface_heights.push_back(new_surface_heights[i]);
+    }
+}
+
+bool pointcloud::inside_surface(
+    std::vector<cv::Point> &vertices,
+    float x, float y)
+{
+    int i, j;
+    bool c = false;
+    for (i = 0, j = (int)vertices.size()-1; i < (int)vertices.size(); j = i++) {
+        if (fabs(vertices[j].y - vertices[i].y) > 0.1f) {
+            if ( ((vertices[i].y > y) != (vertices[j].y > y)) &&
+	         (x < (vertices[j].x-vertices[i].x) * (y-vertices[i].y) / (vertices[j].y-vertices[i].y) + vertices[i].x) ) {
+                c = !c;
+            }
+        }
+    }
+    return c;
+}
+
 void pointcloud::find_horizontal_surfaces(
     int map_dimension_mm,
     int cell_size_mm,
     int min_height_mm,
     int min_surface_area_mm2,
     int * height,
-    vector<vector<int> > &surfaces)
+    std::vector<std::vector<cv::Point> > &surfaces,
+    std::vector<int> &surface_heights)
 {
     int dimension = map_dimension_mm / cell_size_mm;
+    int half_dimension = dimension/2;
     int n=0;
     for (int y = 0; y < dimension; y++) {
         for (int x = 0; x < dimension; x++, n++) {
             if (height[n] > min_height_mm) {
                 if (height[n] % cell_size_mm == 0) {
-                    vector<int> surface;
-                    fill_surface(height, dimension, x, y, height[n], surface, 0);
-                    int area_mm2 = ((int)surface.size()/2)*cell_size_mm;
-                    area_mm2 *= area_mm2;
+                    std::vector<cv::Point> surface_points;
+                    fill_surface(height, dimension, x, y, height[n], surface_points, 0);
+                    int area_mm2 = (int)surface_points.size() * cell_size_mm;
                     if (area_mm2 > min_surface_area_mm2) {
-                        surfaces.push_back(surface);
+                        // compute the convex hull
+                        CvPoint * points = new CvPoint[(int)surface_points.size()];
+                        int * hull = new int[(int)surface_points.size()];
+
+                        float tx=0,ty=0,bx=0,by=0;
+                        for (int i = 0; i < (int)surface_points.size(); i++) {
+                            points[i] = surface_points[i];
+                            if (i>0) {
+                                if (points[i].x < tx) tx = points[i].x;
+                                if (points[i].y < ty) ty = points[i].y;
+                                if (points[i].x > bx) bx = points[i].x;
+                                if (points[i].y > by) by = points[i].y;
+                            }
+                            else {
+                                tx = points[i].x;
+                                ty = points[i].y;
+                                bx = points[i].x;
+                                by = points[i].y;
+                            }
+                        }
+
+                        CvMat pointMat = cvMat(1, (int)surface_points.size(), CV_32SC2, points);
+                        CvMat hullMat = cvMat(1, (int)surface_points.size(), CV_32SC1, hull);
+                        cvConvexHull2( &pointMat, &hullMat, CV_CLOCKWISE, 0 );
+                        std::vector<cv::Point> hull2;
+                        for (int i = 0; i < (int)hullMat.cols; i++) {
+                            CvPoint pt = points[hull[i]];
+                            pt.x = (pt.x - half_dimension) * cell_size_mm;
+                            pt.y = (pt.y - half_dimension) * cell_size_mm;
+                            hull2.push_back(pt);
+                        }
+                        surfaces.push_back(hull2);
+                        surface_heights.push_back(height[n]);
+                        delete [] hull;
+                        delete [] points;
                     }
                 }
             }
         }
     }
+
+    for (int i = 0; i < 2; i++) {
+        join_surfaces(surfaces, surface_heights,cell_size_mm*2);
+    }
 }
 
 void pointcloud::height_field(
-    vector<float> &point,
+    std::vector<float> &point,
     int camera_height_mm,
     int map_dimension_mm,
     int cell_size_mm,
@@ -1891,12 +2071,12 @@ void pointcloud::height_field(
         height[i] = min_height_mm;
     }
 
-    for (int i = (int)point.size()-1; i >= 0; i--) {
-        int z_mm = (int)(point[i*3+2] + camera_height_mm);
-        if ((z_mm >= min_height_mm) && (z_mm <= max_height_mm)) {                     
-            int x = half_dimension + (int)(point[i*3] / cell_size_mm);
+    for (int i = (int)point.size()-3; i >= 0; i-=3) {
+        int z_mm = (int)(point[i+POINT_CLOUD_Z_AXIS] + camera_height_mm);
+        if (z_mm >= min_height_mm) {                     
+            int x = half_dimension + (int)(point[i+POINT_CLOUD_X_AXIS] / cell_size_mm);
             if ((x >= 0) && (x < dimension)) {
-                int y = half_dimension + (int)(point[i*3+1] / cell_size_mm);
+                int y = half_dimension + (int)(point[i+POINT_CLOUD_Y_AXIS] / cell_size_mm);
                 if ((y >= 0) && (y < dimension)) {
                     int n = y*dimension + x;
                     int z = (z_mm/cell_size_mm) * cell_size_mm;
@@ -1907,26 +2087,221 @@ void pointcloud::height_field(
             }
         }
     }
+
+    for (int i = 0; i < dimension * dimension; i++) {
+        if (height[i] > max_height_mm) {
+            height[i] = min_height_mm;
+        }
+    }
 }
 
 void pointcloud::overhead_occupancy(
-    vector<float> &point,
+    std::vector<float> &point,
     int map_dimension_mm,
     int cell_size_mm,
-    unsigned int * map)
+    int * map)
 {
     int dimension = map_dimension_mm / cell_size_mm;
     int half_dimension = dimension/2;
-    memset((void*)map,'\0',dimension * dimension * sizeof(unsigned int));
+    memset((void*)map,'\0',dimension * dimension * sizeof(int));
     for (int i = (int)point.size()-1; i >= 0; i--) {
-        int x = half_dimension + (int)(point[i*3] / cell_size_mm);
+        int x = half_dimension + (int)(point[i*3+POINT_CLOUD_X_AXIS] / cell_size_mm);
         if ((x >= 0) && (x < dimension)) {
-            int y = half_dimension + (int)(point[i*3+1] / cell_size_mm);
+            int y = half_dimension + (int)(point[i*3+POINT_CLOUD_Y_AXIS] / cell_size_mm);
             if ((y >= 0) && (y < dimension)) {
                 int n = y*dimension + x;
                 map[n]++;
             }
         }
+    }
+}
+
+void pointcloud::detect_horizontal_surfaces(
+    std::vector<float> &point,
+    int camera_height_mm,
+    int map_dimension_mm,
+    int cell_size_mm,
+    int min_height_mm,
+    int max_height_mm,
+    int min_surface_area_mm2,
+    std::vector<std::vector<cv::Point> > &surfaces,
+    std::vector<int> &surface_heights)
+{
+    int dimension = map_dimension_mm / cell_size_mm;
+    int * height = new int[dimension*dimension];
+
+    height_field(
+        point, camera_height_mm,
+        map_dimension_mm, cell_size_mm,
+        min_height_mm, max_height_mm, height);
+
+    find_horizontal_surfaces(
+        map_dimension_mm,
+        cell_size_mm,
+        min_height_mm,
+        min_surface_area_mm2,
+        height,
+        surfaces, surface_heights);
+
+    delete [] height;
+}
+
+void pointcloud::horizontal_surfaces_points(
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour,
+    int camera_height_mm,
+    int map_dimension_mm,
+    int cell_size_mm,
+    int min_height_mm,
+    int max_height_mm,
+    int min_surface_area_mm2,
+    std::vector<float> &horizontal_point,
+    std::vector<unsigned char> &horizontal_point_colour)
+{
+    std::vector<std::vector<cv::Point> > surfaces;
+    std::vector<int> surface_heights;
+
+    detect_horizontal_surfaces(
+        point,
+        camera_height_mm,
+        map_dimension_mm,
+        cell_size_mm,
+        min_height_mm, max_height_mm,
+        min_surface_area_mm2,
+        surfaces, surface_heights);
+
+    for (int i = 0; i < (int)surfaces.size(); i++) {
+        std::vector<cv::Point> surface = surfaces[i];
+
+        float tx = 0, ty = 0, bx = 0, by = 0;
+        for (int j = 0; j < (int)surface.size(); j++) {
+            if (j != 0) {
+                if (surface[j].x < tx) tx = surface[j].x;
+                if (surface[j].y < ty) ty = surface[j].y;
+                if (surface[j].x > bx) bx = surface[j].x;
+                if (surface[j].y > by) by = surface[j].y;
+            }
+            else {
+                tx = surface[j].x;
+                ty = surface[j].y;
+                bx = surface[j].x;
+                by = surface[j].y;
+            }
+        }
+
+        for (int j = 0; j < (int)point.size(); j += 3) {
+            if (point[j+POINT_CLOUD_X_AXIS] >= tx) {
+                if (point[j+POINT_CLOUD_Y_AXIS] >= ty) {
+                    if (point[j+POINT_CLOUD_X_AXIS] <= bx) {
+                        if (point[j+POINT_CLOUD_Y_AXIS] <= by) {
+                            if (inside_surface(surface, point[j+POINT_CLOUD_X_AXIS], point[j+POINT_CLOUD_Y_AXIS])) {
+                                horizontal_point.push_back(point[j]);
+                                horizontal_point.push_back(point[j+1]);
+                                horizontal_point.push_back(point[j+3]);
+                                horizontal_point_colour.push_back(point_colour[j]);
+                                horizontal_point_colour.push_back(point_colour[j+1]);
+                                horizontal_point_colour.push_back(point_colour[j+2]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void pointcloud::colour_surfaces_points(
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour,
+    int camera_height_mm,
+    int map_dimension_mm,
+    int cell_size_mm,
+    int min_height_mm,
+    int max_height_mm,
+    int min_surface_area_mm2,
+    int r, int g, int b)
+{
+    std::vector<std::vector<cv::Point> > surfaces;
+    std::vector<int> surface_heights;
+
+    detect_horizontal_surfaces(
+        point,
+        camera_height_mm,
+        map_dimension_mm,
+        cell_size_mm,
+        min_height_mm, max_height_mm,
+        min_surface_area_mm2,
+        surfaces, surface_heights);
+
+//printf("surfaces %d\n", (int)surfaces.size());
+
+    for (int i = 0; i < (int)surfaces.size(); i++) {
+        std::vector<cv::Point> surface = surfaces[i];
+        int height = surface_heights[i];
+
+        float tx = 0, ty = 0, bx = 0, by = 0;
+        for (int j = 0; j < (int)surface.size(); j++) {
+            if (j != 0) {
+                if (surface[j].x < tx) tx = surface[j].x;
+                if (surface[j].y < ty) ty = surface[j].y;
+                if (surface[j].x > bx) bx = surface[j].x;
+                if (surface[j].y > by) by = surface[j].y;
+            }
+            else {
+                tx = surface[j].x;
+                ty = surface[j].y;
+                bx = surface[j].x;
+                by = surface[j].y;
+            }
+        }
+
+        r=g=b=0;
+        switch(i % 6) {
+            case 0: {
+                r = 255;
+                break;
+            }
+            case 1: {
+                g = 255;
+                break;
+            }
+            case 2: {
+                b = 255;
+                break;
+            }
+            case 3: {
+                r = g = 255;
+                break;
+            }
+            case 4: {
+                g = b = 255;
+                break;
+            }
+            case 5: {
+                r = b = 255;
+                break;
+            }
+        }
+
+        for (int j = 0; j < (int)point.size(); j += 3) {
+            if (point[j+POINT_CLOUD_X_AXIS] >= tx) {
+                if (point[j+POINT_CLOUD_Y_AXIS] >= ty) {
+                    if (point[j+POINT_CLOUD_X_AXIS] <= bx) {
+                        if (point[j+POINT_CLOUD_Y_AXIS] <= by) {
+                            if (inside_surface(surface, point[j+POINT_CLOUD_X_AXIS], point[j+POINT_CLOUD_Y_AXIS])) {
+                                int point_height = (int)point[j+POINT_CLOUD_Z_AXIS]+camera_height_mm;
+                                if (fabs(point_height - height) < cell_size_mm) {
+                                   point_colour[j] = (unsigned char)b;
+                                   point_colour[j+1] = (unsigned char)g;
+                                   point_colour[j+2] = (unsigned char)r;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
     }
 }
 

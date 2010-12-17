@@ -43,8 +43,10 @@ int main(int argc, char* argv[]) {
     bool headless = false;
     bool view_point_cloud = false;
     bool show_axes = false;
+    bool show_surfaces = false;
     int camera_image_width=0,camera_image_height=0;
     float stereo_camera_baseline=0;
+    int camera_height_mm = 0;
     std::vector<float> point;
     std::vector<unsigned char> point_colour;
 
@@ -72,6 +74,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --poserotation        Three values specifying camera rotation in degrees");
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
+    opt->addUsage( "     --surfaces            Highlight horizontal surfaces");
     opt->addUsage( " -s  --save                Save filename");
     opt->addUsage( " -x  --savex3d             Save as X3D filename");
     opt->addUsage( "     --axes                Show axes");
@@ -88,6 +91,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "poserotation" );
     opt->setOption( "posetranslation" );
     opt->setOption( "calibrationfile" );
+    opt->setFlag( "surfaces" );
     opt->setFlag( "axes" );
     opt->setFlag( "headless" );
     opt->setFlag( "help" );
@@ -120,6 +124,10 @@ int main(int argc, char* argv[]) {
         headless = true;
     }
 
+    if( opt->getFlag( "surfaces" ) ) {
+        show_surfaces = true;
+    }
+
     if( opt->getFlag( "axes" ) ) {
         show_axes = true;
     }
@@ -143,6 +151,7 @@ int main(int argc, char* argv[]) {
 
     if( opt->getValue("posetranslation") != NULL ) {
         camera_calibration->ParsePoseTranslation(opt->getValue("posetranslation"));
+        camera_height_mm = (int)cvmGet(camera_calibration->pose,0,3);
     }
 
     std::string save_filename = "";
@@ -214,6 +223,23 @@ int main(int argc, char* argv[]) {
     }
 
     printf("%d points loaded\n", (int)point.size()/3);
+
+    int cell_size_mm = 70;
+    int map_dimension_mm = cell_size_mm * 64;
+    int min_height_mm = 100;
+    int max_height_mm = 1000;
+    int min_surface_area_mm2 = 1000;
+
+    if (show_surfaces) {
+        pointcloud::colour_surfaces_points(
+            point, point_colour,
+            camera_height_mm,
+            map_dimension_mm,
+            cell_size_mm,
+            min_height_mm, max_height_mm,
+            min_surface_area_mm2,
+            0, 255, 0);
+    }
 
     if (save_filename != "") {
         pointcloud::save(
