@@ -60,10 +60,22 @@ protected:
         int image_height,
         unsigned char * img_output);
 
+    static void fill_surface(
+        int * height,
+        int dimension,
+        int x, int y,
+        int surface_height_mm,
+        std::vector<cv::Point> &surface,
+        int depth);
+
+    static bool inside_surface(
+        std::vector<cv::Point> &vertices,
+        float x, float y);
+
 public:
     static void save(
-        vector<float> &point,
-        vector<unsigned char> &point_colour,
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour,
         int max_range_mm,
         CvMat * pose,
         int image_width,
@@ -85,8 +97,8 @@ public:
         int &image_width,
         int &image_height,
         float &baseline,
-        vector<float> &point,
-        vector<unsigned char> &point_colour);
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour);
 
     static void disparity_map_to_3d_points(
         float * disparity_map,
@@ -271,6 +283,78 @@ public:
         bool BGR,
         std::vector<float> &points,
         int max_range_mm);
+
+    static void enlarge_surface(
+        std::vector<cv::Point> &surface,
+        std::vector<cv::Point> &enlarged,
+        int enlarge_percent);
+
+    static bool connected_surfaces(
+        std::vector<cv::Point> &surface1,
+        std::vector<cv::Point> &surface2);
+
+    static void join_surfaces(
+        std::vector<std::vector<cv::Point> > &surfaces,
+        std::vector<int> &surface_heights,
+        int max_height_difference);
+
+    static void height_field(
+        std::vector<float> &point,
+        int camera_height_mm,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int max_height_mm,
+        int * height);
+
+    static void find_horizontal_surfaces(
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int min_surface_area_mm2,
+        int * height,
+        std::vector<std::vector<cv::Point> > &surfaces,
+        std::vector<int> &surface_heights);
+
+    static void overhead_occupancy(
+        std::vector<float> &point,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int * map);
+
+    static void detect_horizontal_surfaces(
+        std::vector<float> &point,
+        int camera_height_mm,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int max_height_mm,
+        int min_surface_area_mm2,
+        std::vector<std::vector<cv::Point> > &surfaces,
+        std::vector<int> &surface_heights);
+
+    static void horizontal_surfaces_points(
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour,
+        int camera_height_mm,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int max_height_mm,
+        int min_surface_area_mm2,
+        std::vector<float> &horizontal_point,
+        std::vector<unsigned char> &horizontal_point_colour);
+
+    static void colour_surfaces_points(
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour,
+        int camera_height_mm,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int max_height_mm,
+        int min_surface_area_mm2,
+        int r, int g, int b);
 
 };
 
