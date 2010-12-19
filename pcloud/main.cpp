@@ -50,6 +50,11 @@ int main(int argc, char* argv[]) {
     std::vector<float> point;
     std::vector<unsigned char> point_colour;
 
+    int min_surface_area_mm2 = 70*70;
+    int cell_size_mm = 32;
+    int min_height_mm = 100;
+    int max_height_mm = 1000;
+
     camcalibbase * camera_calibration = new camcalibbase();
     camera_calibration->ParseCalibrationFile("calibration.txt");
 
@@ -75,6 +80,10 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
     opt->addUsage( "     --surfaces            Highlight horizontal surfaces");
+    opt->addUsage( "     --minsurfacearea      Minimum surface area in square millimetres");
+    opt->addUsage( "     --minheight           Minimum surface height in millimetres");
+    opt->addUsage( "     --maxheight           Maximum surface height in millimetres");
+    opt->addUsage( "     --cellsize            Cell size in millimetres");
     opt->addUsage( " -s  --save                Save filename");
     opt->addUsage( " -x  --savex3d             Save as X3D filename");
     opt->addUsage( "     --axes                Show axes");
@@ -91,6 +100,10 @@ int main(int argc, char* argv[]) {
     opt->setOption( "poserotation" );
     opt->setOption( "posetranslation" );
     opt->setOption( "calibrationfile" );
+    opt->setOption( "minsurfacearea" );
+    opt->setOption( "minheight" );
+    opt->setOption( "maxheight" );
+    opt->setOption( "cellsize" );
     opt->setFlag( "surfaces" );
     opt->setFlag( "axes" );
     opt->setFlag( "headless" );
@@ -162,6 +175,23 @@ int main(int argc, char* argv[]) {
     std::string save_x3d_filename = "";
     if( opt->getValue( 'x' ) != NULL  || opt->getValue( "savex3d" ) != NULL  ) {
         save_x3d_filename = opt->getValue( "savex3d" );
+    }
+
+    if( opt->getValue( "minheight" ) != NULL  ) {
+        min_height_mm = atoi(opt->getValue("minheight"));
+    }
+
+    if( opt->getValue( "maxheight" ) != NULL  ) {
+        max_height_mm = atoi(opt->getValue("maxheight"));
+    }
+
+    if( opt->getValue( "cellsize" ) != NULL  ) {
+        cell_size_mm = atoi(opt->getValue("cellsize"));
+    }
+
+    if( opt->getValue( "minsurfacearea" ) != NULL  ) {
+        min_surface_area_mm2 = atoi(opt->getValue( "minsurfacearea" ));
+        min_surface_area_mm2 *= min_surface_area_mm2;
     }
 
     //std::vector<std::string> point_cloud_filenames;
@@ -238,12 +268,7 @@ int main(int argc, char* argv[]) {
          10);
 */
 
-    int cell_size_mm = 32;
-    int map_dimension_mm = cell_size_mm * 64;
-    int min_height_mm = 100;
-    int max_height_mm = 1000;
-    int patch_surface_area_mm2 = 5000;
-    int min_surface_area_mm2 = 5000;
+    int map_dimension_mm = cell_size_mm * 128;
 
     if (show_surfaces) {
         pointcloud::colour_surfaces_points(
@@ -252,7 +277,7 @@ int main(int argc, char* argv[]) {
             map_dimension_mm,
             cell_size_mm,
             min_height_mm, max_height_mm,
-            patch_surface_area_mm2,
+            min_surface_area_mm2,
             min_surface_area_mm2,
             0, 255, 0);
     }
