@@ -2378,17 +2378,12 @@ void pointcloud::colour_surfaces_points(
         min_surface_area_mm2,
         surfaces, surface_heights);
 
-printf("surfaces %d\n", (int)surfaces.size());
-
     for (int i = 0; i < (int)surfaces.size(); i++) {
         std::vector<cv::Point> surface = surfaces[i];
         int height = surface_heights[i];
 
-printf("vertices %d\n",(int)surface.size());
-
         float tx = 0, ty = 0, bx = 0, by = 0;
         for (int j = 0; j < (int)surface.size(); j++) {
-printf("%d,%d  ", (int)surface[j].x,(int)surface[j].y);
             if (j != 0) {
                 if (surface[j].x < tx) tx = surface[j].x;
                 if (surface[j].y < ty) ty = surface[j].y;
@@ -2402,7 +2397,6 @@ printf("%d,%d  ", (int)surface[j].x,(int)surface[j].y);
                 by = surface[j].y;
             }
         }
-printf("\n");
 
         r=g=b=0;
         switch(i % 6) {
