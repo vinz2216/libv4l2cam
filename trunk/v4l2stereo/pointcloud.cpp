@@ -707,6 +707,59 @@ void pointcloud::virtual_camera_show_axes(
     cvReleaseMat(&axis_image_points);
 }
 
+void pointcloud::prune(
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour,
+    int map_dimension_mm,
+    int map_height_mm,
+    int cell_size_mm,
+    int camera_height_mm,
+    int min_threshold)
+{
+    int dimension = map_dimension_mm / cell_size_mm;
+    int height = map_height_mm / cell_size_mm;
+    unsigned char * occupancy = new unsigned char[dimension*dimension*height];
+    int half_dimension = dimension/2;    
+    memset((void*)occupancy,'\0',dimension*dimension*height*sizeof(unsigned char));
+    
+    for (int i = (int)point.size()-3; i >= 0; i -= 3) {
+        int x = half_dimension + (point[i + POINT_CLOUD_X_AXIS] / cell_size_mm);
+        if ((x >= 0) && (x < dimension)) {
+            int y = half_dimension + (point[i + POINT_CLOUD_Y_AXIS] / cell_size_mm);
+            if ((y >= 0) && (y < dimension)) {
+                int z = (camera_height_mm + point[i + POINT_CLOUD_Z_AXIS]) / cell_size_mm;
+                if ((z >= 0) && (z < height)) {
+                    int n = (z*dimension*dimension) + (y*dimension) + x;
+                    if (occupancy[n] < 255) {
+                        occupancy[n]++;
+                    }
+                }
+            }
+        }
+    }
+
+    for (int i = (int)point.size()-3; i >= 0; i -= 3) {
+        int x = half_dimension + (point[i + POINT_CLOUD_X_AXIS] / cell_size_mm);
+        if ((x >= 0) && (x < dimension)) {
+            int y = half_dimension + (point[i + POINT_CLOUD_Y_AXIS] / cell_size_mm);
+            if ((y >= 0) && (y < dimension)) {
+                int z = (camera_height_mm + point[i + POINT_CLOUD_Z_AXIS]) / cell_size_mm;
+                if ((z >= 0) && (z < height)) {
+                    int n = (z*dimension*dimension) + (y*dimension) + x;
+                    if (occupancy[n] < min_threshold) {
+                        for (int p = 2; p >= 0; p--) {
+                            point.erase(point.begin()+i+p);
+                            point_colour.erase(point_colour.begin()+i+p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    delete [] occupancy;
+}
+
 void pointcloud::virtual_camera(
     std::vector<float> &point,
     std::vector<unsigned char> &point_colour,
@@ -1822,27 +1875,47 @@ void pointcloud::save_largest_object(
     }
 }
 
+float pointcloud::surface_area(
+    std::vector<cv::Point> &surface)
+{
+    float area = 0;
+    int corners = (int)surface.size();
+    for (int cornercount=0; cornercount < corners-1; cornercount++) {
+        area += 
+            -0.5f*(surface[cornercount].x*surface[cornercount+1].y -
+            surface[cornercount+1].x*surface[cornercount].y);
+    }
+    area += -0.5f*(surface[corners-1].x*surface[0].y - surface[0].x*surface[corners-1].y);
+    return area;
+}
+
 void pointcloud::fill_surface(
     int * height,
     int dimension,
     int x, int y,
     int surface_height_mm,
+    int cell_size_mm,
     std::vector<cv::Point> &surface,
     int depth)
 {
     if ((depth < 10000) && (x >= 0) && (y >= 0) && (x < dimension) && (y < dimension)) {
-        if (height[y*dimension + x] == surface_height_mm) {
+        int h = height[y*dimension + x];
+        if ((h == surface_height_mm) ||
+            (h == surface_height_mm + cell_size_mm) ||
+            (h == surface_height_mm - cell_size_mm)) {
+//            (h == surface_height_mm - (cell_size_mm*2)) ||
+//            (h == surface_height_mm + (cell_size_mm*2))) {
             surface.push_back(cv::Point(x, y));
             height[y*dimension + x]++;
 
-            fill_surface(height, dimension, x, y-1, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x+1, y-1, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x+1, y, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x+1, y+1, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x, y+1, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x-1, y+1, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x-1, y, surface_height_mm, surface, depth+1);
-            fill_surface(height, dimension, x-1, y-1, surface_height_mm, surface, depth+1);
+            fill_surface(height, dimension, x, y-1, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x+1, y-1, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x+1, y, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x+1, y+1, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x, y+1, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x-1, y+1, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x-1, y, surface_height_mm, cell_size_mm, surface, depth+1);
+            fill_surface(height, dimension, x-1, y-1, surface_height_mm, cell_size_mm, surface, depth+1);
         }
     }
 }
@@ -1894,11 +1967,12 @@ bool pointcloud::connected_surfaces(
     return connected;
 }
 
-void pointcloud::join_surfaces(
+bool pointcloud::join_surfaces(
     std::vector<std::vector<cv::Point> > &surfaces,
     std::vector<int> &surface_heights,
     int max_height_difference)
 {
+    bool joined = false;
     std::vector<std::vector<cv::Point> > new_surfaces;
     std::vector<int> new_surface_heights;
     bool * connection_matrix = new bool[(int)surfaces.size()*(int)surfaces.size()];
@@ -1940,6 +2014,7 @@ void pointcloud::join_surfaces(
             new_surface_heights.push_back(surface_heights[i]);
         }
         else {
+            joined = true;
             int no_of_points = (int)pts.size();
             CvPoint * points = new CvPoint[no_of_points];
             int * hull = new int[no_of_points];
@@ -1970,6 +2045,7 @@ void pointcloud::join_surfaces(
         surfaces.push_back(new_surfaces[i]);
         surface_heights.push_back(new_surface_heights[i]);
     }
+    return joined;
 }
 
 bool pointcloud::inside_surface(
@@ -1993,6 +2069,7 @@ void pointcloud::find_horizontal_surfaces(
     int map_dimension_mm,
     int cell_size_mm,
     int min_height_mm,
+    int patch_surface_area_mm2,
     int min_surface_area_mm2,
     int * height,
     std::vector<std::vector<cv::Point> > &surfaces,
@@ -2000,15 +2077,18 @@ void pointcloud::find_horizontal_surfaces(
 {
     int dimension = map_dimension_mm / cell_size_mm;
     int half_dimension = dimension/2;
-    int n=0;
-    for (int y = 0; y < dimension; y++) {
-        for (int x = 0; x < dimension; x++, n++) {
+
+    for (int y = 1; y < dimension; y++) {
+        for (int x = 1; x < dimension; x++) {
+            int n = y*dimension + x;
             if (height[n] > min_height_mm) {
-                if (height[n] % cell_size_mm == 0) {
+                if ((height[n] == height[n-1]) &&
+                    (height[n] == height[n-dimension]) &&
+                    (height[n] == height[n-dimension-1])) {
                     std::vector<cv::Point> surface_points;
-                    fill_surface(height, dimension, x, y, height[n], surface_points, 0);
+                    fill_surface(height, dimension, x, y, height[n], cell_size_mm, surface_points, 0);
                     int area_mm2 = (int)surface_points.size() * cell_size_mm;
-                    if (area_mm2 > min_surface_area_mm2) {
+                    if (area_mm2 > patch_surface_area_mm2) {
                         // compute the convex hull
                         CvPoint * points = new CvPoint[(int)surface_points.size()];
                         int * hull = new int[(int)surface_points.size()];
@@ -2045,13 +2125,27 @@ void pointcloud::find_horizontal_surfaces(
                         delete [] hull;
                         delete [] points;
                     }
+                    // reset heights
+                    for (int i = (int)surface_points.size()-1; i >= 0; i--) {
+                        int n2 = surface_points[i].y*dimension + surface_points[i].x;
+                        height[n2]--;
+                    }
                 }
             }
         }
     }
 
-    for (int i = 0; i < 2; i++) {
-        join_surfaces(surfaces, surface_heights,cell_size_mm*2);
+    // join nearby surfaces
+    int ctr = 0;
+    while ((join_surfaces(surfaces, surface_heights,cell_size_mm*2)) && (ctr < 4)) {
+        ctr++;
+    }
+
+    // remove small surfaces
+    for (int i = (int)surfaces.size()-1; i >= 0; i--) {
+        if (surface_area(surfaces[i]) < min_surface_area_mm2) {
+            surfaces.erase(surfaces.begin() + i);
+        }
     }
 }
 
@@ -2116,6 +2210,45 @@ void pointcloud::overhead_occupancy(
     }
 }
 
+void pointcloud::remove_duplicate_surfaces(
+    std::vector<std::vector<cv::Point> > &surfaces,
+    std::vector<int> &surface_heights)
+{
+    std::vector<std::vector<cv::Point> > new_surfaces;
+    std::vector<int> new_surface_heights;
+
+    for (int i = 0; i < (int)surfaces.size(); i++) {
+        std::vector<cv::Point> surface1 = surfaces[i];
+        int j = i+1;
+        for (j = i+1; j < (int)surfaces.size(); j++) {
+            std::vector<cv::Point> surface2 = surfaces[j];
+            if (surface1.size()==surface2.size()) {
+                int k = 0;
+                for (k = 0; k < (int)surface1.size(); k++) {
+                    if ((surface1[k].x != surface2[k].x) ||
+                        (surface1[k].y != surface2[k].y)) {
+                        break;
+                    }
+                }
+                if (k == (int)surface1.size()) {
+                    break;
+                }
+            }
+        }
+        if (j == (int)surfaces.size()) {
+            new_surfaces.push_back(surface1);
+            new_surface_heights.push_back(surface_heights[i]);
+        }
+    }
+    surfaces.clear();
+    surface_heights.clear();
+    for (int i = 0; i < (int)new_surfaces.size(); i++) {
+        surfaces.push_back(new_surfaces[i]);
+        surface_heights.push_back(new_surface_heights[i]);
+    }
+}
+
+
 void pointcloud::detect_horizontal_surfaces(
     std::vector<float> &point,
     int camera_height_mm,
@@ -2123,6 +2256,7 @@ void pointcloud::detect_horizontal_surfaces(
     int cell_size_mm,
     int min_height_mm,
     int max_height_mm,
+    int patch_surface_area_mm2,
     int min_surface_area_mm2,
     std::vector<std::vector<cv::Point> > &surfaces,
     std::vector<int> &surface_heights)
@@ -2139,11 +2273,14 @@ void pointcloud::detect_horizontal_surfaces(
         map_dimension_mm,
         cell_size_mm,
         min_height_mm,
+        patch_surface_area_mm2,
         min_surface_area_mm2,
         height,
         surfaces, surface_heights);
 
     delete [] height;
+
+    remove_duplicate_surfaces(surfaces,surface_heights);
 }
 
 void pointcloud::horizontal_surfaces_points(
@@ -2154,6 +2291,7 @@ void pointcloud::horizontal_surfaces_points(
     int cell_size_mm,
     int min_height_mm,
     int max_height_mm,
+    int patch_surface_area_mm2,
     int min_surface_area_mm2,
     std::vector<float> &horizontal_point,
     std::vector<unsigned char> &horizontal_point_colour)
@@ -2167,11 +2305,13 @@ void pointcloud::horizontal_surfaces_points(
         map_dimension_mm,
         cell_size_mm,
         min_height_mm, max_height_mm,
+        patch_surface_area_mm2,
         min_surface_area_mm2,
         surfaces, surface_heights);
 
     for (int i = 0; i < (int)surfaces.size(); i++) {
         std::vector<cv::Point> surface = surfaces[i];
+        int height = surface_heights[i];
 
         float tx = 0, ty = 0, bx = 0, by = 0;
         for (int j = 0; j < (int)surface.size(); j++) {
@@ -2195,12 +2335,15 @@ void pointcloud::horizontal_surfaces_points(
                     if (point[j+POINT_CLOUD_X_AXIS] <= bx) {
                         if (point[j+POINT_CLOUD_Y_AXIS] <= by) {
                             if (inside_surface(surface, point[j+POINT_CLOUD_X_AXIS], point[j+POINT_CLOUD_Y_AXIS])) {
-                                horizontal_point.push_back(point[j]);
-                                horizontal_point.push_back(point[j+1]);
-                                horizontal_point.push_back(point[j+3]);
-                                horizontal_point_colour.push_back(point_colour[j]);
-                                horizontal_point_colour.push_back(point_colour[j+1]);
-                                horizontal_point_colour.push_back(point_colour[j+2]);
+                                int point_height = (int)point[j+POINT_CLOUD_Z_AXIS]+camera_height_mm;
+                                if (fabs(point_height - height) < cell_size_mm*2) {
+                                    horizontal_point.push_back(point[j]);
+                                    horizontal_point.push_back(point[j+1]);
+                                    horizontal_point.push_back(point[j+3]);
+                                    horizontal_point_colour.push_back(point_colour[j]);
+                                    horizontal_point_colour.push_back(point_colour[j+1]);
+                                    horizontal_point_colour.push_back(point_colour[j+2]);
+                                }
                             }
                         }
                     }
@@ -2218,6 +2361,7 @@ void pointcloud::colour_surfaces_points(
     int cell_size_mm,
     int min_height_mm,
     int max_height_mm,
+    int patch_surface_area_mm2,
     int min_surface_area_mm2,
     int r, int g, int b)
 {
@@ -2230,17 +2374,21 @@ void pointcloud::colour_surfaces_points(
         map_dimension_mm,
         cell_size_mm,
         min_height_mm, max_height_mm,
+        patch_surface_area_mm2,
         min_surface_area_mm2,
         surfaces, surface_heights);
 
-//printf("surfaces %d\n", (int)surfaces.size());
+printf("surfaces %d\n", (int)surfaces.size());
 
     for (int i = 0; i < (int)surfaces.size(); i++) {
         std::vector<cv::Point> surface = surfaces[i];
         int height = surface_heights[i];
 
+printf("vertices %d\n",(int)surface.size());
+
         float tx = 0, ty = 0, bx = 0, by = 0;
         for (int j = 0; j < (int)surface.size(); j++) {
+printf("%d,%d  ", (int)surface[j].x,(int)surface[j].y);
             if (j != 0) {
                 if (surface[j].x < tx) tx = surface[j].x;
                 if (surface[j].y < ty) ty = surface[j].y;
@@ -2254,6 +2402,7 @@ void pointcloud::colour_surfaces_points(
                 by = surface[j].y;
             }
         }
+printf("\n");
 
         r=g=b=0;
         switch(i % 6) {
@@ -2290,7 +2439,7 @@ void pointcloud::colour_surfaces_points(
                         if (point[j+POINT_CLOUD_Y_AXIS] <= by) {
                             if (inside_surface(surface, point[j+POINT_CLOUD_X_AXIS], point[j+POINT_CLOUD_Y_AXIS])) {
                                 int point_height = (int)point[j+POINT_CLOUD_Z_AXIS]+camera_height_mm;
-                                if (fabs(point_height - height) < cell_size_mm) {
+                                if (fabs(point_height - height) < cell_size_mm*2) {
                                    point_colour[j] = (unsigned char)b;
                                    point_colour[j+1] = (unsigned char)g;
                                    point_colour[j+2] = (unsigned char)r;

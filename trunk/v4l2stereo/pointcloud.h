@@ -51,6 +51,10 @@ class pointcloud {
 protected:
     static CvMat* matMul(const CvMat* A, const CvMat* B);
 
+    static void remove_duplicate_surfaces(
+        std::vector<std::vector<cv::Point> > &surfaces,
+        std::vector<int> &surface_heights);
+
     static void virtual_camera_show_axes(
         CvMat * intrinsic_matrix,
         CvMat * distortion_coeffs,
@@ -65,12 +69,16 @@ protected:
         int dimension,
         int x, int y,
         int surface_height_mm,
+        int cell_size_mm,
         std::vector<cv::Point> &surface,
         int depth);
 
     static bool inside_surface(
         std::vector<cv::Point> &vertices,
         float x, float y);
+
+    static float surface_area(
+        std::vector<cv::Point> &surface);
 
 public:
     static void save(
@@ -293,7 +301,7 @@ public:
         std::vector<cv::Point> &surface1,
         std::vector<cv::Point> &surface2);
 
-    static void join_surfaces(
+    static bool join_surfaces(
         std::vector<std::vector<cv::Point> > &surfaces,
         std::vector<int> &surface_heights,
         int max_height_difference);
@@ -311,6 +319,7 @@ public:
         int map_dimension_mm,
         int cell_size_mm,
         int min_height_mm,
+        int patch_surface_area_mm2,
         int min_surface_area_mm2,
         int * height,
         std::vector<std::vector<cv::Point> > &surfaces,
@@ -329,6 +338,7 @@ public:
         int cell_size_mm,
         int min_height_mm,
         int max_height_mm,
+        int patch_surface_area_mm2,
         int min_surface_area_mm2,
         std::vector<std::vector<cv::Point> > &surfaces,
         std::vector<int> &surface_heights);
@@ -341,6 +351,7 @@ public:
         int cell_size_mm,
         int min_height_mm,
         int max_height_mm,
+        int patch_surface_area_mm2,
         int min_surface_area_mm2,
         std::vector<float> &horizontal_point,
         std::vector<unsigned char> &horizontal_point_colour);
@@ -353,8 +364,18 @@ public:
         int cell_size_mm,
         int min_height_mm,
         int max_height_mm,
+        int patch_surface_area_mm2,
         int min_surface_area_mm2,
         int r, int g, int b);
+
+    static void prune(
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour,
+        int map_dimension_mm,
+        int map_height_mm,
+        int cell_size_mm,
+        int camera_height_mm,
+        int min_threshold);
 
 };
 
