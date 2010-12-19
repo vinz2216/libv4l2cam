@@ -224,11 +224,26 @@ int main(int argc, char* argv[]) {
 
     printf("%d points loaded\n", (int)point.size()/3);
 
-    int cell_size_mm = 70;
+/*
+    int prune_cell_size_mm = 32;
+    int prune_map_dimension_mm = prune_cell_size_mm * 64;
+    int prune_max_height_mm = 2000;
+
+    pointcloud::prune(
+         point, point_colour,
+         prune_map_dimension_mm,
+         prune_max_height_mm,
+         prune_cell_size_mm,
+         camera_height_mm,
+         10);
+*/
+
+    int cell_size_mm = 32;
     int map_dimension_mm = cell_size_mm * 64;
     int min_height_mm = 100;
     int max_height_mm = 1000;
-    int min_surface_area_mm2 = 1000;
+    int patch_surface_area_mm2 = 5000;
+    int min_surface_area_mm2 = 5000;
 
     if (show_surfaces) {
         pointcloud::colour_surfaces_points(
@@ -237,6 +252,7 @@ int main(int argc, char* argv[]) {
             map_dimension_mm,
             cell_size_mm,
             min_height_mm, max_height_mm,
+            patch_surface_area_mm2,
             min_surface_area_mm2,
             0, 255, 0);
     }
