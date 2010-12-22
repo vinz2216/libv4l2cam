@@ -368,6 +368,18 @@ public:
         int min_surface_area_mm2,
         int r, int g, int b);
 
+    static void colour_surface_objects(
+        std::vector<float> &point,
+        std::vector<unsigned char> &point_colour,
+        int camera_height_mm,
+        int map_dimension_mm,
+        int cell_size_mm,
+        int min_height_mm,
+        int max_height_mm,
+        int patch_surface_area_mm2,
+        int min_surface_area_mm2,
+        int r, int g, int b);
+
     static void prune(
         std::vector<float> &point,
         std::vector<unsigned char> &point_colour,

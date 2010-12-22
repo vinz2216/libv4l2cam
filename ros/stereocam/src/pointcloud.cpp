@@ -2448,6 +2448,72 @@ void pointcloud::colour_surfaces_points(
     }
 }
 
+void pointcloud::colour_surface_objects(
+    std::vector<float> &point,
+    std::vector<unsigned char> &point_colour,
+    int camera_height_mm,
+    int map_dimension_mm,
+    int cell_size_mm,
+    int min_height_mm,
+    int max_height_mm,
+    int patch_surface_area_mm2,
+    int min_surface_area_mm2,
+    int r, int g, int b)
+{
+    std::vector<std::vector<cv::Point> > surfaces;
+    std::vector<int> surface_heights;
+
+    detect_horizontal_surfaces(
+        point,
+        camera_height_mm,
+        map_dimension_mm,
+        cell_size_mm,
+        min_height_mm, max_height_mm,
+        patch_surface_area_mm2,
+        min_surface_area_mm2,
+        surfaces, surface_heights);
+
+    for (int i = 0; i < (int)surfaces.size(); i++) {
+        std::vector<cv::Point> surface = surfaces[i];
+        int height = surface_heights[i];
+
+        float tx = 0, ty = 0, bx = 0, by = 0;
+        for (int j = 0; j < (int)surface.size(); j++) {
+            if (j != 0) {
+                if (surface[j].x < tx) tx = surface[j].x;
+                if (surface[j].y < ty) ty = surface[j].y;
+                if (surface[j].x > bx) bx = surface[j].x;
+                if (surface[j].y > by) by = surface[j].y;
+            }
+            else {
+                tx = surface[j].x;
+                ty = surface[j].y;
+                bx = surface[j].x;
+                by = surface[j].y;
+            }
+        }
+
+        int min_height = height + (cell_size_mm*3/2);
+        for (int j = (int)point.size()-3; j >= 0; j -= 3) {
+            if (point[j+POINT_CLOUD_X_AXIS] >= tx) {
+                if (point[j+POINT_CLOUD_Y_AXIS] >= ty) {
+                    if (point[j+POINT_CLOUD_X_AXIS] <= bx) {
+                        if (point[j+POINT_CLOUD_Y_AXIS] <= by) {
+                            if (inside_surface(surface, point[j+POINT_CLOUD_X_AXIS], point[j+POINT_CLOUD_Y_AXIS])) {
+                                int point_height = (int)point[j+POINT_CLOUD_Z_AXIS]+camera_height_mm;
+                                if (point_height > min_height) {
+                                   point_colour[j] = (unsigned char)b;
+                                   point_colour[j+1] = (unsigned char)g;
+                                   point_colour[j+2] = (unsigned char)r;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 
 
