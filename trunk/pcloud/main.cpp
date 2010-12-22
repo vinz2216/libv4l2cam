@@ -44,6 +44,7 @@ int main(int argc, char* argv[]) {
     bool view_point_cloud = false;
     bool show_axes = false;
     bool show_surfaces = false;
+    bool show_surface_objects = false;
     int camera_image_width=0,camera_image_height=0;
     float stereo_camera_baseline=0;
     int camera_height_mm = 0;
@@ -80,6 +81,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --posetranslation     Three values specifying camera translation in mm");
     opt->addUsage( "     --calibrationfile     Load a given calibration file");
     opt->addUsage( "     --surfaces            Highlight horizontal surfaces");
+    opt->addUsage( "     --surfaceobjects      Highlight objects on horizontal surfaces");
     opt->addUsage( "     --minsurfacearea      Minimum surface area in square millimetres");
     opt->addUsage( "     --minheight           Minimum surface height in millimetres");
     opt->addUsage( "     --maxheight           Maximum surface height in millimetres");
@@ -104,6 +106,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "minheight" );
     opt->setOption( "maxheight" );
     opt->setOption( "cellsize" );
+    opt->setFlag( "surfaceobjects" );
     opt->setFlag( "surfaces" );
     opt->setFlag( "axes" );
     opt->setFlag( "headless" );
@@ -143,6 +146,10 @@ int main(int argc, char* argv[]) {
 
     if( opt->getFlag( "axes" ) ) {
         show_axes = true;
+    }
+
+    if( opt->getFlag( "surfaceobjects" ) ) {
+        show_surface_objects = true;
     }
 
     if( opt->getValue( "calibrationfile" ) != NULL ) {
@@ -269,6 +276,18 @@ int main(int argc, char* argv[]) {
 */
 
     int map_dimension_mm = cell_size_mm * 128;
+
+    if (show_surface_objects) {
+        pointcloud::colour_surface_objects(
+            point, point_colour,
+            camera_height_mm,
+            map_dimension_mm,
+            cell_size_mm,
+            min_height_mm, max_height_mm,
+            min_surface_area_mm2,
+            min_surface_area_mm2,
+            0, 255, 0);
+    }
 
     if (show_surfaces) {
         pointcloud::colour_surfaces_points(

@@ -56,10 +56,13 @@ static void errno_exit (const char *           s)
 
 static int xioctl(int fd, int request, void *arg)
 {
-        int r;
+        int r,itt=0;
 
-        do r = ioctl (fd, request, arg);
-        while (-1 == r && EINTR == errno);
+        do {
+		r = ioctl (fd, request, arg);
+		itt++;
+	}
+        while ((-1 == r) && (EINTR == errno) && (itt<100));
 
         return r;
 }
@@ -77,19 +80,26 @@ Camera::Camera(const char *n, int w, int h, int f) {
 
   data=(unsigned char *)malloc(w*h*4);
 
-
   this->Open();
   this->Init();
   this->Start();
-
+  initialised = true;
 }
 
 Camera::~Camera() {
-  this->Stop();
-  this->UnInit();
-  this->Close();
+  this->StopCam();
+}
 
-  free(data);
+void Camera::StopCam()
+{
+  if (initialised) {
+    this->Stop();
+    this->UnInit();
+    this->Close();
+
+    free(data);
+    initialised = false;
+  }
 }
 
 void Camera::Open() {
@@ -230,7 +240,7 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
 
   memset(&queryctrl, 0, sizeof(queryctrl));
   queryctrl.id = V4L2_CID_BRIGHTNESS;
-  if(-1 == ioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+  if(-1 == xioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
     if(errno != EINVAL) {
       //perror ("VIDIOC_QUERYCTRL");
       //exit(EXIT_FAILURE);
@@ -248,7 +258,7 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
 
   memset(&queryctrl, 0, sizeof(queryctrl));
   queryctrl.id = V4L2_CID_CONTRAST;
-  if(-1 == ioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+  if(-1 == xioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
     if(errno != EINVAL) {
       //perror ("VIDIOC_QUERYCTRL");
       //exit(EXIT_FAILURE);
@@ -266,7 +276,7 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
 
   memset(&queryctrl, 0, sizeof(queryctrl));
   queryctrl.id = V4L2_CID_SATURATION;
-  if(-1 == ioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+  if(-1 == xioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
     if(errno != EINVAL) {
       //perror ("VIDIOC_QUERYCTRL");
       //exit(EXIT_FAILURE);
@@ -284,7 +294,7 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
 
   memset(&queryctrl, 0, sizeof(queryctrl));
   queryctrl.id = V4L2_CID_HUE;
-  if(-1 == ioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+  if(-1 == xioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
     if(errno != EINVAL) {
       //perror ("VIDIOC_QUERYCTRL");
       //exit(EXIT_FAILURE);
@@ -302,7 +312,7 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
 
   memset(&queryctrl, 0, sizeof(queryctrl));
   queryctrl.id = V4L2_CID_HUE_AUTO;
-  if(-1 == ioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+  if(-1 == xioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
     if(errno != EINVAL) {
       //perror ("VIDIOC_QUERYCTRL");
       //exit(EXIT_FAILURE);
@@ -318,7 +328,7 @@ if(-1==xioctl(fd, VIDIOC_S_PARM, &p))
 
   memset(&queryctrl, 0, sizeof(queryctrl));
   queryctrl.id = V4L2_CID_SHARPNESS;
-  if(-1 == ioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+  if(-1 == xioctl (fd, VIDIOC_QUERYCTRL, &queryctrl)) {
     if(errno != EINVAL) {
       //perror ("VIDIOC_QUERYCTRL");
       //exit(EXIT_FAILURE);
@@ -585,7 +595,6 @@ void Camera::Stop() {
 unsigned char *Camera::Get() {
   struct v4l2_buffer buf;
 
-
   switch(io) {
     case IO_METHOD_READ:
 /*
@@ -611,7 +620,6 @@ unsigned char *Camera::Get() {
 
       buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
       buf.memory = V4L2_MEMORY_MMAP;
-
       if(-1 == xioctl (fd, VIDIOC_DQBUF, &buf)) {
         switch (errno) {
           case EAGAIN:
@@ -629,7 +637,7 @@ unsigned char *Camera::Get() {
       if(-1 == xioctl (fd, VIDIOC_QBUF, &buf))
         return 0; //errno_exit ("VIDIOC_QBUF");
 
-return data;
+    return data;
 
 
       break;
@@ -672,17 +680,41 @@ return data;
   return 0;
 }
 
-unsigned char *Camera::Update(unsigned int t) {
-  while(this->Get()==0) {
-    usleep(t);
+bool Camera::Update(unsigned int t, int timeout_ms) {
+  bool grabbed = false;
+  int grab_time_uS = 0;
+  while (!grabbed) {
+    if ((!grabbed) && (this->Get()!=0)) grabbed = true;
+    if (!grabbed) {
+      usleep(t);
+      grab_time_uS+=(int)t;
+      if (grab_time_uS > timeout_ms * 1000) {
+        break;
+      }
+    }
   }
-  return this->data;
+
+  return grabbed;
 
 }
 
-unsigned char *Camera::Update(Camera *c2, unsigned int t) {
-  while(this->Get()==0 || c2->Get()==0) usleep(t);
-  return this->data;
+bool Camera::Update(Camera *c2, unsigned int t, int timeout_ms) {
+  bool left_grabbed = false;
+  bool right_grabbed = false;
+  int grab_time_uS = 0;
+  while (!(left_grabbed && right_grabbed)) {
+    if ((!left_grabbed) && (this->Get()!=0)) left_grabbed = true;
+    if ((!right_grabbed) && (c2->Get()!=0)) right_grabbed = true;
+    if (!(left_grabbed && right_grabbed)) {
+      usleep(t);
+      grab_time_uS+=(int)t;
+      if (grab_time_uS > timeout_ms * 1000) {
+        break;
+      }
+    }
+  }
+
+  return left_grabbed & right_grabbed;
 
 }
 

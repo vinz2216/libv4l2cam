@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-//#define GSTREAMER
+#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -64,7 +64,7 @@
 #include "pointcloud.h"
 //#include "gridmap3d.h"
 
-#define VERSION 1.052
+#define VERSION			1.052
 
 using namespace std;
 
@@ -153,6 +153,7 @@ void elas_disparity_map(
 }
 
 int main(int argc, char* argv[]) {
+
     int ww = 320;
     int hh = 240;
     int fps = 30;
@@ -179,6 +180,7 @@ int main(int argc, char* argv[]) {
     bool detect_objects = false;
     bool view_point_cloud = false;
     bool BGR = true;
+    int grab_timeout_ms = 500;
     int object_format = POINT_CLOUD_FORMAT_POINTS;
     int FOV_degrees = 50;
     int max_range_mm = 3000;
@@ -289,6 +291,7 @@ int main(int argc, char* argv[]) {
     opt->addUsage( "     --saveperiod          Save images repeatedly every x seconds");
     opt->addUsage( "     --flipright           Flip the right image");
     opt->addUsage( "     --flipleft            Flip the left image");
+    opt->addUsage( "     --timeout             Frame grab timeout in milliseconds");
 #ifdef GSTREAMER
     opt->addUsage( "     --stream              Stream output using gstreamer");
 #endif
@@ -341,6 +344,7 @@ int main(int argc, char* argv[]) {
     opt->setOption( "maxarea" );
     opt->setOption( "savestl" );
     opt->setOption( "savex3d" );
+    opt->setOption( "timeout" );
     opt->setFlag( "help" );
     opt->setFlag( "flipleft" );
     opt->setFlag( "flipright" );
@@ -447,6 +451,10 @@ int main(int argc, char* argv[]) {
         opt->printUsage();
         delete opt;
         return(0);
+    }
+
+    if( opt->getValue("timeout") != NULL ) {
+        grab_timeout_ms = atoi(opt->getValue("timeout"));
     }
 
     if( opt->getValue("maxrange") != NULL ) {
@@ -1062,7 +1070,10 @@ int main(int argc, char* argv[]) {
 
     while(1) {
 
-        while(c.Get()==0 || c2.Get()==0) usleep(100);
+        if (!c.Update(&c2, 100, grab_timeout_ms)) {
+            printf("Failed to acquire images\n");
+            break;
+        }
 
         c.toIplImage(l);
         c2.toIplImage(r);
@@ -1547,6 +1558,10 @@ int main(int argc, char* argv[]) {
                         memcpy((void*)buffer,(void*)l_,ww*hh*3);
                     }
 
+                    // stop cameras before saving
+                    c.StopCam();
+                    c2.StopCam();
+
                     pointcloud::save(
                         buffer,points_image,max_range_mm,
                         camera_calibration->pose,
@@ -1610,6 +1625,10 @@ int main(int argc, char* argv[]) {
 
                             if (save_mesh_filename!="") {
                                 if (skip_frames <= 0) {
+                                    // stop cameras before saving
+                                    c.StopCam();
+                                    c2.StopCam();
+
                                     // save the object as a mesh model
                                     pointcloud::save_largest_object(
                                         save_mesh_filename,object_format,false,ww,hh,
@@ -1626,6 +1645,11 @@ int main(int argc, char* argv[]) {
                     else {
                         if (save_mesh_filename!="") {
                             if (skip_frames <= 0) {
+
+                                // stop cameras before saving
+                                c.StopCam();
+                                c2.StopCam();
+
                                 // save all points as a mesh model
                                 std::vector<float> points;
                                 pointcloud::export_points(
@@ -1905,6 +1929,10 @@ int main(int argc, char* argv[]) {
 
             /* save left and right images to file, then quit */
             if (save_images) {
+                // stop cameras before saving
+                c.StopCam();
+                c2.StopCam();
+
                 std::string filename = save_filename + "0.jpg";
                 cvSaveImage(filename.c_str(), l);
                 filename = save_filename + "1.jpg";

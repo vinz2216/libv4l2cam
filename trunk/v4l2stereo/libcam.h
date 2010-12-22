@@ -6,7 +6,6 @@
 #ifndef __LIBCAM__H__
 #define __LIBCAM__H__
 
-
 #define USE_OPENCV 1
 
 #ifdef USE_OPENCV
@@ -19,7 +18,6 @@ struct buffer {
         void *                  start;
         size_t                  length;
 };
-
 
 typedef enum {
 	IO_METHOD_READ,
@@ -46,7 +44,7 @@ private:
   void init_mmap();
   void init_read(unsigned int buffer_size);
 
-
+  bool initialised;
 
 
 public:
@@ -57,9 +55,7 @@ public:
 
   int w2;
 
-
   unsigned char *data;
-
 
   io_method io;
   int fd;
@@ -74,15 +70,15 @@ public:
   ~Camera();
 
   unsigned char *Get();    //deprecated
-  unsigned char *Update(unsigned int t=100); //better  (t=0.1ms, in usecs)
-  unsigned char *Update(Camera *c2, unsigned int t=100);
+  bool Update(unsigned int t=100, int timeout_ms=500); //better  (t=0.1ms, in usecs)
+  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=500);
 
 #ifdef USE_OPENCV
   void toIplImage(IplImage *im);
 #endif
 
 
-
+  void StopCam();
 
   int minBrightness();
   int maxBrightness();
