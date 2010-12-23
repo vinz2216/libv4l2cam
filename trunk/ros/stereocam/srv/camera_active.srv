@@ -1,3 +1,6 @@
-int32 camera_active
+bool camera1_active
+bool camera2_active
+bool camera3_active
+bool camera4_active
 ---
 int32 ack
