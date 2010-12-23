@@ -1,7 +1,7 @@
 <package>
   <description brief="stereocam">
 
-     ROS package for use with stereo webcams such as the Minoru
+     ROS package for broadcasting point cloud data from stereo webcams such as the Minoru
 
   </description>
   <author>Bob Mottram</author>
@@ -11,10 +11,6 @@
   <depend package="roscpp"/>
   <depend package="std_msgs"/>
   <depend package="sensor_msgs"/>
-  <depend package="opencv2"/>
-  <depend package="cv_bridge"/>
-  <depend package="image_transport"/>
-  <depend package="compressed_image_transport"/>
 
 </package>
 

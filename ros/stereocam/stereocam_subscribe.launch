@@ -1,0 +1,11 @@
+<!--
+  Launcher for stereocam subscribe
+  -->
+<launch>
+    <!-- Machine settings. See http://www.ros.org/wiki/roslaunch/XML/machine -->
+    <machine name="local_alt" address="localhost" default="true" />
+    <!-- stereocam -->
+    <node pkg="stereocam" type="stereocam_subscribe" name="stereocam_subscribe" respawn="false" output="screen">
+    </node>
+</launch>
+

@@ -1,48 +1,32 @@
-Making the package
-------------------
+Making and running the package
+------------------------------
 
-Add the following line to the end of ~/.bashrc
+1. Add the directory where this ROS package is located to /opt/ros/cturtle/setup.sh
 
-    source ~/develop/libv4l2cam/ros/setup.sh
+2. Edit the stereocam.launch file to your desired settings
 
-pointing to the directory where this ROS package is located
+3. rosmake --rosdep-install stereocam
 
-Reload
+4. roslaunch stereocam.launch
 
-    . ~/.bashrc
+5. A new topic called stereo/point_cloud should appear
+   rostopic list
 
-You may need to edit stereocam_broadcast.cpp within the src directory in order to change the device numbers for the cameras and the resolution to be used.  Camera parameters are also set within stereocam_subscribe.cpp.
+6. An example subscriber:
 
-Then make the package as follows:
-
-    rosmake --rosdep-install stereocam
+     roslaunch stereocam_subscribe.launch
 
 
-Running the ROS publisher (broadcasting service)
-------------------------------------------------
+A note about efficiency
+-----------------------
 
-Start ROS:
+The current implementation saves point cloud data to file, then re-loads it and broadcasts it.  This is not a very efficient way of doing things, and may thrash the hard disk somewhat.  A slightly better workaround would be to create a RAM disk, and save the point cloud data there.  
 
-    roscore
+For example:
 
-Then in a separate shell begin broadcasting:
+  su
+  mkdir /tmp/ramdisk
+  chmod 777 /tmp/ramdisk
+  mount -t tmpfs -o size=256M tmpfs /tmp/ramdisk/
 
-    rosrun stereocam stereocam_broadcast _index:=0
-
-And in another shell you can subscribe to the broadcast:
-
-    rosrun stereocam stereocam_subscribe
-
-To check that the images are being published:
-
-    rostopic list
-
-should show /stereo/left/image_raw and /stereo/right/image_raw, and also compressed versions of these.
-
-To enable compressed image transport, for efficient transport of images over networks:
-
-    rosparam set /compressed_listener/image_transport compressed
-
-then restart the broadcast and subscriber.
-
-A disparity map of the type sensor_msgs::Image (one byte per pixel) is also published.  This was used instead of stereo_msgs::DisparityImage because it provides the ability to transport disparity maps efficiently over networks using image_transport.  The disparity value is remapped into a 0-255 range.
+then edit sterecam.launch and set the outputdirectory parameter to "/tmp/ramdisk/"
