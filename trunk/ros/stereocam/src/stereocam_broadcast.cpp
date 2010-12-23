@@ -54,7 +54,6 @@ bool load_point_cloud(
     image_height = 0;
 
     point_cloud.header.stamp = t;
-    point_cloud.header.frame_id = "stereo_cloud";
     
     elem_bytes = (sizeof(float)*3) + 3;
     no_of_points = (int)header[1];
@@ -199,7 +198,11 @@ int main(int argc, char** argv)
                 float * rotation = NULL;
                 int image_width=0,image_height=0;
                 float baseline=0;
+
                 sensor_msgs::PointCloud point_cloud;
+                sprintf((char*)str,"stereo_camera%d", stereo_camera_index);
+                point_cloud.header.frame_id = str;
+
                 if (load_point_cloud(
                     filename, translation, rotation,
                     image_width, image_height,
