@@ -30,7 +30,7 @@
 #include "../v4l2stereo/pointcloud.h"
 #include "camcalibbase.h"
 
-#define VERSION 0.1
+#define VERSION 0.2
 
 using namespace std;
 
