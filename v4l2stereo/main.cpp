@@ -64,7 +64,7 @@
 #include "pointcloud.h"
 //#include "gridmap3d.h"
 
-#define VERSION			1.052
+#define VERSION			1.053
 
 using namespace std;
 
