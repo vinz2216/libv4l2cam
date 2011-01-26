@@ -143,7 +143,8 @@ public:
         bool flip_left_image,
         bool flip_right_image,
         int calibration_images,
-        bool headless);
+        bool headless,
+        int grab_timeout_ms);
 
     int ParseCalibrationParameters(
         char * calibration_str,

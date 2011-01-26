@@ -308,7 +308,8 @@ void camcalib::stereo_camera_calibrate(
     bool flip_left_image,
     bool flip_right_image,
     int calibration_images,
-    bool headless)
+    bool headless,
+    int grab_timeout_ms)
 {
     int retval = system("mkdir calibration_image");
     retval = system("mkdir capture");
@@ -375,9 +376,9 @@ void camcalib::stereo_camera_calibrate(
 
     while (key != '\x1b') {
 
-        while ((leftcam.Get() == 0) ||
-               (rightcam.Get() == 0)) {
-            usleep(100);
+        if (!leftcam.Update(&rightcam, 100, grab_timeout_ms)) {
+            printf("Failed to acquire images\n");
+            break;
         }
 
         leftcam.toIplImage(l);
