@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-//#define GSTREAMER
+#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -64,7 +64,7 @@
 #include "pointcloud.h"
 //#include "gridmap3d.h"
 
-#define VERSION			1.053
+#define VERSION			1.054
 
 using namespace std;
 
