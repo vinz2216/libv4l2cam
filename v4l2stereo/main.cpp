@@ -38,7 +38,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-#define GSTREAMER
+//#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -852,7 +852,8 @@ int main(int argc, char* argv[]) {
                 dev0, dev1,
                 flip_left_image,
                 flip_right_image,
-                no_of_calibration_images, headless);
+                no_of_calibration_images, headless,
+                grab_timeout_ms);
         }
         delete opt;
         return 0;
