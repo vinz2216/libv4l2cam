@@ -20,7 +20,7 @@
 /*  Berkeley, California  94705-1927                                         */
 /*  jrs@cs.berkeley.edu                                                      */
 /*                                                                           */
-/*  Modified by Andreas Geiger, 2010                                         */
+/*  Modified by Andreas Geiger, 2011                                         */
 /*                                                                           */
 /*  This program may be freely redistributed under the condition that the    */
 /*    copyright notices (including this entire header and the copyright      */
@@ -1261,7 +1261,8 @@ void internalerror()
 /*****************************************************************************/
 
 void parsecommandline(int argc, char **argv, struct behavior *b) {
-  int i, j;
+  int i, j, k;
+  char workstring[FILENAMESIZE];
 
   b->poly = b->refine = b->quality = 0;
   b->vararea = b->fixedarea = b->usertest = 0;
@@ -1659,7 +1660,7 @@ void poolinit(struct memorypool *pool, int bytecount, int itemcount,
   /*   - The parameter `alignment'.                                   */
   /*   - sizeof(int *), so the stack of dead items can be maintained */
   /*       without unaligned accesses.                                */
-  if (alignment > (int)sizeof(int *)) {
+  if (alignment > sizeof(int *)) {
     pool->alignbytes = alignment;
   } else {
     pool->alignbytes = sizeof(int *);
@@ -2007,7 +2008,7 @@ void initializetrisubpools(struct mesh *m, struct behavior *b)
   /*   integer index can occupy the same space as the subsegment pointers  */
   /*   or attributes or area constraint or extra nodes.                    */
   if ((b->voronoi || b->neighbors) &&
-      (trisize < 6 * (int)sizeof(triangle) + (int)sizeof(int))) {
+      (trisize < 6 * sizeof(triangle) + sizeof(int))) {
     trisize = 6 * sizeof(triangle) + sizeof(int);
   }
 
@@ -2804,7 +2805,7 @@ float incircleadapt(vertex pa, vertex pb, vertex pc, vertex pd, float permanent)
   float cxtaa[8], cxtbb[8], cytaa[8], cytbb[8];
   int cxtaalen, cxtbblen, cytaalen, cytbblen;
   float axtbc[8], aytbc[8], bxtca[8], bytca[8], cxtab[8], cytab[8];
-  int axtbclen=0, aytbclen=0, bxtcalen=0, bytcalen=0, cxtablen=0, cytablen=0;
+  int axtbclen, aytbclen, bxtcalen, bytcalen, cxtablen, cytablen;
   float axtbct[16], aytbct[16], bxtcat[16], bytcat[16], cxtabt[16], cytabt[16];
   int axtbctlen, aytbctlen, bxtcatlen, bytcatlen, cxtabtlen, cytabtlen;
   float axtbctt[8], aytbctt[8], bxtcatt[8];
@@ -4820,9 +4821,6 @@ enum insertvertexresult insertvertex(struct mesh *m, struct behavior *b,
   triangle ptr;                         /* Temporary variable used by sym(). */
   subseg sptr;         /* Temporary variable used by spivot() and tspivot(). */
 
-  toprcasing.tri=0;
-  toprcasing.orient=0;
-
   if (b->verbose > 1) {
     printf("  Inserting (%.12g, %.12g).\n", newvertex[0], newvertex[1]);
   }
@@ -4998,8 +4996,7 @@ enum insertvertexresult insertvertex(struct mesh *m, struct behavior *b,
       poolrestart(&m->flipstackers);
       m->lastflip = (struct flipstacker *) poolalloc(&m->flipstackers);
       m->lastflip->flippedtri = encode(horiz);
-      /* TODO: not sure what to do with this, which is ISO C++ forbidden - commenting it out
-      m->lastflip->prevflip = (struct flipstacker *)&insertvertex; */
+      m->lastflip->prevflip = (struct flipstacker *) &insertvertex;
     }
     if (b->verbose > 2) {
       printf("  Updating bottom left ");
@@ -5466,6 +5463,7 @@ void vertexsort(vertex *sortarray, int arraysize)
     }
     return;
   }
+  if (arraysize<=1) return;
   /* Choose a random pivot to split the array. */
   pivot = (int) randomnation((unsigned int) arraysize);
   pivotx = sortarray[pivot][0];
@@ -5964,6 +5962,7 @@ void divconqrecurse(struct mesh *m, struct behavior *b, vertex *sortarray,
   float area;
   int divider;
 
+  if (vertices<=1) return;
   if (b->verbose > 2) {
     printf("  Triangulating %d vertices.\n", vertices);
   }
@@ -6176,54 +6175,49 @@ long divconqdelaunay(struct mesh *m, struct behavior *b)
   /* Allocate an array of pointers to vertices for sorting. */
   sortarray = (vertex *) trimalloc(m->invertices * (int) sizeof(vertex));
   traversalinit(&m->vertices);
-  if (m->invertices > 2) {
-    for (i = 0; i < m->invertices; i++) {
-      sortarray[i] = vertextraverse(m);
-    }
-    /* Sort the vertices. */
-    vertexsort(sortarray, m->invertices);
-    /* Discard duplicate vertices, which can really mess up the algorithm. */
-    i = 0;
-    for (j = 1; j < m->invertices; j++) {
-      if ((sortarray[i][0] == sortarray[j][0])
-          && (sortarray[i][1] == sortarray[j][1])) {
-        if (!b->quiet) {
-          printf(
+  for (i = 0; i < m->invertices; i++) {
+    sortarray[i] = vertextraverse(m);
+  }
+  /* Sort the vertices. */
+  vertexsort(sortarray, m->invertices);
+  /* Discard duplicate vertices, which can really mess up the algorithm. */
+  i = 0;
+  for (j = 1; j < m->invertices; j++) {
+    if ((sortarray[i][0] == sortarray[j][0])
+        && (sortarray[i][1] == sortarray[j][1])) {
+      if (!b->quiet) {
+        printf(
 "Warning:  A duplicate vertex at (%.12g, %.12g) appeared and was ignored.\n",
                sortarray[j][0], sortarray[j][1]);
-        }
-        setvertextype(sortarray[j], UNDEADVERTEX);
-        m->undeads++;
-      } else {
-        i++;
-        sortarray[i] = sortarray[j];
       }
+      setvertextype(sortarray[j], UNDEADVERTEX);
+      m->undeads++;
+    } else {
+      i++;
+      sortarray[i] = sortarray[j];
     }
-    i++;
-    if (b->dwyer) {
-      /* Re-sort the array of vertices to accommodate alternating cuts. */
-      divider = i >> 1;
-      if (i - divider >= 2) {
-        if (divider >= 2) {
-          alternateaxes(sortarray, divider, 1);
-        }
-        alternateaxes(&sortarray[divider], i - divider, 1);
+  }
+  i++;
+  if (b->dwyer) {
+    /* Re-sort the array of vertices to accommodate alternating cuts. */
+    divider = i >> 1;
+    if (i - divider >= 2) {
+      if (divider >= 2) {
+        alternateaxes(sortarray, divider, 1);
       }
+      alternateaxes(&sortarray[divider], i - divider, 1);
     }
-
-    if (b->verbose) {
-      printf("  Forming triangulation.\n");
-    }
-
-    /* Form the Delaunay triangulation. */
-    divconqrecurse(m, b, sortarray, i, 0, &hullleft, &hullright);
-    trifree((int *) sortarray);
-
-    return removeghosts(m, b, &hullleft);
   }
-  else {
-    return 0;
+
+  if (b->verbose) {
+    printf("  Forming triangulation.\n");
   }
+
+  /* Form the Delaunay triangulation. */
+  divconqrecurse(m, b, sortarray, i, 0, &hullleft, &hullright);
+  trifree((int *) sortarray);
+
+  return removeghosts(m, b, &hullleft);
 }
 
 /**                                                                         **/
@@ -7641,7 +7635,7 @@ void highorder(struct mesh *m, struct behavior *b)
 /*                                                                           */
 /*****************************************************************************/
 
-void transfernodes(struct mesh *m, struct behavior *b, float *pointlist,
+int transfernodes(struct mesh *m, struct behavior *b, float *pointlist,
                    float *pointattriblist, int *pointmarkerlist,
                    int numberofpoints, int numberofpointattribs)
 {
@@ -7656,9 +7650,9 @@ void transfernodes(struct mesh *m, struct behavior *b, float *pointlist,
   m->nextras = numberofpointattribs;
   m->readnodefile = 0;
   if (m->invertices < 3) {
-    return;
-    /* printf("Error:  Input must have at least three input vertices.\n");
-    triexit(1); */
+    //printf("Error:  Input must have at least three input vertices.\n");
+    //triexit(1);
+    return -1;
   }
   if (m->nextras == 0) {
     b->weighted = 0;
@@ -7701,6 +7695,7 @@ void transfernodes(struct mesh *m, struct behavior *b, float *pointlist,
   /* Nonexistent x value used as a flag to mark circle events in sweepline */
   /*   Delaunay algorithm.                                                 */
   m->xminextreme = 10 * m->xmin - 9 * m->xmax;
+  return 0;
 }
 
 /*****************************************************************************/
@@ -8507,7 +8502,7 @@ void statistics(struct mesh *m, struct behavior *b)
 /*                                                                           */
 /*****************************************************************************/
 
-void triangulate(char *triswitches, struct triangulateio *in,
+int triangulate(char *triswitches, struct triangulateio *in,
                  struct triangulateio *out, struct triangulateio *vorout)
 {
   struct mesh m;
@@ -8519,9 +8514,9 @@ void triangulate(char *triswitches, struct triangulateio *in,
   parsecommandline(1, &triswitches, &b);
   m.steinerleft = b.steiner;
 
-  transfernodes(&m, &b, in->pointlist, in->pointattributelist,
+  if (transfernodes(&m, &b, in->pointlist, in->pointattributelist,
                 in->pointmarkerlist, in->numberofpoints,
-                in->numberofpointattributes);
+		    in->numberofpointattributes)==-1) return -1;
 
   m.hullsize = delaunay(&m, &b);                /* Triangulate the vertices. */
   /* Ensure that no vertex can be mistaken for a triangular bounding */
@@ -8643,4 +8638,5 @@ void triangulate(char *triswitches, struct triangulateio *in,
   }
 
   triangledeinit(&m, &b);
+  return 0;
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2010. All rights reserved.
+Copyright 2011. All rights reserved.
 Institute of Measurement and Control Systems
 Karlsruhe Institute of Technology, Germany
 
@@ -19,11 +19,9 @@ libelas; if not, write to the Free Software Foundation, Inc., 51 Franklin
 Street, Fifth Floor, Boston, MA 02110-1301, USA 
 */
 
-// Note: This descripter is a sparse approximation to the 50-dimensional
-// descriptor described in the paper. It produces almost the same results
-// but is faster to compute.
-// Many thanks also to Julius Ziegler for increasing the speed of the
-// sobel filtering functions.
+// NOTE: This descripter is a sparse approximation to the 50-dimensional
+// descriptor described in the paper. It produces similar results, but
+// is faster to compute.
 
 #ifndef __DESCRIPTOR_H__
 #define __DESCRIPTOR_H__
@@ -53,7 +51,7 @@ class Descriptor {
 public:
   
   // constructor creates filters
-  Descriptor(uint8_t* I,const int32_t* dims);
+  Descriptor(uint8_t* I,int32_t width,int32_t height,int32_t bpl,bool half_resolution);
   
   // deconstructor releases memory
   ~Descriptor();
@@ -63,9 +61,8 @@ public:
   
 private:
 
-  inline uint8_t saturate( int16_t in );
-  void filterSobel3(const uint8_t* in, uint8_t* out_v, uint8_t* out_h,const int *dims);
-  void createDescriptor(uint8_t* I_sobel3_du,uint8_t* I_sobel3_dv,const int *dims);
+  // build descriptor I_desc from I_du and I_dv
+  void createDescriptor(uint8_t* I_du,uint8_t* I_dv,int32_t width,int32_t height,int32_t bpl,bool half_resolution);
 
 };
 

@@ -13,7 +13,7 @@
 /*  Berkeley, California  94705-1927                                         */
 /*  jrs@cs.berkeley.edu                                                      */
 /*                                                                           */
-/*  Modified by Andreas Geiger, 2010                                         */
+/*  Modified by Andreas Geiger, 2011                                         */
 /*****************************************************************************/
 
 /*****************************************************************************/
@@ -280,6 +280,6 @@ struct triangulateio {
   int numberofedges;                                             /* Out only */
 };
 
-void triangulate(char *,triangulateio *,triangulateio *,triangulateio *);
+int triangulate(char *,triangulateio *,triangulateio *,triangulateio *);
 void trifree(int *memptr);
 

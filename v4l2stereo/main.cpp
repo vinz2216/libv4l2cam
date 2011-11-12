@@ -10,6 +10,10 @@
 
     sudo apt-get install libcv2.1 libhighgui2.1 libcvaux2.1 libcv-dev libcvaux-dev libhighgui-dev libgstreamer-plugins-base0.10-dev libgst-dev
 
+    For details of use see:
+
+        http://sluggish.homelinux.net/wiki/Libv4l2cam
+
     For details of the ELAS dense stereo algorithm see:
 
         http://rainsoft.de/software/libelas.html
@@ -38,7 +42,7 @@
 */
 
 /* enable or disable gstreamer functionality */
-#define GSTREAMER
+//#define GSTREAMER
 
 #include <iostream>
 #include <cv.h>
@@ -148,7 +152,7 @@ void elas_disparity_map(
         I2[i] = (uint8_t)right_image[i*3+2];
     }
 
-    const int32_t dims[2] = {image_width, image_height};
+    const int32_t dims[3] = {image_width, image_height, image_width};
     elas->process(I1,I2,left_disparities,right_disparities,dims);
 }
 
@@ -174,7 +178,7 @@ int main(int argc, char* argv[]) {
     bool overhead_view = false;
     bool virtual_camera_view = false;
     std::string learn_background_filename = "";
-    int retval = 0, use_priors = 1;
+    int use_priors = 1;
     int matches;
     bool detect_obstacles = false;
     bool detect_objects = false;
@@ -182,7 +186,6 @@ int main(int argc, char* argv[]) {
     bool BGR = true;
     int grab_timeout_ms = 500;
     int object_format = POINT_CLOUD_FORMAT_POINTS;
-    int FOV_degrees = 50;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
 
@@ -648,9 +651,11 @@ int main(int argc, char* argv[]) {
         ground_y_percent = atoi(opt->getValue("ground"));
     }
 
+    /*
     if( opt->getValue( "fov" ) != NULL  ) {
         FOV_degrees = atoi(opt->getValue("fov"));
     }
+    */
 
     if( opt->getValue( "calibrationfile" ) != NULL ) {
         std::string calibration_file = opt->getValue("calibrationfile");
@@ -831,7 +836,8 @@ int main(int argc, char* argv[]) {
         if (fp != NULL) {
             if (background_disparity_map==NULL) background_disparity_map = new float[ww*hh];
             if (original_left_image == NULL) original_left_image = cvCreateImage(cvSize(ww, hh), 8, 3);
-            retval = fread((void*)background_disparity_map,sizeof(float),ww*hh,fp);
+            if (fread((void*)background_disparity_map,sizeof(float),ww*hh,fp)>0) {
+	    }
             fclose(fp);
         }
     }
