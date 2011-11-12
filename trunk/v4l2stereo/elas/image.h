@@ -1,5 +1,5 @@
 /*
-Copyright 2010. All rights reserved.
+Copyright 2011. All rights reserved.
 Institute of Measurement and Control Systems
 Karlsruhe Institute of Technology, Germany
 
@@ -19,7 +19,7 @@ libelas; if not, write to the Free Software Foundation, Inc., 51 Franklin
 Street, Fifth Floor, Boston, MA 02110-1301, USA 
 */
 
-// basic image I/O, modified version of Pedro Felzenszwalb's code
+// basic image I/O, based on Pedro Felzenszwalb's code
 
 #ifndef IMAGE_H
 #define IMAGE_H

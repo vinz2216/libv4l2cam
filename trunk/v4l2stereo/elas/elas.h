@@ -1,5 +1,5 @@
 /*
-Copyright 2010. All rights reserved.
+Copyright 2011. All rights reserved.
 Institute of Measurement and Control Systems
 Karlsruhe Institute of Technology, Germany
 
@@ -31,7 +31,7 @@ Street, Fifth Floor, Boston, MA 02110-1301, USA
 #include <vector>
 #include <emmintrin.h>
 
-// Define fixed-width datatypes for Visual Studio projects
+// define fixed-width datatypes for Visual Studio projects
 #ifndef _MSC_VER
   #include <stdint.h>
 #else
@@ -79,6 +79,9 @@ public:
     bool    filter_median;          // optional median filter (approximated)
     bool    filter_adaptive_mean;   // optional adaptive mean filter (approximated)
     bool    postprocess_only_left;  // saves time by not postprocessing the right image
+    bool    subsampling;            // saves time by only computing disparities for each 2nd pixel
+                                    // note: for this option D1 and D2 must be passed with size
+                                    //       width/2 x height/2 (rounded towards zero)
     
     // constructor
     parameters (setting s=ROBOTICS) {
@@ -108,7 +111,8 @@ public:
         ipol_gap_width        = 3;
         filter_median         = 0;
         filter_adaptive_mean  = 1;
-        postprocess_only_left = 0;
+        postprocess_only_left = 1;
+        subsampling           = 0;
         
       // default settings for middlebury benchmark
       // (interpolate all missing disparities)
@@ -135,6 +139,7 @@ public:
         filter_median         = 1;
         filter_adaptive_mean  = 0;
         postprocess_only_left = 0;
+        subsampling           = 0;
       }
     }
   };
@@ -146,12 +151,14 @@ public:
   ~Elas () {}
   
   // matching function
-  // inputs: pointers to left (I1) and right (I2) image
-  //         pointers to left (D1) and right (D2) disparity image (result)
-  //         dims[0] = width of images
-  //         dims[1] = height of images
-  //         note: D1 and D2 must be allocated before
-  //               all images are assumed to be of same size
+  // inputs: pointers to left (I1) and right (I2) intensity image (uint8, input)
+  //         pointers to left (D1) and right (D2) disparity image (float, output)
+  //         dims[0] = width of I1 and I2
+  //         dims[1] = height of I1 and I2
+  //         dims[2] = bytes per line (often equal to width, but allowed to differ)
+  //         note: D1 and D2 must be allocated before (bytes per line = width)
+  //               if subsampling is not active their size is width x height,
+  //               otherwise width/2 x height/2 (rounded towards zero)
   void process (uint8_t* I1,uint8_t* I2,float* D1,float* D2,const int32_t* dims);
   
 private:
@@ -180,42 +187,45 @@ private:
 
   // support point functions
   void removeInconsistentSupportPoints (int16_t* D_can,int32_t D_can_width,int32_t D_can_height);
-  void removeRedundantSupportPoints(int16_t* D_can,int32_t D_can_width,int32_t D_can_height,
-                                    int32_t redun_max_dist, int32_t redun_threshold, bool vertical);
-  void addCornerSupportPoints(std::vector<support_pt> &p_support,int32_t width,int32_t height);
-  inline int16_t computeMatchingDisparity (const int32_t &u,const int32_t &v,const int32_t &width,const int32_t &height,
-                                           uint8_t* I1_desc,uint8_t* I2_desc,const bool &right_image);
-  std::vector<support_pt> computeSupportMatches (uint8_t* I1_desc,uint8_t* I2_desc,const int32_t* dims);
+  void removeRedundantSupportPoints (int16_t* D_can,int32_t D_can_width,int32_t D_can_height,
+                                     int32_t redun_max_dist, int32_t redun_threshold, bool vertical);
+  void addCornerSupportPoints (std::vector<support_pt> &p_support);
+  inline int16_t computeMatchingDisparity (const int32_t &u,const int32_t &v,uint8_t* I1_desc,uint8_t* I2_desc,const bool &right_image);
+  std::vector<support_pt> computeSupportMatches (uint8_t* I1_desc,uint8_t* I2_desc);
 
   // triangulation & grid
-  std::vector<triangle> computeDelaunayTriangulation(std::vector<support_pt> p_support,int32_t right_image);
+  std::vector<triangle> computeDelaunayTriangulation (std::vector<support_pt> p_support,int32_t right_image);
   void computeDisparityPlanes (std::vector<support_pt> p_support,std::vector<triangle> &tri,int32_t right_image);
-  void createGrid(std::vector<support_pt> p_support,int32_t* disparity_grid,int32_t* grid_dims,bool right_image);
+  void createGrid (std::vector<support_pt> p_support,int32_t* disparity_grid,int32_t* grid_dims,bool right_image);
 
   // matching
-  inline void updatePosteriorMinimum(__m128i* I2_block_addr,const int32_t &d,const int32_t &w,
-                                     const __m128i &xmm1,__m128i &xmm2,int32_t &val,int32_t &min_val,int32_t &min_d);
-  inline void updatePosteriorMinimum(__m128i* I2_block_addr,const int32_t &d,
-                                     const __m128i &xmm1,__m128i &xmm2,int32_t &val,int32_t &min_val,int32_t &min_d);
-  inline void findMatch(int32_t &u,int32_t &v,float &plane_a,float &plane_b,float &plane_c,
-                        int32_t* disparity_grid,int32_t *grid_dims,uint8_t* I1_desc,uint8_t* I2_desc,const int32_t *dims,
-                        int32_t *P,int32_t &plane_radius,bool &valid,bool &right_image,float* D);
-  void computeDisparity(std::vector<support_pt> p_support,std::vector<triangle> tri,int32_t* disparity_grid,int32_t* grid_dims,
-                        uint8_t* I1_desc,uint8_t* I2_desc,const int32_t *dims,bool right_image,float* D);
+  inline void updatePosteriorMinimum (__m128i* I2_block_addr,const int32_t &d,const int32_t &w,
+                                      const __m128i &xmm1,__m128i &xmm2,int32_t &val,int32_t &min_val,int32_t &min_d);
+  inline void updatePosteriorMinimum (__m128i* I2_block_addr,const int32_t &d,
+                                      const __m128i &xmm1,__m128i &xmm2,int32_t &val,int32_t &min_val,int32_t &min_d);
+  inline void findMatch (int32_t &u,int32_t &v,float &plane_a,float &plane_b,float &plane_c,
+                         int32_t* disparity_grid,int32_t *grid_dims,uint8_t* I1_desc,uint8_t* I2_desc,
+                         int32_t *P,int32_t &plane_radius,bool &valid,bool &right_image,float* D);
+  void computeDisparity (std::vector<support_pt> p_support,std::vector<triangle> tri,int32_t* disparity_grid,int32_t* grid_dims,
+                         uint8_t* I1_desc,uint8_t* I2_desc,bool right_image,float* D);
 
   // L/R consistency check
-  void leftRightConsistencyCheck(float* D1,float* D2,const int32_t *dims);
+  void leftRightConsistencyCheck (float* D1,float* D2);
   
   // postprocessing
-  void removeSmallSegments (float* I,const int32_t *dims);
-  void gapInterpolation(float* D,const int32_t* dims);
+  void removeSmallSegments (float* D);
+  void gapInterpolation (float* D);
 
   // optional postprocessing
-  void adaptiveMean (float* D,const int32_t *dims);
-  void median (float* D,const int32_t *dims);
+  void adaptiveMean (float* D);
+  void median (float* D);
   
   // parameter set
   parameters param;
+  
+  // memory aligned input images + dimensions
+  uint8_t *I1,*I2;
+  int32_t width,height,bpl;
   
   // profiling timer
 #ifdef PROFILE
