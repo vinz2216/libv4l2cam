@@ -1,0 +1,40 @@
+<!--
+  Launcher for stereocam
+  -->
+<launch>
+    <!-- Machine settings. See http://www.ros.org/wiki/roslaunch/XML/machine -->
+    <machine name="local_alt" address="localhost" default="true" />
+    <!-- stereocam -->
+    <node pkg="stereocam" type="stereocam_broadcast" name="stereocam_broadcast" respawn="false" output="screen">
+        <!-- Enable stereo camera 1 -->
+        <param name="enable1" value="true" />
+        <!-- Enable stereo camera 2 -->
+        <param name="enable2" value="false" />
+        <!-- Enable stereo camera 3 -->
+        <param name="enable3" value="false" />
+        <!-- Enable stereo camera 4 -->
+        <param name="enable4" value="false" />
+
+        <!-- Glimpse time in seconds -->
+        <param name="glimpsetime" value="1" />
+
+        <!-- Directory to save files to.
+	     Change this as appropriate. -->
+        <param name="outputdirectory" value="/home/motters/" />
+        <!-- Command to run for the first stereo camera.
+	     Change the calibration file path as needed. -->
+        <param name="glimpsecommand1" value="v4l2stereo -0 /dev/video1 -1 /dev/video0 --timeout 1000 --headless --vcamera --equal --calibrationfile ~/develop/libv4l2cam/v4l2stereo/calibration.txt --poserotation '0 0 0' --posetranslation '0 0 0' --pointcloud %sglimpse%d.dat" />
+        <!-- Command to run for the second stereo camera -->
+        <param name="glimpsecommand2" value="" />
+        <!-- Command to run for the third stereo camera -->
+        <param name="glimpsecommand3" value="" />
+        <!-- Command to run for the fourth stereo camera -->" />
+        <!-- Command to run for the second stereo camera -->
+        <param name="glimpsecommand2" value="" />
+        <!-- Command to run for the third stereo camera -->
+        <param name="glimpsecommand3" value="" />
+        <!-- Command to run for the fourth stereo camera -->
+        <param name="glimpsecommand4" value="" />
+
+    </node>
+</launch>

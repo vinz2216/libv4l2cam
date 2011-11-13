@@ -209,7 +209,7 @@ int main(int argc, char** argv)
                     baseline, point_cloud, timestamp)) {
 
                     point_cloud_pub.publish(point_cloud);
-
+		    
                     ROS_INFO("Point cloud published from stereo camera %d", stereo_camera_index);
                 }
                 if (translation != NULL) delete [] translation;
