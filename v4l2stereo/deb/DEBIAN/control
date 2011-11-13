@@ -1,9 +1,10 @@
 Package: v4l2stereo
-Version: 1.054
+Version: 1.055
+Installed-Size: 580
 Section: utils
 Maintainer: Bob Mottram <fuzzgun@gmail.com>
-Architecture: all
-Depends: libcv2.1, libhighgui2.1, libcvaux2.1, libcv-dev, libhighgui-dev, libcvaux-dev, libgtk2.0-dev, libavcodec-dev, libavformat-dev, libjpeg62-dev, libtiff4-dev, libgstreamer-plugins-base0.10-0, libcvm57
+Architecture: amd64
+Depends: libcv2.1, libhighgui2.1, libcvaux2.1, libcv-dev, libhighgui-dev, libcvaux-dev, libgtk2.0-dev, libavcodec-dev, libavformat-dev, libjpeg62-dev, libtiff4-dev, libgstreamer-plugins-base0.10-0
 Recommends: 
 Suggests: 
 Essential: no

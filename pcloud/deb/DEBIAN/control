@@ -1,4 +1,5 @@
 Package: pcloud
+Installed-Size: 150
 Version: 0.2
 Section: utils
 Maintainer: Bob Mottram <fuzzgun@gmail.com>
