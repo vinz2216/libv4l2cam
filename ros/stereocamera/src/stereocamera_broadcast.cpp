@@ -21,6 +21,7 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/SetCameraInfo.h>
 #include <image_transport/image_transport.h>
 #include <sstream>
 
@@ -47,7 +48,73 @@ unsigned char * buffer=NULL;
 bool flip_left_image=false;
 bool flip_right_image=false;
 
+std::string left_camera_filename = "left_camera.txt";
+std::string right_camera_filename = "right_camera.txt";
+std::string stereo_camera_filename = "stereo_camera.txt";
+
 image_transport::Publisher left_pub, right_pub;
+
+bool save_camera_info(std::string filename, sensor_msgs::SetCameraInfo::Request &info)
+{
+  FILE * fp;
+
+  fp = fopen(filename.c_str(),"w");
+  if (fp!=NULL) {
+    fprintf(fp,"%d,%d,\n",info.camera_info.width,info.camera_info.height);
+    fprintf(fp,"%s,\n",info.camera_info.distortion_model.c_str());
+    for (int i = 0; i<info.camera_info.D.size();i++) {
+      fprintf(fp,"%.10f,",info.camera_info.D[i]);
+    }
+    fprintf(fp,"\n");
+    for (int i = 0;i<9;i++) {
+      fprintf(fp,"%.10f,",info.camera_info.K[i]);
+    }
+    fprintf(fp,"\n");
+    for (int i = 0;i<9;i++) {
+      fprintf(fp,"%.10f,",info.camera_info.R[i]);
+    }
+    fprintf(fp,"\n");
+    for (int i = 0;i<12;i++) {
+      fprintf(fp,"%.10f,",info.camera_info.P[i]);
+    }
+    fprintf(fp,"\n");
+    fprintf(fp,"%d,%d\n",info.camera_info.binning_x,info.camera_info.binning_y);
+    fclose(fp);
+    return true;
+  }
+
+  return false;
+}
+
+bool set_camera_info_left(
+			  sensor_msgs::SetCameraInfo::Request &req,
+			  sensor_msgs::SetCameraInfo::Response &res)
+{
+  ROS_INFO("Set camera info left");
+  res.status_message = "";
+  res.success = true;
+  return save_camera_info(left_camera_filename,req);
+}
+
+bool set_camera_info_right(
+			   sensor_msgs::SetCameraInfo::Request &req,
+			   sensor_msgs::SetCameraInfo::Response &res)
+{
+  ROS_INFO("Set camera info right");
+  res.status_message = "";
+  res.success = true;
+  return save_camera_info(right_camera_filename,req);
+}
+
+bool set_camera_info(
+		     sensor_msgs::SetCameraInfo::Request &req,
+		     sensor_msgs::SetCameraInfo::Response &res)
+{
+  ROS_INFO("Set camera info");
+  res.success = true;
+  res.status_message = "";
+  return save_camera_info(stereo_camera_filename,req);
+}
 
 /*!
  * \brief stop the stereo camera
@@ -199,11 +266,24 @@ int main(int argc, char** argv)
   nh.getParam("flip_left", flip_left_image);
   nh.getParam("flip_right", flip_right_image);
 
+  nh.getParam("left_camera_filename", str);
+  if (str!="") left_camera_filename=str;
+  nh.getParam("right_camera_filename", str);
+  if (str!="") right_camera_filename=str;
+  nh.getParam("stereo_camera_filename", str);
+  if (str!="") stereo_camera_filename=str;
+  ROS_INFO("%s",stereo_camera_filename.c_str());
+
   start_cameras(left_camera,right_camera,
 		dev_left, dev_right,
 		width, height, fps);
 
   ros::NodeHandle n;
+
+  ros::ServiceServer set_cam_info_left = n.advertiseService("stereocamera/left/set_camera_info", set_camera_info_left);
+  ros::ServiceServer set_cam_info_right = n.advertiseService("stereocamera/right/set_camera_info", set_camera_info_right);
+  ros::ServiceServer set_cam_info = n.advertiseService("stereocamera/set_camera_info", set_camera_info);
+
   bool publishing = false;
   while (n.ok()) {
     if (grab_images()) {

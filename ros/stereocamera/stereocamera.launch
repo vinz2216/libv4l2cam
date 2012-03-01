@@ -7,9 +7,9 @@
   <!-- stereocamera -->
   <node pkg="stereocamera" type="stereocamera_broadcast" name="stereocamera_broadcast" respawn="true" output="screen">
     <!-- left camera device -->
-    <param name="dev_left" value="/dev/video1" />
+    <param name="dev_left" value="/dev/video3" />
     <!-- right camera device -->
-    <param name="dev_right" value="/dev/video0" />
+    <param name="dev_right" value="/dev/video2" />
     <!-- image width -->
     <param name="width" value="320" />
     <!-- image height -->
@@ -20,5 +20,9 @@
     <param name="flip_left" value="false" />
     <!-- Flip the right image -->
     <param name="flip_right" value="false" />
+    <!-- filenames -->
+    <param name="left_camera_filename" value="~/.ros/left_camera.txt" />
+    <param name="right_camera_filename" value="~/.ros/right_camera.txt" />
+    <param name="stereo_camera_filename" value="~/.ros/stereo_camera.txt" />
   </node>
 </launch>
