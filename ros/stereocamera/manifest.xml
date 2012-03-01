@@ -1,0 +1,22 @@
+<package>
+  <description brief="stereocamera">
+
+     stereocamera
+
+  </description>
+  <author>Bob Mottram</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/stereocamera</url>
+  <depend package="std_msgs"/>
+  <depend package="roscpp"/>
+  <depend package="std_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="opencv2"/>
+  <depend package="cv_bridge"/>
+  <depend package="image_transport"/>
+  <depend package="compressed_image_transport"/>
+
+</package>
+
+

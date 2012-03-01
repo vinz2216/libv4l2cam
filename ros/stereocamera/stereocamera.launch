@@ -1,0 +1,20 @@
+<!--
+  Launcher for stereocamera
+  -->
+<launch>
+    <!-- Machine settings. See http://www.ros.org/wiki/roslaunch/XML/machine -->
+    <machine name="local_alt" address="localhost" default="true" />
+    <!-- stereocamera -->
+    <node pkg="stereocamera" type="stereocamera_broadcast" name="stereocamera_broadcast" respawn="false" output="screen">
+        <!-- left camera device -->
+        <param name="dev_left" value="/dev/video1" />
+        <!-- right camera device -->
+        <param name="dev_right" value="/dev/video0" />
+        <!-- image width -->
+        <param name="width" value="320" />
+        <!-- image height -->
+        <param name="height" value="240" />
+        <!-- Frames per second -->
+        <param name="fps" value="30" />
+    </node>
+</launch>

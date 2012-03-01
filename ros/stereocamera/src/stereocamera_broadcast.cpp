@@ -1,0 +1,217 @@
+/*
+    ROS driver to broadcast stereo images from a stereo webcam (eg. Minoru)
+    This doesn't do any stsreo correspondence.  It merely broadcasts the images.
+    Copyright (C) 2012 Bob Mottram
+    fuzzgun@gmail.com
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <ros/ros.h>
+#include <std_msgs/String.h>
+#include <sensor_msgs/Image.h>
+#include <image_transport/image_transport.h>
+#include <sstream>
+
+#include <iostream>
+#include <stdio.h>
+
+#include "libcam.h"
+
+std::string dev_left = "";
+std::string dev_right = "";
+int fps = 30;
+
+Camera *left_camera = NULL;
+Camera *right_camera = NULL;
+sensor_msgs::Image left_image;
+sensor_msgs::Image right_image;
+
+IplImage *l=NULL;
+IplImage *r=NULL;
+unsigned char *l_=NULL;
+unsigned char *r_=NULL;
+unsigned char * buffer=NULL;
+
+bool flip_left_image=false;
+bool flip_right_image=false;
+
+image_transport::Publisher left_pub, right_pub;
+
+/*!
+ * \brief stop the stereo camera
+ * \param left_camera left camera object
+ * \param right_camera right camera object
+ */
+void stop_cameras(
+		  Camera *&left_camera,
+		  Camera *&right_camera)
+{
+  if (left_camera != NULL) {
+    delete left_camera;
+    delete right_camera;
+    left_camera = NULL;
+    right_camera = NULL;
+  }
+}
+
+void start_cameras(
+		   Camera *&left_camera,
+		   Camera *&right_camera,
+		   std::string dev_left, std::string dev_right,
+		   int width, int height,
+		   int fps)
+{
+  if (left_camera != NULL) {
+    stop_cameras(left_camera,right_camera);
+  }
+
+  ros::NodeHandle n;
+  image_transport::ImageTransport it(n);
+
+  std::string topic_str = "stereocamera/left/image_raw";
+  left_pub = it.advertise(topic_str.c_str(), 1);
+
+  topic_str = "stereocamera/right/image_raw";
+  right_pub = it.advertise(topic_str, 1);
+
+  left_image.width  = width;
+  left_image.height = height;
+  left_image.step = width * 3;
+  left_image.encoding = "bgr8";
+  left_image.data.resize(width*height*3);
+
+  right_image.width  = width;
+  right_image.height = height;
+  right_image.step = width * 3;
+  right_image.encoding = "bgr8";
+  right_image.data.resize(width*height*3);
+
+  l = cvCreateImage(cvSize(width, height), 8, 3);
+  r = cvCreateImage(cvSize(width, height), 8, 3);
+
+  l_=(unsigned char *)l->imageData;
+  r_=(unsigned char *)r->imageData;
+
+  left_camera = new Camera(dev_left.c_str(), width, height, fps);
+  right_camera = new Camera(dev_right.c_str(), width, height, fps);
+}
+
+// flip the given image so that the camera can be mounted upside down
+void flip(unsigned char* raw_image, unsigned char* flipped_frame_buf) {
+  int max = left_image.width * left_image.height * 3;
+  for (int i = 0; i < max; i += 3) {
+    flipped_frame_buf[i] = raw_image[(max - 3 - i)];
+    flipped_frame_buf[i + 1] = raw_image[(max - 3 - i + 1)];
+    flipped_frame_buf[i + 2] = raw_image[(max - 3 - i + 2)];
+  }
+  memcpy(raw_image, flipped_frame_buf, max * sizeof(unsigned char));
+}
+
+bool grab_images()
+{
+  if ((left_camera==NULL) || (right_camera==NULL)) return false;
+
+  // Read image data
+  while ((left_camera->Get() == 0) || (right_camera->Get() == 0)) {
+    usleep(100);
+  }
+
+  // Convert to IplImage
+  left_camera->toIplImage(l);
+  right_camera->toIplImage(r);
+
+  // flip images
+  if (flip_left_image) {
+    if (buffer == NULL) {
+      buffer = new unsigned char[left_image.width * left_image.height * 3];
+    }
+    flip(l_, buffer);
+  }
+
+  if (flip_right_image) {
+    if (buffer == NULL) {
+      buffer = new unsigned char[left_image.width * left_image.height * 3];
+    }
+    flip(r_, buffer);
+  }
+
+  return true;
+}
+
+void publish_images()
+{
+  // Convert to sensor_msgs::Image
+  memcpy ((void*)(&left_image.data[0]), (void*)l_, left_image.width*left_image.height*3);
+  memcpy ((void*)(&right_image.data[0]), (void*)r_, right_image.width*right_image.height*3);
+
+  left_pub.publish(left_image);
+  right_pub.publish(right_image);
+
+  ROS_INFO("Stereo images published");
+}
+
+void cleanup()
+{
+  if (l_ != NULL) {
+    cvReleaseImage(&l);
+    cvReleaseImage(&r);
+  }
+
+  if (buffer != NULL) delete[] buffer;
+    
+  stop_cameras(left_camera,right_camera);
+}
+
+int main(int argc, char** argv)
+{
+  ros::init(argc, argv, "stereocamera_broadcast");
+  ros::NodeHandle nh("~");
+
+  // set some default values
+  int val=0;
+  int width=320;
+  int height=240;
+  std::string str="";
+  dev_left = "/dev/video1";
+  dev_right = "/dev/video0";
+  fps = 30;
+
+  nh.getParam("width", val);
+  if (val>0) width=val;
+  nh.getParam("height", val);
+  if (val>0) height=val;
+  nh.getParam("fps", val);
+  if (val>0) fps=val;
+  nh.getParam("dev_left", str);
+  if (str!="") dev_left=str;
+  nh.getParam("dev_right", str);
+  if (str!="") dev_right=str;
+
+  start_cameras(left_camera,right_camera,
+		dev_left, dev_right,
+		width, height, fps);
+
+  ros::NodeHandle n;
+  while (n.ok()) {
+    if (grab_images()) {
+      publish_images();
+    }
+    ros::spinOnce();
+  }
+
+  cleanup();
+  ROS_INFO("Exit Success");
+}
+
