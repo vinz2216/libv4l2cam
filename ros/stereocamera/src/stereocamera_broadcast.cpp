@@ -158,8 +158,6 @@ void publish_images()
 
   left_pub.publish(left_image);
   right_pub.publish(right_image);
-
-  ROS_INFO("Stereo images published");
 }
 
 void cleanup()
@@ -206,14 +204,19 @@ int main(int argc, char** argv)
 		width, height, fps);
 
   ros::NodeHandle n;
+  bool publishing = false;
   while (n.ok()) {
     if (grab_images()) {
+      if (!publishing) {
+	ROS_INFO("Publishing stereo images...");
+	publishing = true;
+      }
       publish_images();
     }
     ros::spinOnce();
   }
 
   cleanup();
-  ROS_INFO("Exit Success");
+  ROS_INFO("Stereo camera stopped");
 }
 
