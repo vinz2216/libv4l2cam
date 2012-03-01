@@ -198,6 +198,8 @@ int main(int argc, char** argv)
   if (str!="") dev_left=str;
   nh.getParam("dev_right", str);
   if (str!="") dev_right=str;
+  nh.getParam("flip_left", flip_left_image);
+  nh.getParam("flip_right", flip_right_image);
 
   start_cameras(left_camera,right_camera,
 		dev_left, dev_right,
