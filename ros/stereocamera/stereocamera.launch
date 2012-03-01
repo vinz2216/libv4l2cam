@@ -16,5 +16,9 @@
         <param name="height" value="240" />
         <!-- Frames per second -->
         <param name="fps" value="30" />
+        <!-- Flip the left image -->
+        <param name="flip_left" value="false" />
+        <!-- Flip the right image -->
+        <param name="flip_right" value="false" />
     </node>
 </launch>
