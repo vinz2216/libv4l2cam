@@ -1,0 +1,1 @@
+rosrun camera_calibration cameracalibrator.py --approximate=0.1 --size 9x6 --square 0.025 right:=/stereocamera/right/image_raw left:=/stereocamera/left/image_raw left_camera:=/stereocamera/left right_camera:=/stereocamera/right
