@@ -6,7 +6,7 @@
 #ifndef __LIBCAM__H__
 #define __LIBCAM__H__
 
-#define USE_OPENCV
+#undef USE_OPENCV
 
 #ifdef USE_OPENCV
 #include <cv.h>
