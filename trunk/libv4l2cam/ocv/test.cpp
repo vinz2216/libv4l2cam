@@ -1,3 +1,4 @@
+
 /*
  * Copyright (C) 2009 Giacomo Spigler
  * CopyPolicy: Released under the terms of the GNU GPL v3.0.
@@ -78,8 +79,3 @@ int main(int argc, char **args) {
 
   return 0;
 }
-
-
-
-
-

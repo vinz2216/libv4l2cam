@@ -48,7 +48,7 @@ private:
 
 
 public:
-  const char *name;  //dev_name
+  char name[256];  // device name
   int width;
   int height;
   int fps;
@@ -71,13 +71,13 @@ public:
 
   unsigned char *Get();    //deprecated
   bool Update(unsigned int t=100, int timeout_ms=500);
-  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=500);
+  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=1000);
 
 #ifdef USE_OPENCV
   void toIplImage(IplImage *im);
 #endif
   void toRGB(unsigned char * img);
-
+  void toMono(unsigned char * img);
 
   void StopCam();
 
