@@ -11,6 +11,8 @@
 #include <highgui.h>
 #include <stdio.h>
 
+#define USE_OPENCV
+
 #include "../libcam.h"
 
 using namespace std;
@@ -99,8 +101,3 @@ int main() {
 
   return 0;
 }
-
-
-
-
-

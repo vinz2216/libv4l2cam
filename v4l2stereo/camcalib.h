@@ -21,6 +21,10 @@
 #ifndef CAMCALIB_H_
 #define CAMCALIB_H_
 
+#ifndef USE_OPENCV
+#define USE_OPENCV
+#endif
+
 #include <cctype>
 #include <iostream>
 #include <cv.h>
@@ -35,6 +39,7 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <unistd.h>
 
 #include "calibration/mcv.h"
 #include "calibration/CvexStereoCameraCalibration.h"
@@ -131,7 +136,7 @@ public:
     void SetEssentialMatrix(
         double * matrix);
 
-    void stereo_camera_calibrate(
+    int stereo_camera_calibrate(
         int image_width,
         int image_height,
         int fps,
@@ -227,4 +232,3 @@ public:
 };
 
 #endif
-
