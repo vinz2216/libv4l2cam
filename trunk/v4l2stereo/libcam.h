@@ -6,13 +6,9 @@
 #ifndef __LIBCAM__H__
 #define __LIBCAM__H__
 
-#define USE_OPENCV 1
-
-#ifdef USE_OPENCV
+//#ifdef USE_OPENCV
 #include <cv.h>
-#endif
-
-
+//#endif
 
 struct buffer {
         void *                  start;
@@ -48,7 +44,7 @@ private:
 
 
 public:
-  const char *name;  //dev_name
+  char name[256];  // device name
   int width;
   int height;
   int fps;
@@ -70,13 +66,14 @@ public:
   ~Camera();
 
   unsigned char *Get();    //deprecated
-  bool Update(unsigned int t=100, int timeout_ms=500); //better  (t=0.1ms, in usecs)
-  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=500);
+  bool Update(unsigned int t=100, int timeout_ms=500);
+  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=1000);
 
-#ifdef USE_OPENCV
+  //#ifdef USE_OPENCV
   void toIplImage(IplImage *im);
-#endif
-
+  //#endif
+  void toRGB(unsigned char * img);
+  void toMono(unsigned char * img);
 
   void StopCam();
 
@@ -103,8 +100,11 @@ public:
   int setHue(int v);
   int setHueAuto(bool v);
   int setSharpness(int v);
-
-
+  int setExposureAuto();
+  int setExposureAutoPriority(int v);
+  int getExposure();
+  int setExposure(int v);
+  int setExposureAutoOff();
 
 };
 

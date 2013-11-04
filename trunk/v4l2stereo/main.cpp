@@ -44,6 +44,9 @@
 /* enable or disable gstreamer functionality */
 //#define GSTREAMER
 
+// ensure that openCV functions are defined within libcam
+#define USE_OPENCV
+
 #include <iostream>
 #include <cv.h>
 #include <highgui.h>
@@ -184,7 +187,7 @@ int main(int argc, char* argv[]) {
     bool detect_objects = false;
     bool view_point_cloud = false;
     bool BGR = true;
-    int grab_timeout_ms = 500;
+    int grab_timeout_ms = 1000;
     int object_format = POINT_CLOUD_FORMAT_POINTS;
     int max_range_mm = 3000;
     int no_of_calibration_images = 20;
@@ -1068,16 +1071,9 @@ int main(int argc, char* argv[]) {
     CvMat * virtual_camera_points=NULL;
     CvMat * virtual_camera_image_points=NULL;
 
-    /*
-        gridmap3d * grid = NULL;
-        if (point_cloud_filename != "") {
-            grid = new gridmap3d(256,256,10);
-        }
-    */
+    while (1) {
 
-    while(1) {
-
-        if (!c.Update(&c2, 100, grab_timeout_ms)) {
+        if (!c.Update(&c2, 25, grab_timeout_ms)) {
             printf("Failed to acquire images\n");
             break;
         }
@@ -2125,6 +2121,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-
-
