@@ -1,13 +1,19 @@
 /*
  * Copyright (C) 2009 Giacomo Spigler
+ * 2013 - George Jordanov - improve in performance for HSV conversion and improvements
+ *
  * CopyPolicy: Released under the terms of the GNU GPL v3.0.
  */
 
 #ifndef __LIBCAM__H__
 #define __LIBCAM__H__
 
+#define USE_OPENCV 1
+#define USE_LOOKUP 1
+
 #ifdef USE_OPENCV
 #include <cv.h>
+#include "opencv2/core/core.hpp"
 #endif
 
 
@@ -43,10 +49,16 @@ private:
   void init_read(unsigned int buffer_size);
 
   bool initialised;
-
+#ifdef USE_LOOKUP
+    void genYUVtoRGBLookups();
+    unsigned char yv[256][256];
+    unsigned char yu[256][256];
+             int y2v[256][256];
+             int y2u[256][256];
+#endif
 
 public:
-  char name[256];  // device name
+  const char *name;  //dev_name
   int width;
   int height;
   int fps;
@@ -63,19 +75,22 @@ public:
   int mb, Mb, db, mc, Mc, dc, ms, Ms, ds, mh, Mh, dh, msh, Msh, dsh;
   bool ha;
 
-
+  //Camera();
   Camera(const char *name, int w, int h, int fps=30);
+  void  StartCamera(const char *name, int w, int h, int fps=30);
   ~Camera();
 
   unsigned char *Get();    //deprecated
-  bool Update(unsigned int t=100, int timeout_ms=500);
-  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=1000);
+  bool Update(unsigned int t=100, int timeout_ms=500); //better  (t=0.1ms, in usecs)
+  bool Update(Camera *c2, unsigned int t=100, int timeout_ms=500);
 
 #ifdef USE_OPENCV
   void toIplImage(IplImage *im);
+  void toGrayScaleIplImage(IplImage *im);
+  void toGrayScaleMat(cv::Mat& im);
+  void toMat (cv::Mat& im);
 #endif
-  void toRGB(unsigned char * img);
-  void toMono(unsigned char * img);
+
 
   void StopCam();
 
@@ -102,11 +117,8 @@ public:
   int setHue(int v);
   int setHueAuto(bool v);
   int setSharpness(int v);
-  int setExposureAuto();
-  int setExposureAutoPriority(int v);
-  int getExposure();
-  int setExposure(int v);
-  int setExposureAutoOff();
+
+
 
 };
 
